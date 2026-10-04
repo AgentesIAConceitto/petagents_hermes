@@ -1,0 +1,10 @@
+name: petagent
+version: 0.1.0
+description: >-
+  PetAgent — boneco vivo no desktop que conversa com o Hermes, avisa quando algo
+  acontece e lê seu e-mail. Instala, configura e sobe com um comando.
+  (Windows)
+author: "Conceitto Labs"
+hooks:
+  - post_tool_call
+  - on_session_end

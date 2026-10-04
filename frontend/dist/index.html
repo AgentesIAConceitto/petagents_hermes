@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PetAgent</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ================= BONECO ================= -->
+  <div id="pet" class="pet idle" data-agent="hermes" title="Clique para conversar · botão direito para opções">
+    <div id="petdex"></div>
+    <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+      <defs>
+        <radialGradient id="corpo" cx="40%" cy="30%" r="80%">
+          <stop offset="0%" stop-color="#7ef0d8"/>
+          <stop offset="100%" stop-color="#14a08a"/>
+        </radialGradient>
+        <linearGradient id="led" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffe08a"/><stop offset="100%" stop-color="#ff9d2e"/>
+        </linearGradient>
+      </defs>
+      <!-- antena -->
+      <g class="antena">
+        <line x1="60" y1="26" x2="60" y2="10" stroke="#0d7f6e" stroke-width="3" stroke-linecap="round"/>
+        <circle class="led" cx="60" cy="8" r="7" fill="url(#led)"/>
+      </g>
+      <!-- pés -->
+      <ellipse class="pe" cx="42" cy="104" rx="13" ry="8" fill="#0d7f6e"/>
+      <ellipse class="pe" cx="78" cy="104" rx="13" ry="8" fill="#0d7f6e"/>
+      <!-- corpo -->
+      <rect x="20" y="26" width="80" height="76" rx="30" fill="url(#corpo)" stroke="#0d7f6e" stroke-width="3"/>
+      <!-- badge com a inicial -->
+      <circle cx="60" cy="88" r="9" fill="rgba(255,255,255,.85)"/>
+      <text x="60" y="92.5" text-anchor="middle" font-size="11" font-weight="700" fill="#0d7f6e">H</text>
+      <!-- olhos -->
+      <g class="olhos">
+        <ellipse cx="45" cy="60" rx="11" ry="12" fill="#fff"/>
+        <ellipse cx="75" cy="60" rx="11" ry="12" fill="#fff"/>
+        <circle class="pupila" cx="45" cy="61" r="5" fill="#123"/>
+        <circle class="pupila" cx="75" cy="61" r="5" fill="#123"/>
+      </g>
+      <!-- boca -->
+      <path class="boca" d="M52 76 Q60 82 68 76" stroke="#0d3b36" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="zzz">z z</div>
+    <div class="pensando-pontos"><i></i><i></i><i></i></div>
+  </div>
+
+  <!-- ================= BALÃO (HQ) ================= -->
+  <div id="balao" class="balao oculto">
+    <div class="balao-topo">
+      <span class="dot" id="dot"></span>
+      <strong id="balao-titulo">Hermes</strong>
+      <span id="balao-sub" class="sub"></span>
+      <button id="balao-estender" class="x" title="Abrir o chat estendido">⤢</button>
+      <button id="balao-min" class="x" title="Esconder balão (Esc)">—</button>
+    </div>
+    <div id="msgs" class="msgs"></div>
+    <div class="balao-rodape">
+      <input id="txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
+      <button id="enviar">→</button>
+    </div>
+  </div>
+
+  <!-- ================= MENU (tiles) ================= -->
+  <div id="menu" class="menu oculto">
+    <div class="menu-linha" id="linha1"></div>
+    <div class="menu-linha destaque" id="linha2"></div>
+    <div class="menu-linha" id="linha3"></div>
+    <div class="menu-linha" id="linha4"></div>
+    <div class="menu-linha" id="linha5"></div>
+    <div class="menu-linha" id="linha6"></div>
+  </div>
+
+  <!-- balãozinho de aviso (toast) — tarefa concluída, lembrete, gateway -->
+  <div id="toast" class="toast oculto">
+    <div class="toast-ico" id="toast-ico">✅</div>
+    <div class="toast-txt"><b id="toast-tit"></b><span id="toast-sub"></span></div>
+  </div>
+
+  <!-- camada de efeitos (emojis que sobem) -->
+  <div id="fx"></div>
+
+  <!-- ============ CHAT ESTENDIDO (janela arrastável e redimensionável) ============ -->
+  <div id="chatGrande" class="cg oculto">
+    <div class="cg-topo" id="cg-topo">
+      <span class="cg-tit">Chat Estendido</span>
+      <span class="cg-marca">PETAGENTS · Hermes</span>
+      <span class="cg-sub" id="cg-sub"></span>
+      <button class="cg-bt sec" id="cg-min" title="voltar ao chat pequeno (reabre o balão)">⤡ chat pequeno</button>
+      <span class="cg-x" id="cg-x" title="fechar o chat (a conversa fica guardada)">✕</span>
+    </div>
+    <div id="cg-msgs" class="msgs cg-msgs"></div>
+    <div class="cg-rodape">
+      <input id="cg-txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
+      <button id="cg-enviar" class="cg-bt">Enviar</button>
+    </div>
+    <div class="cg-puxa" id="cg-puxa" title="arraste para redimensionar"></div>
+  </div>
+
+  <!-- ================= PAINEL DE E-MAIL ================= -->
+  <!-- ============ PAINEL DE BONECOS (galeria Petdex) ============ -->
+  <div id="petPanel" class="pets oculto">
+    <div class="pets-tit">🐾 Escolher boneco <span id="pets-atual" class="pets-sub"></span>
+      <span id="pets-x" class="pets-x" title="fechar">✕</span></div>
+    <div class="pets-linha">
+      <input id="pets-termo" class="pets-inp" type="text" placeholder="buscar: capivara, mecha, dragão…" />
+      <div class="b" id="pets-buscar">🔎 buscar</div>
+    </div>
+    <div class="pets-linha">
+      <div class="b" id="pets-instalados">meus bonecos</div>
+      <div class="b" id="pets-galeria">ver a galeria (4.873)</div>
+      <div class="b" id="pets-bichinhos">bichinhos</div>
+      <div class="b" id="pets-personagens">personagens</div>
+    </div>
+    <div id="pets-conta" class="pets-dica">…</div>
+    <div id="pets-lista" class="pets-grade"></div>
+    <div class="pets-linha">
+      <div class="b" id="pets-mais">mais bonecos…</div>
+      <div class="b" id="pets-vetor">usar o vetor (nosso)</div>
+      <div class="b" id="pets-fechar">Fechar</div>
+    </div>
+  </div>
+
+  <div id="email" class="email oculto">
+    <div class="tela-tit">📧 E-mail — triagem que aprende</div>
+    <div class="email-resumo" id="email-resumo"></div>
+    <div class="email-lista" id="email-lista"></div>
+    <div class="tela-linha">
+      <div class="b" id="email-verificar">↻ Verificar agora</div>
+      <div class="b" id="email-fechar">Fechar</div>
+    </div>
+    <div class="tela-dica">Só leitura: nada é apagado, movido ou marcado. Cada decisão sua vira regra.</div>
+  </div>
+
+  <!-- ================= SELETOR DE TELA / BORDA ================= -->
+  <div id="tela" class="tela oculto">
+    <div class="tela-tit">Tela e borda de encaixe</div>
+    <div class="tela-linha" id="tela-mon"></div>
+    <div class="tela-linha" id="tela-canto"></div>
+    <div class="tela-dica" id="tela-atual"></div>
+  </div>
+
+  <script src="main.js"></script>
+  <script src="premios.js"></script>
+  <script src="bicho.js"></script>
+</body>
+</html>

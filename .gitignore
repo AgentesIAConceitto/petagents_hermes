@@ -1,0 +1,30 @@
+# binários e build (nunca versionar: o .exe sai do source)
+build/
+*.exe
+*.dll
+*.so
+*.syso
+
+# logs, temporários e estados locais
+*.log
+*.tmp
+*.bak
+*.swp
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node (só usado para checagem de sintaxe)
+node_modules/
+
+# SEGREDOS: nunca versionar
+.env
+.env.*
+secrets/
+*.pem
+*.key
+*.p12
+credentials.json

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "petagent",
+  "outputfilename": "petagent",
+  "frontend:install": "",
+  "frontend:build": "",
+  "author": {
+    "name": "Conceitto Labs",
+    "email": "AgentesIAConceitto@users.noreply.github.com"
+  },
+  "info": {
+    "productName": "PetAgent",
+    "productVersion": "0.1.0",
+    "comments": "Bonecos dos agentes no desktop"
+  }
+}
