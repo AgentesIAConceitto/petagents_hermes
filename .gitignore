@@ -1,30 +1,25 @@
-# binários e build (nunca versionar: o .exe sai do source)
+# ── build / binários ──────────────────────────────────────────────
 build/
 *.exe
 *.dll
-*.so
 *.syso
+wailsjs/
 
-# logs, temporários e estados locais
-*.log
-*.tmp
-*.bak
-*.swp
-
-# python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# node (só usado para checagem de sintaxe)
+# ── frontend ──────────────────────────────────────────────────────
+frontend/node_modules/
 node_modules/
 
-# SEGREDOS: nunca versionar
+# ── estado local (nunca vai para o repositório) ───────────────────
+config.json
+pets.json
+*.log
+*.tmp
+tmp/
+secrets/
 .env
 .env.*
-secrets/
-*.pem
-*.key
-*.p12
-credentials.json
+
+# ── sistema ───────────────────────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store

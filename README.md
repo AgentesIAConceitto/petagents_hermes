@@ -145,6 +145,21 @@ Nome do bicho, horário de trabalho (início/fim), **água a cada (h)**, **camin
 cada (min)**, modo foco, dormir (1–4 h), perfil de animação, escolha de boneco na
 galeria, gráfico do bicho e a coleção 💎. Tudo pelo painel — sem editar arquivo.
 
+### Atalho no desktop e início automático
+
+O projeto traz os atalhos prontos (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File atalhos\criar-atalhos.ps1
+```
+
+Cria dois atalhos "PetAgent": um na **área de trabalho** e outro na pasta
+**Inicialização** (sobe o boneco sozinho no login). O lançador
+(`atalhos/lancar.vbs`) é **idempotente** (não abre um segundo boneco se já houver um
+na tela), sobe o app **pelo `explorer.exe`** — contexto **não-elevado**, que o COM do
+Outlook exige — e registra o que fez em `%LOCALAPPDATA%\petagent\atalho.log`.
+Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
+
 ### Decisões de projeto (o porquê das regras)
 
 - **Clique = carinho, duplo clique = chat.** Clicar no bicho não significa "quero
@@ -309,6 +324,22 @@ wails build -s                      # produces build/bin/petagent.exe
 Pet name, working hours (start/end), **water every (h)**, **walk every (min)**, focus
 mode, sleep (1–4 h), animation profile, character gallery, pet stats graph and the 💎
 collection. Everything from the panel — no file editing.
+
+### Desktop shortcut and auto-start
+
+The project ships ready-made shortcuts (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File atalhos\criar-atalhos.ps1
+```
+
+It creates two "PetAgent" shortcuts: one on the **desktop** and one in the
+**Startup** folder (so the pet comes back by itself at logon). The launcher
+(`atalhos/lancar.vbs`) is **idempotent** (it will not open a second pet if one is
+already on screen), starts the app **through `explorer.exe`** — a **non-elevated**
+context, which Outlook's COM requires — and records what it did in
+`%LOCALAPPDATA%\petagent\atalho.log`. To undo, delete both `.lnk` files; the app and
+the launcher stay where they are.
 
 ### Design decisions (why the rules exist)
 
