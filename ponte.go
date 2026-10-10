@@ -23,6 +23,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -175,11 +177,13 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				return "", false
 			}
 			var d struct {
-				OK       bool    `json:"ok"`
-				Pronto   bool    `json:"pronto"`
-				Resposta string  `json:"resposta"`
-				Erro     string  `json:"erro"`
-				Segundos float64 `json:"segundos"`
+				OK        bool    `json:"ok"`
+				Pronto    bool    `json:"pronto"`
+				Resposta  string  `json:"resposta"`
+				Progresso string  `json:"progresso"` // "texto" ou "passo" — NÃO é a resposta
+				Texto     string  `json:"texto"`
+				Erro      string  `json:"erro"`
+				Segundos  float64 `json:"segundos"`
 			}
 			if err := json.Unmarshal([]byte(r.linha), &d); err != nil {
 				txt := strings.TrimSpace(r.linha)
@@ -188,6 +192,22 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				}
 				logMsg("ponte: linha fora do formato — usando como texto")
 				return txt, true
+			}
+			// LINHA DE PROGRESSO (10/10/2026) — o dono: "eu não fico nunca no vácuo aqui".
+			//
+			// Medido: no Telegram cada passo do agente vira uma mensagem (11 ferramentas = 11
+			// mensagens) e ele nunca fica esperando no escuro; aqui eram 9 ferramentas virando
+			// UMA mensagem no fim — 224 s olhando um balão parado. A ponte agora emite o que
+			// está acontecendo ENQUANTO acontece; isto repassa para a tela e NÃO consome
+			// tentativa (a linha não é resposta).
+			if d.Progresso != "" {
+				if a != nil && a.ctx != nil {
+					runtime.EventsEmit(a.ctx, "chat-progresso", map[string]string{
+						"tipo": d.Progresso, "texto": d.Texto,
+					})
+				}
+				tentativa-- // progresso não gasta tentativa: só as 4 leituras "de verdade" contam
+				continue
 			}
 			if d.Pronto && !d.OK { // handshake antigo/atrasado: não é resposta
 				continue
@@ -203,8 +223,19 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 			}
 			logMsg(fmt.Sprintf("ponte: resposta quente em %.1fs", time.Since(t0).Seconds()))
 			return d.Resposta, true
-		case <-time.After(150 * time.Second):
-			logMsg("ponte: tempo esgotado (150s) — reserva lenta")
+		case <-time.After(330 * time.Second):
+			// O APP TEM DE ESPERAR MAIS QUE A PONTE.
+			//
+			// Defeito medido em 10/10/2026 (relato do dono: "fiz uma pergunta simples e ele levou
+			// 205 segundos"): aqui o prazo era 150 s, mas `chat_bridge.py::perguntar` espera 300 s
+			// e, se o canal quente cair, RECONECTA uma vez e repete. Com 150 s o app desistia
+			// ANTES da ponte terminar, caía na reserva lenta (`hermes -z`) e a reconexão nunca
+			// chegava a rodar. Somando: 150 s de espera + ~56 s da reserva = os 205 s medidos no
+			// log real (10:33:12 "tempo esgotado (150s)" → 10:34:08 "reserva respondeu").
+			//
+			// Com 330 s a ponte tem a janela dela inteira: ou responde quente, ou reconecta
+			// sozinha — e a reserva lenta volta a ser ÚLTIMO recurso em vez de caminho comum.
+			logMsg("ponte: tempo esgotado (330s) — reserva lenta")
 			return "", false
 		}
 	}

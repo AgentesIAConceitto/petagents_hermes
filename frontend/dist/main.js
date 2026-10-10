@@ -598,6 +598,70 @@ function rolarAoFim() {
   setTimeout(fazer, 60);
 }
 
+/* PAINEL AO VIVO — mostra o que o agente está fazendo ENQUANTO faz (10/10/2026).
+   O dono: "eu não fico nunca no vácuo aqui no chat".
+
+   MEDIDO: o modelo passa o tempo PENSANDO e o texto só sai em rajada no fim — transmitir
+   só o texto deixaria o balão parado de novo. Por isso há DOIS movimentos: os passos que a
+   ponte manda (ferramentas) e um RELÓGIO que mantém a linha viva a cada segundo.
+
+   ⚠️ Não abre o balão: a regra do dono é que nada abre o chat sozinho.
+   ⚠️ Não usa `conversa` (é const — reatribuir quebra a função): mexe só no DOM. */
+let _vivoRotulo = "";
+let _vivoInicio = 0;
+let _vivoTimer = null;
+
+function _pintaVivo() {
+  if (!_vivoRotulo) return;
+  const seg = _vivoInicio ? Math.round((Date.now() - _vivoInicio) / 1000) : 0;
+  const texto = '<span class="passo">⚙️ ' + formata(_vivoRotulo) + (seg > 2 ? " · " + seg + "s" : "") + "…</span>";
+  for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
+    if (!alvo) continue;
+    let el = alvo.querySelector(".ao-vivo");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "m meta ao-vivo";
+      alvo.appendChild(el);
+    }
+    el.innerHTML = texto;
+  }
+  rolarAoFim();
+}
+
+function progressoAoVivo(p) {
+  if (!p || !p.tipo) return;
+  if (p.tipo === "passo") {
+    _vivoRotulo = String(p.texto || "trabalhando");
+    if (!_vivoInicio) _vivoInicio = Date.now();
+    _pintaVivo();
+  } else {
+    // texto chegando: mostra o que já veio (e mantém o relógio se ele ainda pensa)
+    const alvo = msgs || document.getElementById("cg-msgs");
+    if (alvo) {
+      let el = alvo.querySelector(".ao-vivo");
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "m meta ao-vivo";
+        alvo.appendChild(el);
+      }
+      el.innerHTML = formata(String(p.texto || ""));
+      rolarAoFim();
+    }
+  }
+  if (!_vivoTimer) _vivoTimer = setInterval(_pintaVivo, 1000);
+}
+
+function encerraAoVivo() {
+  if (_vivoTimer) { clearInterval(_vivoTimer); _vivoTimer = null; }
+  _vivoRotulo = "";
+  _vivoInicio = 0;
+  for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
+    if (!alvo) continue;
+    const vivo = alvo.querySelector(".ao-vivo");
+    if (vivo) vivo.remove();
+  }
+}
+
 function pintaConversa() {
   const alvos = [msgs, document.getElementById("cg-msgs")];
   for (const alvo of alvos) {
@@ -697,6 +761,21 @@ async function enviarTexto(texto, input) {
   ocupado = false;
   input.disabled = false;
   input.placeholder = "Escreva e dê Enter…";
+  // COMANDOS QUE LIMPAM A TELA (pedido do dono, 10/10/2026): /clear, /new e /reset apagam a
+  // conversa VISÍVEL — senão o chat fica poluído e o dono rola por mãos antigas. A ponte cuida
+  // do CONTEXTO (cria sessão nova); a tela é daqui. Apago ANTES de mostrar a resposta, para o
+  // recado do comando ser a primeira linha do chat limpo.
+  const _cmd = texto.toLowerCase().split(/\s+/)[0];
+  if (["/clear", "/limpar", "/new", "/nova", "/reset"].includes(_cmd)) {
+    // ⚠️ `conversa` é CONST (linha 568): reatribuir (`conversa = []`) lança TypeError e QUEBRA
+    // a função aqui — a resposta nunca aparecia e o chat não limpava. Defeito medido em
+    // 10/10/2026: o /clear zerava o contexto no motor (log: 0,6 s) e na tela "não funcionava".
+    // Limpar o MESMO array (length = 0) mantém a referência e o resto do código intacto.
+    conversa.length = 0;
+    try { localStorage.setItem("conversa", JSON.stringify([])); } catch (e) {}
+  }
+  // a linha "ao vivo" (progresso + relógio) sai de cena: entra a mensagem de verdade
+  encerraAoVivo();
   msg(resp, "ele");
   // marcador honesto: mostra quanto tempo levou (quente = segundos / reserva = ~1 min)
   msg("via Hermes · " + levou + " s", "meta");
@@ -1222,6 +1301,12 @@ function ligarEventos() {
     explosao([a.icone || "🔔"], 3);
   });
   R.EventsOn("status-panel", (texto) => { abrirBalao(); msg(texto, "ele"); });
+  // PROGRESSO AO VIVO (10/10/2026) — o dono: "eu não fico nunca no vácuo aqui no chat".
+  // Medido: no Telegram cada passo do agente vira uma mensagem (11 ferramentas = 11
+  // mensagens); aqui eram 9 ferramentas virando UMA no fim, com 224 s de balão parado.
+  // ⚠️ NÃO abre o balão (regra do dono: nada abre o chat sozinho) — só pinta se já estiver
+  // aberto. Ao chegar a resposta final, a linha ao vivo sai e entra a mensagem de verdade.
+  R.EventsOn("chat-progresso", (p) => progressoAoVivo(p));
   // volta do "esconder N min": quem conta o tempo é o Go — aqui só damos o recado
   // (balãozinho, que é a voz do bicho: não abre chat nem entra no histórico)
   R.EventsOn("volta-escondido", (min) => {

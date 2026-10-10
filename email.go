@@ -118,11 +118,15 @@ func leRegras() RegrasEmail {
 
 // ehNova — só o que é novo interessa: não lida OU chegou nos últimos 45 min.
 // (Evita avisar de e-mail velho que já estava na caixa antes do agente existir.)
+//
+// ⚠️ 05/10/2026: o carimbo vem do Outlook com .ToString("s") = hora LOCAL, SEM fuso.
+// `time.Parse` num layout sem zona assume UTC — então a idade saía inflada pelo offset
+// local (3h no Brasil) e NADA era considerado novo. Tem de ser ParseInLocation(Local).
 func ehNova(m CabecalhoEmail) bool {
 	if m.NaoLida {
 		return true
 	}
-	t, err := time.Parse("2006-01-02T15:04:05", m.Quando)
+	t, err := time.ParseInLocation("2006-01-02T15:04:05", m.Quando, time.Local)
 	if err != nil {
 		return false
 	}
@@ -333,8 +337,13 @@ func (a *App) emailLoop() {
 
 // idadeLeitura — há quanto tempo o poll gravou o inbox.json. Data ilegível conta
 // como muito velha: sem saber a idade, não se avisa nada.
+//
+// ⚠️ 05/10/2026: mesmo defeito do ehNova — o poll grava hora LOCAL sem fuso e
+// `time.Parse` assumia UTC, somando o offset local à idade (medido: "leitura VELHA
+// (420 min)" com o Windows no Pacífico; 180 min em Brasília). Com o limite de 20 min
+// isto MUDO o e-mail por completo. ParseInLocation(Local) é o conserto.
 func idadeLeitura(quando string) time.Duration {
-	t, err := time.Parse("2006-01-02T15:04:05", quando)
+	t, err := time.ParseInLocation("2006-01-02T15:04:05", quando, time.Local)
 	if err != nil {
 		return 24 * time.Hour
 	}
