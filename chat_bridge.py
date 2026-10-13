@@ -275,6 +275,7 @@ def log(msg: str) -> None:
 # acontecendo enquanto acontece, e o app repassa para a tela.
 # ---------------------------------------------------------------------------
 EM_TESTE = False            # --teste espera UM json no stdout: não emitir progresso
+_pedido_atual = None        # id do pedido em andamento: vai em cada linha (o app descarta o de outro)
 _ultimo_progresso = 0.0
 _INTERVALO_PROGRESSO = 0.5  # freio: sem isto, cada token viraria uma linha (3.802 num turno)
 
@@ -292,8 +293,8 @@ def _progresso(tipo: str, texto: str) -> None:
             return
         _ultimo_progresso = agora
     try:
-        print(json.dumps({"ok": True, "progresso": tipo, "texto": str(texto)[:800]},
-                         ensure_ascii=False), flush=True)
+        print(json.dumps({"ok": True, "id": _pedido_atual, "progresso": tipo,
+                          "texto": str(texto)[:800]}, ensure_ascii=False), flush=True)
     except Exception:  # noqa: BLE001
         pass
 
@@ -725,6 +726,7 @@ async def servico(bk: "Backend", args) -> int:
 
     # handshake: o app só pergunta depois disto
     print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao}), flush=True)
+    global _pedido_atual
     while True:
         linha = await asyncio.to_thread(sys.stdin.readline)
         if not linha:
@@ -736,12 +738,16 @@ async def servico(bk: "Backend", args) -> int:
         p = str(pedido.get("prompt") or "").strip()
         if not p:
             continue
+        # o id volta em toda linha desta pergunta: se o app já desistiu dela (prazo), a
+        # resposta atrasada não pode ser lida como resposta da pergunta seguinte
+        _pedido_atual = pedido.get("id")
         try:
             resp, seg = await bk.perguntar(p)
-            print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
-                             ensure_ascii=False), flush=True)
+            print(json.dumps({"ok": True, "id": _pedido_atual, "resposta": resp,
+                              "segundos": round(seg, 1)}, ensure_ascii=False), flush=True)
         except Exception as e:  # noqa: BLE001
-            print(json.dumps({"ok": False, "erro": f"{type(e).__name__}: {e}"}), flush=True)
+            print(json.dumps({"ok": False, "id": _pedido_atual,
+                              "erro": f"{type(e).__name__}: {e}"}), flush=True)
     # o app fechou: leva o backend junto (sem órfãos)
     if bk.proc and bk.proc.poll() is None:
         try:
