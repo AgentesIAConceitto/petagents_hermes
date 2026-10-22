@@ -28,7 +28,7 @@ function log(m) { try { G && G.LogMsg(m); } catch (e) {} }
    então o X não fechava nada — só funcionava quando outro painel registrado (o
    balão, que abre por cima) caía sobre o X (relatado pelo dono, 03/10/2026).
    Agora varre o DOM pelas classes de superfície: painel novo entra sozinho. */
-const SUPERFICIES = ".balao, .menu, .bicho, .pets, .email, .tela, .cg, .toast, .premio";
+const SUPERFICIES = ".balao, .menu, .bicho, .pets, .email, .tela, .cg, .toast, .premio, .aparencia";
 function reportarHit() {
   if (!G) return;
   const d = DPR(), rs = [];
@@ -358,6 +358,7 @@ async function carregarPet() {
       cfg.offset = Math.max(6, d.left);
     }
   } catch (e) {}
+  aplicaAparencia(cfg.aparencia); // tema.js: cores, fonte, ícones e cantos salvos
   aplicaPerfil(); aplicaInteracao(); aplicaParado(); aplicaTamanho(); aplicaPosicao();
   carregarPetDex(); // boneco da galeria (Petdex), se houver um instalado
 }
@@ -1060,100 +1061,138 @@ try { // recupera a conversa anterior (inclusive resposta que chegou com o balã
   }
 } catch (e) {}
 
-/* ───────── menu (tiles, dirigido por estado) ─────────
-   Padrão ANTES do bicho.js entrar: ele sobrescreve as linhas 1/2/3/6 em
-   repintaMenu(). Regra: cada ação aparece em UM botão só. */
-const TILES = {
-  linha1: [
-    ["🍖", "Alimentar", () => subAlimentar()],
-    ["🎾", "Brincar", () => reagir("Uhu! Vou procurar um tesouro…", "pensando")],
-    ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
-    ["😴", "Dormir", () => dormir(30)],
+/* ───────── menu (dock com abas: Pet · Recursos · Sistema) ─────────
+   Escolha da dona em 22/10/2026 (prancha "PetAgent — Menu novo", opção A): o
+   que é DO PET fica separado do que é recurso DELA e do que é controle da janela.
+   Cada item: [ícone, nome, ação, valor?, fica?] — nome/valor podem ser função
+   (mostram o estado ATUAL a cada abertura); `fica` mantém o menu aberto (ajuste
+   que só alterna um valor). O bicho.js troca MENU.pet pelas ações dele em
+   repintaMenu(). Regra que continua: uma ação, um botão. */
+const MENU = {
+  pet: [
+    ["alimentar", "Alimentar", () => subAlimentar()],
+    ["brincar", "Brincar", () => reagir("Uhu! Vou procurar um tesouro…", "pensando")],
+    ["dormir", "Dormir", () => dormir(30)],
+    ["status", "Como está", () => status()],
+    ["colecao", "Coleção", () => { if (window.premiosGaleria) window.premiosGaleria(); }],
+    ["cuidar", "Cuidar dele", () => { if (window.bicho) window.bicho.abrirPainel(); }],
   ],
-  linha2: [
-    ["🐾", "Cuidar dele", () => { if (window.bicho) window.bicho.abrirPainel(); }],
-    ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
+  boneco: [
+    ["boneco", "Trocar boneco", () => abrirPainelBonecos()],
+    ["tamanho", "Tamanho", () => cicloTamanho(), () => Math.round(escala() * 100) + "%", true],
+    ["passear", "Passear sozinho", () => alternaParado(), () => cfg.parado ? "Parado" : "Ligado", true],
+    ["perfil", "Perfil", () => cicloPerfil(), () => ({ calmo: "Calmo", agitado: "Agitado", brincalhao: "Brincalhão" })[cfg.perfil] || "", true],
+    ["interacao", "Interação", () => alternaInteracao(), () => cfg.interagir ? "Ligada" : "Desligada", true],
   ],
-  linha3: [
-    ["📊", "Como ele está", () => status()],
-    ["💎", "Coleção", () => { if (window.premiosGaleria) window.premiosGaleria(); else msg("A coleção do bicho mora aqui.", "ele"); }],
-    ["🖐", "Gestos", () => reagir("Olha eu me mexendo! 🎩", "pensando")],
-    ["📧", "E-mail", () => abrirEmail()],
+  recursos: [
+    ["conversar", "Conversar", () => { abrirBalao(); txt.focus(); }, "No balão, junto do boneco"],
+    ["janela", "Chat estendido", () => abrirChatGrande(), "Janela grande, com histórico"],
+    ["email", "E-mail", () => abrirEmail(), "O que chegou de importante"],
   ],
-  // ícone/rótulo podem ser função: o tile mostra o estado ATUAL a cada abertura
-  linha4: [
-    ["🐾", "Boneco", () => abrirPainelBonecos()],
-    ["📏", () => "Tamanho " + Math.round(escala() * 100) + "%", () => cicloTamanho()],
-    [() => cfg.parado ? "🚶" : "📌", () => cfg.parado ? "Deixar passear" : "Ficar parado", () => alternaParado()],
-    ["🎭", "Perfil", () => cicloPerfil()],
-    ["🖱", "Interação", () => alternaInteracao()],
-    ["🖥", "Tela e borda", () => abrirSeletorTela()],
-    ["👁", "Esconder 1h", () => esconder(60)],
+  sistema: [
+    ["tela", "Tela e borda", () => abrirSeletorTela()],
+    ["ajustes", "Aparência", () => abrirAparencia()],
+    ["esconder", "Esconder por 15 min", () => esconder(15)],
+    ["relogio", "Esconder por 1 h", () => esconder(60)],
+    ["recolher", "Recolher janela", () => esconderJanela()],
+    ["balao", "Recolher balão", () => fecharBalao()],
   ],
-  // Linha obrigatória de controle: DESLIGAR sempre visível, sempre no mesmo lugar.
-  linha5: [
-    ["⏻", "DESLIGAR", () => desligar()],
-    ["👁", "Esconder 15min", () => esconder(15)],
-    ["⌄", "Recolher janela", () => esconderJanela()],
-    ["↺", "Recolher balão", () => fecharBalao()],
-  ],
-  // linha6 ficou vazia de propósito: era depósito de resto (incl. o botão de
-  // debug "Testar balãozinho"). Linha vazia não é renderizada.
-  linha6: [],
 };
+const ABAS_MENU = [["pet", "Pet"], ["recursos", "Recursos"], ["sistema", "Sistema"]];
+let abaMenu = "pet";
+
+const valorDe = (v) => (typeof v === "function" ? v() : v) || "";
+// texto no innerHTML do menu sempre escapado (o nome do pet é digitado pela dona)
+const escMenu = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 function montarMenu() {
-  for (const id of ["linha1", "linha3", "linha4", "linha5", "linha6"]) {
-    const box = document.getElementById(id);
-    if (!box) continue;
-    box.innerHTML = "";
-    const lista = TILES[id] || [];
-    // linha vazia não ocupa espaço (era o buraco onde sobrava menu velho)
-    box.style.display = lista.length ? "" : "none";
-    for (const [icoT, rotuloT, acao] of lista) {
-      const ico = typeof icoT === "function" ? icoT() : icoT;
-      const rotulo = typeof rotuloT === "function" ? rotuloT() : rotuloT;
-      const b = document.createElement("div");
-      b.className = "tile"; b.dataset.acao = rotulo;
-      b.innerHTML = `<span class="ico">${ico}</span>${rotulo}`;
-      b.onclick = () => { fecharMenu(); acao(); };
-      box.appendChild(b);
-    }
+  // nome, humor e o que ele está pedindo vêm do bicho.js (se carregou)
+  let r = { nome: "Hermes", linha: "", pendente: "" };
+  try { if (window.bichoResumo) r = Object.assign(r, window.bichoResumo()); } catch (e) { }
+  const linha = (it, cls) => {
+    const [ico, nome, , valor] = it;
+    return `<button class="mlinha ${cls || ""}" data-acao="${escMenu(valorDe(nome))}">${icone(ico, 18)}` +
+      `<span class="nome">${escMenu(valorDe(nome))}</span><span class="valor">${escMenu(valorDe(valor))}</span></button>`;
+  };
+  let corpo = "";
+  if (abaMenu === "pet") {
+    corpo = `<div class="menu-grade">${MENU.pet.map(([ico, nome]) =>
+      `<button class="mtile" data-acao="${escMenu(nome)}"><span class="mtile-ico">${icone(ico)}</span>` +
+      `<span>${escMenu(nome)}</span>${r.pendente === ico ? '<i class="pendente" title="pedindo agora"></i>' : ""}</button>`).join("")}</div>
+      <div class="mlista"><div class="menu-secao">Boneco</div>${MENU.boneco.map((it) => linha(it)).join("")}</div>`;
+  } else if (abaMenu === "recursos") {
+    corpo = `<div class="mlista largo">${MENU.recursos.map(([ico, nome, , desc]) =>
+      `<button class="mcartao" data-acao="${escMenu(nome)}"><span class="mcartao-ico">${icone(ico)}</span>` +
+      `<span class="txt"><b>${escMenu(nome)}</b><span>${escMenu(desc || "")}</span></span>${icone("seta", 16)}</button>`).join("")}</div>`;
+  } else {
+    corpo = `<div class="mlista">${MENU.sistema.map((it) => linha(it)).join("")}
+      <div class="menu-sep"></div>${linha(["desligar", "Desligar"], "perigo")}</div>`;
   }
-  montarDestaque();
-}
+  menu.innerHTML = `
+    <div class="menu-topo">
+      <span class="menu-avatar">${icone("boneco")}</span>
+      <span class="menu-quem"><b>${escMenu(r.nome)}</b><span>${escMenu(r.linha)}</span></span>
+      <button class="botao-x" data-fechar aria-label="Fechar menu">${icone("fechar", 18)}</button>
+    </div>
+    <div class="menu-abas" role="tablist">${ABAS_MENU.map(([k, rot]) =>
+      `<button role="tab" data-aba="${k}" class="${abaMenu === k ? "sel" : ""}" aria-selected="${abaMenu === k}">${rot}</button>`).join("")}</div>
+    ${corpo}`;
 
-function montarDestaque() {
-  const botoes = document.querySelector(".menu-linha.destaque");
-  if (!botoes) return;
-  botoes.innerHTML = "";
-  const lista = TILES.linha2 || [];
-  botoes.style.display = lista.length ? "" : "none";
-  for (const [ico, rot, fn] of lista) {
-    const b = document.createElement("div");
-    b.className = "tile grande"; b.dataset.acao = rot;
-    b.innerHTML = `<span class="ico">${ico}</span>${rot}`;
-    b.onclick = () => { fecharMenu(); fn(); };
-    botoes.appendChild(b);
-  }
+  menu.querySelector("[data-fechar]").onclick = fecharMenu;
+  menu.querySelectorAll("[data-aba]").forEach((b) => {
+    b.onclick = () => { abaMenu = b.dataset.aba; montarMenu(); posicionaPertoDoPet(menu); reportarHit(); };
+  });
+  const itens = abaMenu === "pet" ? [...MENU.pet, ...MENU.boneco]
+    : abaMenu === "recursos" ? MENU.recursos
+    : [...MENU.sistema, ["desligar", "Desligar", () => desligar()]];
+  menu.querySelectorAll("[data-acao]").forEach((b, i) => {
+    const it = itens[i];
+    if (!it) return;
+    const fica = abaMenu !== "recursos" && it[4];
+    b.onclick = () => {
+      if (fica) { it[2](); if (!menu.classList.contains("oculto")) { montarMenu(); reportarHit(); } return; }
+      fecharMenu(); it[2]();
+    };
+  });
+  destacarPendencia();
 }
 
 function destacarPendencia() {
-  document.querySelectorAll(".tile").forEach(t => t.classList.remove("alerta"));
-  // aponta só para tiles que EXISTEM (antes mandava para "Missões", que saiu do
-  // menu — o destaque amarelo de estado nunca acendia) — 03/10/2026
-  const alvo = { erro: "Como ele está", pensando: "Conversar", dormindo: "Dormir" }[estado.state];
+  document.querySelectorAll("#menu [data-acao]").forEach(t => t.classList.remove("alerta"));
+  // aponta só para itens que EXISTEM (antes mandava para "Missões", que saiu do
+  // menu — o destaque de estado nunca acendia) — 03/10/2026
+  const alvo = { erro: "Como está", pensando: "Conversar", dormindo: "Dormir" }[estado.state];
   if (!alvo) return;
-  const t = [...document.querySelectorAll(".tile")].find(e => (e.dataset.acao || "").startsWith(alvo));
+  const t = [...document.querySelectorAll("#menu [data-acao]")].find(e => (e.dataset.acao || "").startsWith(alvo));
   if (t) t.classList.add("alerta");
 }
 
-function abrirMenu(x, y) {
+/* Painel encostado no boneco: em cima dele se o boneco está na metade de baixo da
+   tela (o caso comum: canto inferior), embaixo se está em cima; alinhado pelo lado
+   de dentro da tela. Ancora pela BASE quando fica em cima: assim trocar de aba
+   (que muda a altura) cresce para cima sem desgrudar do boneco. */
+function posicionaPertoDoPet(el) {
+  const r = retPet(), m = 8, gap = 10;
+  const w = el.offsetWidth;
+  const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+  const left = cx > innerWidth / 2 ? r.right - w : r.left;
+  el.style.left = Math.round(Math.max(m, Math.min(left, innerWidth - w - m))) + "px";
+  if (cy > innerHeight / 2) {
+    el.style.top = "auto";
+    el.style.bottom = Math.round(Math.max(m, innerHeight - r.top + gap)) + "px";
+    el.style.maxHeight = Math.round(Math.max(200, r.top - gap - m)) + "px";
+  } else {
+    el.style.bottom = "auto";
+    el.style.top = Math.round(Math.min(r.bottom + gap, innerHeight - 200)) + "px";
+    el.style.maxHeight = Math.round(Math.max(200, innerHeight - r.bottom - gap - m)) + "px";
+  }
+}
+
+function abrirMenu() {
+  abaMenu = "pet";
   montarMenu();
   menu.classList.remove("oculto");
-  const w = menu.offsetWidth, h = menu.offsetHeight;
-  menu.style.left = Math.min(x, innerWidth - w - 8) + "px";
-  menu.style.top = Math.max(8, Math.min(y - h - 10, innerHeight - h - 8)) + "px";
+  posicionaPertoDoPet(menu);
   ultimoMenu = Date.now();
   reportarHit();
 }
@@ -1482,12 +1521,13 @@ pet.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 document.addEventListener("click", (e) => {
-  if (!menu.contains(e.target) && e.target !== pet && !pet.contains(e.target)) {
+  // composedPath: trocar de aba REFAZ o menu, e o alvo do clique já saiu do DOM
+  if (!e.composedPath().includes(menu) && e.target !== pet && !pet.contains(e.target)) {
     if (Date.now() - ultimoMenu > 300) fecharMenu();
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;
