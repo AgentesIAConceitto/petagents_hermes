@@ -19,6 +19,8 @@ const ia = {
   status: null,         // { tipo: "ok" | "erro" | "info", texto }
   boasVindas: false,
   ocupado: false,
+  // voz (voz.go): a chave do Groq que transcreve o áudio do chat — salva à parte da IA
+  voz: { atual: null, nova: "", trocando: false, status: null, ocupado: false },
 };
 
 const provAtual = () => provedoresIA.find((p) => p.id === ia.provedor) || null;
@@ -40,6 +42,10 @@ async function carregaIA() {
     if (!provedoresIA.length) provedoresIA = JSON.parse(await G.IAProvedores());
     ia.atual = JSON.parse(await G.IAAtual());
   } catch (e) { ia.atual = null; }
+  try { ia.voz.atual = JSON.parse(await G.VozAtual()); } catch (e) { ia.voz.atual = null; }
+  ia.voz.nova = "";
+  ia.voz.trocando = !(ia.voz.atual && ia.voz.atual.temChave);
+  ia.voz.status = null;
   const a = ia.atual;
   if (!a) return;
   ia.modo = a.modo;
@@ -100,7 +106,8 @@ function pintaIA() {
     <div class="ia-acoes">
       <button class="ia-bt sec" data-testar ${ia.ocupado ? "disabled" : ""}>Testar acesso</button>
       <button class="ia-bt" data-salvar ${ia.ocupado ? "disabled" : ""}>Salvar</button>
-    </div>`;
+    </div>
+    ${secaoVozIA()}`;
 
   const q = (s) => p.querySelector(s);
   q("[data-fechar]").onclick = fecharInteligencia;
@@ -121,7 +128,56 @@ function pintaIA() {
   };
   q("[data-testar]").onclick = testaIA;
   q("[data-salvar]").onclick = salvaIA;
+  ligaSecaoVozIA(q);
   if (typeof reportarHit === "function") reportarHit();
+}
+
+/* ───────── voz: a chave do Groq que transcreve o áudio do 🎤 (voz.js / voz.go) ───────── */
+
+function secaoVozIA() {
+  const v = ia.voz, a = v.atual;
+  if (!a) return "";
+  const status = v.status ? `<div class="ia-status ${v.status.tipo}">${escIA(v.status.texto)}</div>` : "";
+  return `
+    <div class="ap-sec"><span>Voz — falar pelo microfone do chat</span>
+      ${v.trocando || !a.temChave
+        ? `<input class="ia-campo" data-voz-chave type="password" autocomplete="off" spellcheck="false"
+             placeholder="chave do Groq (gsk_…)" value="${escIA(v.nova)}">`
+        : `<div class="ia-linha"><code class="ia-mascara">${escIA(a.chave)}</code>
+             <button class="ia-bt sec" data-voz-trocar>Trocar</button></div>`}
+      <p class="ia-nota">O áudio vira texto pelo Groq Whisper (conta grátis, ~1 s por frase).
+        <a href="#" class="ia-link" data-voz-pagina>criar a minha chave ↗</a></p>
+      ${status}
+      ${v.trocando || !a.temChave
+        ? `<div class="ia-acoes"><button class="ia-bt" data-voz-salvar ${v.ocupado ? "disabled" : ""}>Testar e salvar a voz</button></div>`
+        : ""}
+    </div>`;
+}
+
+function ligaSecaoVozIA(q) {
+  const v = ia.voz;
+  const ch = q("[data-voz-chave]");
+  if (ch) ch.oninput = () => { v.nova = ch.value; };
+  if (q("[data-voz-trocar]")) q("[data-voz-trocar]").onclick = () => { v.trocando = true; pintaIA(); q("[data-voz-chave]").focus(); };
+  if (q("[data-voz-pagina]")) q("[data-voz-pagina]").onclick = (e) => {
+    e.preventDefault();
+    try { window.runtime.BrowserOpenURL(v.atual.pagina); } catch (err) { }
+  };
+  if (q("[data-voz-salvar]")) q("[data-voz-salvar]").onclick = salvaVozIA;
+}
+
+async function salvaVozIA() {
+  const v = ia.voz;
+  if (!v.nova.trim()) { v.status = { tipo: "erro", texto: "Cole a chave do Groq." }; pintaIA(); return; }
+  v.ocupado = true; v.status = { tipo: "info", texto: "testando a chave…" }; pintaIA();
+  let r = { ok: false, erro: "não consegui salvar" };
+  try { r = JSON.parse(await G.VozSalvar(v.nova.trim())); } catch (e) { }
+  v.ocupado = false;
+  if (!r.ok) { v.status = { tipo: "erro", texto: "✗ " + r.erro }; pintaIA(); return; }
+  try { v.atual = JSON.parse(await G.VozAtual()); } catch (e) { }
+  v.nova = ""; v.trocando = false;
+  v.status = { tipo: "ok", texto: "✓ Voz pronta: clique no microfone do chat e fale." };
+  pintaIA();
 }
 
 const notaModelosIA = (pv) => ia.modelos.length

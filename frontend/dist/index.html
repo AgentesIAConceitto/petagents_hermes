@@ -53,12 +53,16 @@
     <div class="balao-topo chat-topo">
       <span class="dot" id="dot"></span>
       <span class="chat-quem"><b id="balao-titulo"></b><span id="balao-sub" class="sub"></span></span>
+      <!-- ler as respostas em voz alta: liga/desliga (voz.js) -->
+      <button id="balao-som" class="botao-x voz-som" title="Ler as respostas em voz alta" aria-label="Ler as respostas em voz alta"></button>
       <button id="balao-estender" class="botao-x" data-ic="tamanho" title="Abrir o chat estendido" aria-label="Abrir o chat estendido"></button>
       <button id="balao-min" class="botao-x" data-ic="menos" title="Esconder (Esc)" aria-label="Esconder o chat"></button>
     </div>
     <div id="msgs" class="msgs"></div>
     <div class="balao-rodape">
-      <input id="txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
+      <input id="txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
+      <!-- falar em vez de digitar: grava, transcreve e envia (voz.js) -->
+      <button id="voz" class="voz-mic" data-ic="microfone" title="Falar (clique, fale e pare: eu envio sozinho)" aria-label="Gravar áudio"></button>
       <button id="enviar" data-ic="enviar" aria-label="Enviar"></button>
     </div>
     <!-- redimensionar: canto de cima, do lado oposto ao rabinho (o balão cresce para cima) -->
@@ -84,12 +88,14 @@
     <div class="cg-topo" id="cg-topo">
       <span class="dot" id="cg-dot"></span>
       <span class="chat-quem"><b id="cg-tit"></b><span class="sub" id="cg-sub"></span></span>
+      <button id="cg-som" class="botao-x voz-som" title="Ler as respostas em voz alta" aria-label="Ler as respostas em voz alta"></button>
       <button class="cg-bt sec" id="cg-min" title="voltar ao chat pequeno (reabre o balão)"><span data-ic="recolher"></span>chat pequeno</button>
       <button class="botao-x" id="cg-x" data-ic="fechar" title="fechar o chat (a conversa fica guardada)" aria-label="Fechar o chat"></button>
     </div>
     <div id="cg-msgs" class="msgs cg-msgs"></div>
     <div class="cg-rodape">
-      <input id="cg-txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
+      <input id="cg-txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
+      <button id="cg-voz" class="voz-mic" data-ic="microfone" title="Falar (clique, fale e pare: eu envio sozinho)" aria-label="Gravar áudio"></button>
       <button id="cg-enviar" class="cg-bt"><span data-ic="enviar"></span>Enviar</button>
     </div>
     <div class="cg-puxa" id="cg-puxa" title="arraste para redimensionar"></div>
@@ -139,5 +145,6 @@
   <script src="premios.js"></script>
   <script src="bicho.js"></script>
   <script src="inteligencia.js"></script>
+  <script src="voz.js"></script>
 </body>
 </html>

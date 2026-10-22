@@ -359,6 +359,7 @@ async function carregarPet() {
   aplicaAparencia(cfg.aparencia); // tema.js: cores, fonte, ícones e cantos salvos
   aplicaPerfil(); aplicaInteracao(); aplicaParado(); aplicaTamanho(); aplicaPosicao();
   carregarPetDex(); // boneco da galeria (Petdex), se houver um instalado
+  if (typeof pintaBotoesVoz === "function") pintaBotoesVoz(); // 🔊 salvo em cfg.vozFala (voz.js)
 }
 
 /* ───────── PERFIL e INTERAÇÃO ───────── */
@@ -1034,6 +1035,7 @@ async function enviarTexto(texto, input) {
   texto = (texto || "").trim();
   if (!texto || ocupado) return;
   input.value = "";
+  if (typeof pararFala === "function") pararFala(); // pergunta nova: a resposta antiga se cala
   msg(texto, "eu");
   classePet("pensando");
   ocupado = true;                       // esperando resposta: o balão NÃO se esconde
@@ -1048,7 +1050,7 @@ async function enviarTexto(texto, input) {
   const levou = Math.round((Date.now() - t0) / 100) / 10;
   ocupado = false;
   input.disabled = false;
-  input.placeholder = "Escreva e dê Enter…";
+  input.placeholder = "Escreva ou fale pelo microfone…";
   // COMANDOS QUE LIMPAM A TELA (pedido do dono, 10/10/2026): /clear, /new e /reset apagam a
   // conversa VISÍVEL — senão o chat fica poluído e o dono rola por mãos antigas. A ponte cuida
   // do CONTEXTO (cria sessão nova); a tela é daqui. Apago ANTES de mostrar a resposta, para o
@@ -1070,6 +1072,7 @@ async function enviarTexto(texto, input) {
   const chatFechado = balao.classList.contains("oculto") && (!cg || cg.classList.contains("oculto"));
   msg(resp, "ele", { hora: hora, seg: levou });
   classePet(estado.state || "idle");
+  if (typeof falarResposta === "function") falarResposta(resp); // 🔊 ligado: lê em voz alta (voz.js)
   if (chatFechado) {
     const ver = () => abrirBalao();
     toast("conversar", nomeDoPet() + " respondeu", String(resp).replace(/\s+/g, " ").slice(0, 110), 30000, false,
