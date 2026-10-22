@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,6 +144,7 @@ func TestIASalvarIgualAoHermes(t *testing.T) {
 	antes := depoisDeSalvarIA
 	depoisDeSalvarIA = func(*App) {} // sem reiniciar a ponte de verdade
 	t.Cleanup(func() { depoisDeSalvarIA = antes })
+	falsoComplemento(t, nil)
 	h := filepath.Join(base, "hermes")
 	if err := os.MkdirAll(h, 0o755); err != nil {
 		t.Fatal(err)
@@ -191,5 +193,58 @@ func TestIASalvarIgualAoHermes(t *testing.T) {
 	// sem chave nenhuma para o provedor: recusa
 	if r = a.IASalvar(`{"modo":"hermes","provedor":"xai","modelo":"grok-5","chave":""}`); !strings.Contains(r, "falta a chave") {
 		t.Errorf("sem chave deveria recusar: %s", r)
+	}
+}
+
+// falsoComplemento — troca o `hermes pm install` de verdade (o teste não instala nada no
+// Hermes da máquina). Devolve a lista de extras pedidos.
+func falsoComplemento(t *testing.T, erro error) *[]string {
+	t.Helper()
+	pedidos := &[]string{}
+	antes := instalaComplemento
+	instalaComplemento = func(extra string) (bool, error) {
+		*pedidos = append(*pedidos, extra)
+		return erro == nil, erro
+	}
+	t.Cleanup(func() { instalaComplemento = antes })
+	return pedidos
+}
+
+// TestIASalvarInstalaComplemento — o chat da Anthropic respondia "(sem texto)" porque o
+// Hermes não tinha o extra `anthropic` (22/10/2026). Salvar a Anthropic instala o extra;
+// falhando a instalação, NADA é gravado (a IA que funciona hoje fica como está). Provedor
+// sem complemento não chama o instalador.
+func TestIASalvarInstalaComplemento(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("LOCALAPPDATA", base)
+	antes := depoisDeSalvarIA
+	depoisDeSalvarIA = func(*App) {}
+	t.Cleanup(func() { depoisDeSalvarIA = antes })
+	a := &App{}
+
+	pedidos := falsoComplemento(t, nil)
+	r := a.IASalvar(`{"modo":"boneco","provedor":"anthropic","modelo":"claude-haiku-5-5","chave":"sk-ant-teste-123456"}`)
+	if !strings.Contains(r, `"ok":true`) || !strings.Contains(r, `"instalou":true`) {
+		t.Fatalf("salvar anthropic: %s", r)
+	}
+	if len(*pedidos) != 1 || (*pedidos)[0] != "anthropic" {
+		t.Fatalf("extras pedidos: %v", *pedidos)
+	}
+
+	pedidos = falsoComplemento(t, nil)
+	if r = a.IASalvar(`{"modo":"boneco","provedor":"deepseek","modelo":"deepseek-chat","chave":"sk-ds-123456"}`); !strings.Contains(r, `"ok":true`) {
+		t.Fatalf("salvar deepseek: %s", r)
+	}
+	if len(*pedidos) != 0 {
+		t.Errorf("deepseek não exige complemento, mas pediu %v", *pedidos)
+	}
+
+	falsoComplemento(t, errors.New("sem rede"))
+	r = a.IASalvar(`{"modo":"boneco","provedor":"anthropic","modelo":"claude-haiku-5-5","chave":"sk-ant-teste-123456"}`)
+	if !strings.Contains(r, `"ok":false`) || !strings.Contains(r, "sem rede") {
+		t.Fatalf("instalação falhou e o salvar não recusou: %s", r)
+	}
+	if e := iaAgora(); e.Provedor != "deepseek" {
+		t.Errorf("com a instalação falhando, a IA anterior devia ficar: %+v", e)
 	}
 }

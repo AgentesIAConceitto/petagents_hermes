@@ -159,7 +159,12 @@ async function salvaIA() {
   const pv = provAtual();
   if (!pv) return;
   if (!ia.modelo.trim()) { ia.status = { tipo: "erro", texto: "Escolha um modelo." }; pintaIA(); return; }
-  ia.ocupado = true; ia.status = { tipo: "info", texto: "salvando…" }; pintaIA();
+  ia.ocupado = true;
+  // provedor que exige complemento do Hermes (ex.: Anthropic): o Go instala antes de gravar
+  ia.status = { tipo: "info", texto: pv.complemento
+    ? "Instalando no Hermes o complemento do " + pv.nome + "… na primeira vez leva cerca de 1 min."
+    : "salvando…" };
+  pintaIA();
   let r = { ok: false, erro: "não consegui salvar" };
   try {
     r = JSON.parse(await G.IASalvar(JSON.stringify({ modo: ia.modo, provedor: pv.id, modelo: ia.modelo.trim(), chave: ia.chaveNova.trim() })));
@@ -177,8 +182,11 @@ async function salvaIA() {
       clearInterval(espera);
       await carregaIA();
       ia.ocupado = false;
+      // complemento instalado agora: o Telegram/terminal do Hermes já abertos só o veem ao reiniciar
+      const avisoHermes = r.instalou && ia.atual && ia.atual.modo === "hermes"
+        ? " Instalei o complemento do " + pv.nome + " no Hermes: se o Telegram estiver aberto, reinicie o gateway." : "";
       ia.status = pronta
-        ? { tipo: "ok", texto: "✓ Pronto: " + ((ia.atual && ia.atual.efetivo.modelo) || ia.modelo) }
+        ? { tipo: "ok", texto: "✓ Pronto: " + ((ia.atual && ia.atual.efetivo.modelo) || ia.modelo) + "." + avisoHermes }
         : { tipo: "erro", texto: "O agente não voltou em 90 s. Vou responder pelo modo lento enquanto isso." };
       pintaIA();
     }
