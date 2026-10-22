@@ -174,6 +174,7 @@ svg.ic {
 }
 .menu {
   position: absolute; z-index: 64; width: 392px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
   display: flex; flex-direction: column; gap: 14px; padding: 16px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -255,6 +256,7 @@ svg.ic {
 /* ───────── APARÊNCIA (menu › Sistema › Aparência) ───────── */
 .aparencia {
   position: absolute; z-index: 65; width: 340px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
   display: flex; flex-direction: column; gap: 18px; padding: 20px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -487,6 +489,8 @@ svg.ic {
   flex: 1 1 auto; min-height: 110px; display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 7px; overflow-y: auto; align-content: start;
 }
+.pets-grade::-webkit-scrollbar { width: 7px; }
+.pets-grade::-webkit-scrollbar-thumb { background: var(--rolagem); border-radius: 4px; }
 .pets-grade .aviso { grid-column: 1 / -1; font-size: 11px; opacity: .8; padding: 8px 2px; }
 .card {
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px;
@@ -525,6 +529,8 @@ svg.ic {
 .email.oculto { display: none; }
 .email-resumo { font-size: 11px; color: var(--sub); line-height: 1.35; }
 .email-lista { overflow-y: auto; max-height: 300px; display: flex; flex-direction: column; gap: 5px; }
+.email-lista::-webkit-scrollbar { width: 7px; }
+.email-lista::-webkit-scrollbar-thumb { background: var(--rolagem); border-radius: 4px; }
 .email-item {
   display: flex; gap: 6px; align-items: center; padding: 5px 7px; border-radius: var(--raio-interno);
   background: var(--sup); border: 1px solid var(--borda);

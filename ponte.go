@@ -32,14 +32,22 @@ import (
 
 var (
 	ponteIn     io.WriteCloser
-	ponteOut    *bufio.Reader
-	ponteMu     sync.Mutex
-	ponteErro   string
-	pontePronta bool
+	ponteLinhas chan string // stdout da ponte, linha a linha — de UM leitor só (ligaPonte)
+	ponteMu     sync.Mutex  // uma pergunta por vez
+	ponteSeq    int         // id da pergunta em andamento (só muda com ponteMu)
 	ponteUma    sync.Once
 
 	ponteModeloMu sync.Mutex
 	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
+
+	// escritos pelo leitor da ponte e lidos a cada pergunta: sempre com a trava
+	ponteEstadoMu sync.Mutex
+	ponteErro     string
+	pontePronta   bool
+
+	// prazoPonte — quanto o app espera cada linha da ponte (variável só para o teste
+	// encurtar; o porquê dos 330 s está em perguntaPonte).
+	prazoPonte = 330 * time.Second
 )
 
 // guardaModelo — a ponte manda o modelo no handshake e em cada resposta (vazio = não sabe,
@@ -83,6 +91,20 @@ func caminhoPythonHermes() string {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
+		// Hermes 0.21+ (Windows): o venv mora em installs\<id>\environments\<hash>\venv
+		// (nome sorteado). Se houver mais de um, o mais recente é o da instalação atual.
+		achados, _ := filepath.Glob(filepath.Join(base, "hermes", "installs", "*",
+			"environments", "*", "venv", "Scripts", "python.exe"))
+		var maisNovo time.Time
+		p = ""
+		for _, c := range achados {
+			if st, err := os.Stat(c); err == nil && st.ModTime().After(maisNovo) {
+				maisNovo, p = st.ModTime(), c
+			}
+		}
+		if p != "" {
+			return p
+		}
 	}
 	if p, err := exec.LookPath("python"); err == nil {
 		return p
@@ -96,8 +118,7 @@ func (a *App) sobePonte() {
 	ponteUma.Do(func() {
 		script, py := caminhoPonte(), caminhoPythonHermes()
 		if script == "" || py == "" {
-			ponteErro = "ponte indisponível (script ou python não encontrados)"
-			logMsg("ponte: " + ponteErro)
+			marcaPonte(false, "ponte indisponível (script ou python não encontrados)")
 			return
 		}
 		cmd := exec.Command(py, script)
@@ -105,67 +126,108 @@ func (a *App) sobePonte() {
 			HideWindow:    true,
 			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 		}
-		var err error
-		if ponteIn, err = cmd.StdinPipe(); err != nil {
-			ponteErro = err.Error()
-			logMsg("ponte: stdin " + err.Error())
+		in, err := cmd.StdinPipe()
+		if err != nil {
+			marcaPonte(false, "stdin "+err.Error())
 			return
 		}
 		var out io.ReadCloser
 		if out, err = cmd.StdoutPipe(); err != nil {
-			ponteErro = err.Error()
-			logMsg("ponte: stdout " + err.Error())
+			marcaPonte(false, "stdout "+err.Error())
 			return
 		}
-		cmd.Stderr = nil // a ponte já manda o diagnóstico dela pro stderr dela
-		if err = cmd.Start(); err != nil {
-			ponteErro = err.Error()
-			logMsg("ponte: start " + err.Error())
-			return
-		}
-		ponteOut = bufio.NewReaderSize(out, 1<<20)
 		// o stderr da ponte vai para arquivo: quando ela morria calada (02/10/2026)
-		// eu não tinha como saber por quê
+		// eu não tinha como saber por quê. ⚠️ Tem de ser ANTES do Start: o exec só
+		// olha cmd.Stderr ao iniciar (antes era depois, e o arquivo nunca recebia nada).
 		arq := filepath.Join(filepath.Dir(script), "ponte_erro.log")
 		if f, errArq := os.OpenFile(arq, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); errArq == nil {
 			cmd.Stderr = f
 		}
+		if err = cmd.Start(); err != nil {
+			marcaPonte(false, "start "+err.Error())
+			return
+		}
 		logMsg("ponte: chat quente ligado (hermes acp via chat_bridge.py)")
-		// espera o handshake: a ponte só vale quando diz "pronto: true"
-		go func() {
-			linha, errLeitura := ponteOut.ReadString('\n')
-			if errLeitura != nil {
-				ponteErro = "ponte morreu antes do handshake: " + errLeitura.Error()
-				logMsg("ponte: " + ponteErro)
-				return
-			}
-			var d struct {
-				Pronto bool   `json:"pronto"`
-				Erro   string `json:"erro"`
-				Modelo string `json:"modelo"`
-			}
-			if json.Unmarshal([]byte(linha), &d) != nil {
-				ponteErro = "handshake ilegível: " + strings.TrimSpace(linha)
-				logMsg("ponte: " + ponteErro)
-				return
-			}
-			if !d.Pronto {
-				ponteErro = "ponte sem agente: " + d.Erro
-				logMsg("ponte: " + ponteErro)
-				return
-			}
-			pontePronta = true
-			guardaModelo(d.Modelo)
-			logMsg("ponte: agente quente confirmado (handshake ok)")
-		}()
+		ligaPonte(in, out)
 	})
 }
 
+func estadoPonte() (pronta bool, erro string) {
+	ponteEstadoMu.Lock()
+	defer ponteEstadoMu.Unlock()
+	return pontePronta, ponteErro
+}
+
+func marcaPonte(pronta bool, erro string) {
+	ponteEstadoMu.Lock()
+	pontePronta, ponteErro = pronta, erro
+	ponteEstadoMu.Unlock()
+	if erro != "" {
+		logMsg("ponte: " + erro)
+	}
+}
+
+// ligaPonte — passa a conversar com a ponte por estes canos.
+//
+// UM LEITOR SÓ para o stdout da ponte. Antes, cada pergunta criava a própria goroutine
+// de leitura e, quando o prazo estourava, ela ficava ÓRFÃ lendo o mesmo bufio.Reader
+// que a da pergunta seguinte. A órfã comia uma linha (um progresso, por exemplo) e a
+// resposta ATRASADA da pergunta anterior era entregue como resposta da nova — o dono
+// perguntava B e lia a resposta de A (ver ponte_test.go). Agora só esta goroutine lê;
+// cada pergunta leva um id e perguntaPonte descarta o que for de outra.
+func ligaPonte(in io.WriteCloser, out io.Reader) {
+	linhas := make(chan string, 256)
+	ponteMu.Lock()
+	ponteIn, ponteLinhas = in, linhas
+	ponteMu.Unlock()
+	go func() {
+		defer close(linhas)
+		r := bufio.NewReaderSize(out, 1<<20)
+		// espera o handshake: a ponte só vale quando diz "pronto: true"
+		linha, err := r.ReadString('\n')
+		if err != nil {
+			marcaPonte(false, "ponte morreu antes do handshake: "+err.Error())
+			return
+		}
+		var d struct {
+			Pronto bool   `json:"pronto"`
+			Erro   string `json:"erro"`
+			Modelo string `json:"modelo"`
+		}
+		if json.Unmarshal([]byte(linha), &d) != nil {
+			marcaPonte(false, "handshake ilegível: "+strings.TrimSpace(linha))
+			return
+		}
+		if !d.Pronto {
+			marcaPonte(false, "ponte sem agente: "+d.Erro)
+			return
+		}
+		guardaModelo(d.Modelo)
+		marcaPonte(true, "")
+		logMsg("ponte: agente quente confirmado (handshake ok)")
+		for {
+			linha, err := r.ReadString('\n')
+			if strings.TrimSpace(linha) != "" {
+				linhas <- linha
+			}
+			if err != nil {
+				marcaPonte(false, "ponte encerrou: "+err.Error())
+				return
+			}
+		}
+	}()
+}
+
 // perguntaPonte — manda uma pergunta e espera a resposta da ponte.
+//
+// ok=true: a ponte cuidou da pergunta — o texto é a resposta OU um aviso para a tela.
+// ok=false: a ponte está fora do ar e vale a reserva lenta. Se a ponte está de pé e só
+// demorou, NÃO é caso de reserva: ela segue trabalhando na pergunta e a reserva repetiria
+// a mesma pergunta, gastando créditos em dobro (13/10/2026).
 func (a *App) perguntaPonte(texto string) (string, bool) {
-	if ponteIn == nil || ponteOut == nil || !pontePronta {
-		if ponteErro != "" {
-			logMsg("ponte: indisponível (" + ponteErro + ") — usando a reserva lenta")
+	if pronta, erro := estadoPonte(); !pronta {
+		if erro != "" {
+			logMsg("ponte: indisponível (" + erro + ") — usando a reserva lenta")
 		} else {
 			logMsg("ponte: ainda não confirmada — usando a reserva lenta")
 		}
@@ -174,31 +236,25 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 	ponteMu.Lock()
 	defer ponteMu.Unlock()
 
-	pedido, _ := json.Marshal(map[string]string{"prompt": texto})
+	ponteSeq++
+	id := ponteSeq
+	pedido, _ := json.Marshal(map[string]any{"id": id, "prompt": texto})
 	if _, err := ponteIn.Write(append(pedido, '\n')); err != nil {
 		logMsg("ponte: falha ao escrever (" + err.Error() + ") — reserva lenta")
 		return "", false
 	}
 	t0 := time.Now()
-	type linhaRes struct {
-		linha string
-		err   error
-	}
 	// lê até achar uma RESPOSTA de verdade: a ponte manda um frame de handshake
 	// antes, e um frame extra não pode ser confundido com resposta (02/10/2026)
 	for tentativa := 0; tentativa < 4; tentativa++ {
-		ch := make(chan linhaRes, 1)
-		go func() {
-			l, err := ponteOut.ReadString('\n')
-			ch <- linhaRes{l, err}
-		}()
 		select {
-		case r := <-ch:
-			if r.err != nil {
-				logMsg("ponte: leitura falhou (" + r.err.Error() + ") — reserva lenta")
+		case linha, aberta := <-ponteLinhas:
+			if !aberta {
+				logMsg("ponte: encerrou no meio da pergunta — reserva lenta")
 				return "", false
 			}
 			var d struct {
+				ID        int     `json:"id"` // eco do id do pedido (ponte antiga não manda: 0)
 				OK        bool    `json:"ok"`
 				Pronto    bool    `json:"pronto"`
 				Resposta  string  `json:"resposta"`
@@ -208,13 +264,22 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				Segundos  float64 `json:"segundos"`
 				Modelo    string  `json:"modelo"`
 			}
-			if err := json.Unmarshal([]byte(r.linha), &d); err != nil {
-				txt := strings.TrimSpace(r.linha)
+			if err := json.Unmarshal([]byte(linha), &d); err != nil {
+				txt := strings.TrimSpace(linha)
 				if txt == "" {
 					continue
 				}
 				logMsg("ponte: linha fora do formato — usando como texto")
 				return txt, true
+			}
+			// linha de OUTRA pergunta: a que estourou o prazo e que a ponte só terminou
+			// agora. Não é desta e não gasta tentativa.
+			if d.ID != 0 && d.ID != id {
+				if d.Progresso == "" {
+					logMsg(fmt.Sprintf("ponte: resposta atrasada da pergunta %d descartada", d.ID))
+				}
+				tentativa--
+				continue
 			}
 			// LINHA DE PROGRESSO (10/10/2026) — o dono: "eu não fico nunca no vácuo aqui".
 			//
@@ -247,7 +312,7 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 			guardaModelo(d.Modelo)
 			logMsg(fmt.Sprintf("ponte: resposta quente em %.1fs", time.Since(t0).Seconds()))
 			return d.Resposta, true
-		case <-time.After(330 * time.Second):
+		case <-time.After(prazoPonte):
 			// O APP TEM DE ESPERAR MAIS QUE A PONTE.
 			//
 			// Defeito medido em 10/10/2026 (relato do dono: "fiz uma pergunta simples e ele levou
@@ -259,10 +324,19 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 			//
 			// Com 330 s a ponte tem a janela dela inteira: ou responde quente, ou reconecta
 			// sozinha — e a reserva lenta volta a ser ÚLTIMO recurso em vez de caminho comum.
-			logMsg("ponte: tempo esgotado (330s) — reserva lenta")
-			return "", false
+			//
+			// SEM RESERVA AQUI (13/10/2026, para não queimar créditos): estourar o prazo não
+			// para a ponte — o agente segue trabalhando na pergunta (até o teto de iterações).
+			// Cair na reserva rodava a MESMA pergunta num segundo agente, as duas gastando ao
+			// mesmo tempo. Agora o boneco avisa e a pessoa decide se pergunta de novo.
+			logMsg("ponte: tempo esgotado (330s) — sem reserva (a ponte segue na pergunta)")
+			return msgPonteDemorou, true
 		}
 	}
-	logMsg("ponte: frames demais sem resposta — reserva lenta")
-	return "", false
+	// ponte de pé, só confusa: mesma regra do tempo esgotado — nada de repetir a pergunta
+	logMsg("ponte: frames demais sem resposta — sem reserva")
+	return msgPonteDemorou, true
 }
+
+const msgPonteDemorou = "A resposta está demorando demais — parei de esperar para não gastar " +
+	"créditos em dobro (o Hermes ainda pode estar terminando). Tente de novo daqui a pouco."

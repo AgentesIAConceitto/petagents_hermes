@@ -743,9 +743,17 @@ function aplicarEstado(s) {
 const conversa = [];
 let ocupado = false; // true enquanto o agente está pensando
 
+// escHtml — texto de FORA (e-mail, rede) entra no innerHTML só por aqui.
+// Sem isto, um remetente "<img onerror=...>" roda JS no overlay, que alcança
+// window.go.main.App.SendChat (o agente com terminal). Ver teste-painel-email.js.
+function escHtml(t) {
+  return String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // O agente responde em markdown; aqui vai um subconjunto seguro (escapa antes)
 function formata(t) {
-  let s = (t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let s = escHtml(t || "");
   s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
   s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
   s = s.replace(/^#{1,4} (.*)$/gm, "<b>$1</b>");
@@ -1443,13 +1451,13 @@ async function renderEmail() {
   let d = {};
   try { d = JSON.parse((G ? await G.EmailResumo() : "{}") || "{}"); } catch (e) {}
   if (d.erro) {
-    res.innerHTML = "⚠ " + d.erro;
+    res.innerHTML = "⚠ " + escHtml(d.erro);
     box.innerHTML = '<div class="email-vazio">Clique em "↻ Verificar agora" para ler o Outlook.</div>';
     return;
   }
   const imp = d.importantes || [], des = d.desconhecidos || [];
   res.innerHTML =
-    "Conta <b>" + (d.conta || "?") + "</b> · lida em " + String(d.verificado_em || "?").replace("T", " ") +
+    "Conta <b>" + escHtml(d.conta || "?") + "</b> · lida em " + escHtml(String(d.verificado_em || "?").replace("T", " ")) +
     "<br>caixa: " + (d.total_pasta || 0) + " mensagens · " + (d.nao_lidas || 0) + " não lidas · amostra: " + (d.lidas_agora || 0) +
     "<br><b>" + imp.length + " importantes</b> · " + des.length + " desconhecidos · " + (d.spam_n || 0) + " spam";
   if (!des.length) {
@@ -1463,8 +1471,9 @@ async function renderEmail() {
     const ms = porDom[k], m = ms[0];
     const el = document.createElement("div");
     el.className = "email-item";
-    el.innerHTML = '<div class="txt"><b>' + (m.nao_lida ? "🔵 " : "") + k + "</b><span>" + ms.length + "x · " +
-      (m.de_nome || "") + " — " + String(m.assunto || "(sem assunto)").slice(0, 60) + "</span></div>";
+    // remetente, endereço e assunto são escritos por QUEM MANDA o e-mail: só texto escapado
+    el.innerHTML = '<div class="txt"><b>' + (m.nao_lida ? "🔵 " : "") + escHtml(k) + "</b><span>" + ms.length + "x · " +
+      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 60)) + "</span></div>";
     const bi = document.createElement("div");
     bi.className = "bt"; bi.textContent = "✅"; bi.title = "sempre importante: " + k;
     bi.onclick = () => marcarEmail(k, "importante");
@@ -1646,8 +1655,10 @@ document.addEventListener("keydown", (e) => {
 document.getElementById("enviar").onclick = enviar;
 document.getElementById("email-fechar").onclick = fecharEmail;
 document.getElementById("email-verificar").onclick = async () => {
+  let r = "ok";
+  try { if (G) r = await G.EmailVerificarAgora(); } catch (e) {}
+  if (r !== "ok") { toast("📧", "E-mail não lido", r, 7000, true); return; } // ex.: não configurado
   toast("📧", "Lendo o Outlook…", "aguarde ~40 s (o JSON é regravado)", 4000, true);
-  try { G && await G.EmailVerificarAgora(); } catch (e) {}
   setTimeout(() => renderEmail(), 45000);
 };
 document.getElementById("balao-min").onclick = fecharBalao;
