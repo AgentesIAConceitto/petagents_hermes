@@ -242,7 +242,10 @@
   }
   function raridadeBoa(r) { return RARO_DE_VERDADE.indexOf(r) >= 0; }
 
-  /* ── A ENTREGA: cartão animado, com a cor e o brilho da raridade ─────────── */
+  /* ── A ENTREGA: cartão com a cor e o brilho da raridade ─────────────────────
+     22/10/2026 (prancha "Presente achado"): nasce EM CIMA DO BONECO (não mais no meio
+     da tela, interrompendo o trabalho), mostra a fita da raridade, o item grande e um
+     selo "novo na coleção" / "repetido · +N moedas". Clicar nele abre a Coleção. */
   let cardTimer = null;
   function revelar(res) {
     const it = res.item;
@@ -253,30 +256,31 @@
       c = document.createElement("div");
       c.id = "premioCard";
       c.className = "premio oculto";
+      c.setAttribute("role", "status");
+      c.onclick = () => { c.classList.add("oculto"); try { reportarHit(); } catch (e) { } galeria(); };
       document.body.appendChild(c);
     }
-    const linha = res.novo
-      ? '<span class="pc-novo">✨ NOVO na coleção!</span>'
-      : '<span class="pc-rep">repetido → 🪙 ' + res.moedas + ' moeda' + (res.moedas > 1 ? "s" : "") + '</span>';
-    c.className = "premio " + it.raridade + (res.novo ? " novo" : " rep");
+    const selo = res.novo
+      ? '<span class="pc-selo novo">novo na coleção</span>'
+      : '<span class="pc-selo rep">repetido · +' + res.moedas + " moeda" + (res.moedas > 1 ? "s" : "") + "</span>";
+    c.className = "premio " + it.raridade + (bom ? " brilha" : "");
+    c.style.setProperty("--cor", r.cor);
     c.innerHTML =
-      '<div class="pc-fita" style="background:' + r.cor + '">' + r.nome + "</div>" +
-      '<div class="pc-ico">' + it.ico + "</div>" +
-      '<div class="pc-nome">' + it.nome + "</div>" +
-      linha +
-      '<div class="pc-rodape">🪙 ' + res.total + " moedas · coleção " + resumo().qtd + "/" + CATALOGO.length + "</div>";
+      '<span class="pc-fita">' + r.nome + "</span>" +
+      '<span class="pc-ico">' + it.ico + "</span>" +
+      '<span class="pc-nome">' + it.nome + "</span>" + selo +
+      '<span class="pc-rodape">' + res.total + " moedas · coleção " + resumo().qtd + " de " + CATALOGO.length.toLocaleString("pt-BR") + "</span>";
     c.classList.remove("oculto");
+    if (typeof posicionaPertoDoPet === "function") posicionaPertoDoPet(c);
     // tira a classe e repõe: reinicia a animação mesmo em achados seguidos
+    c.classList.remove("entrando");
     void c.offsetWidth;
     c.classList.add("entrando");
     try { explosao(bom ? [it.ico, "✨", "🌟", "💫"] : [it.ico, "✨"], bom ? 10 : 5); } catch (e) { }
     try { reportarHit(); } catch (e) { }
     clearTimeout(cardTimer);
     cardTimer = setTimeout(() => { c.classList.add("oculto"); c.classList.remove("entrando"); try { reportarHit(); } catch (e) { } },
-      bom ? 4200 : 2600);
-    if (it.raridade === "ultra" || it.raridade === "mitico" || it.raridade === "lendario") {
-      try { toast("🌟", r.nome.toUpperCase() + "!", it.ico + " " + it.nome, 4200, true); } catch (e) { }
-    }
+      bom ? 5000 : 3000);
   }
 
   /* ── o achado do dia (mesma regra de antes: até 4 por dia) ───────────────── */
@@ -292,48 +296,56 @@
     return res;
   }
 
-  /* ── a Galeria: moedeiro, progresso, raros em destaque, coleção ─────────── */
+  /* ── a Coleção: moedas, progresso, filtro por raridade, raros em destaque ────
+     22/10/2026 (prancha "Coleção"). Os itens continuam emoji: eles SÃO o presente. */
+  let filtroRar = "todos";
   function galeria() {
     const s = resumo();
     let p = document.getElementById("bichoCol");
     if (!p) {
       p = document.createElement("div");
-      p.className = "bicho";
+      p.className = "bicho col";
       p.id = "bichoCol";
       document.body.appendChild(p);
     }
-    const contador = ORDEM.slice().reverse().map((r) => {
-      const n = s.porRar[r];
-      if (!n) return "";
-      return '<span class="gl-cont" style="color:' + RAR[r].cor + '">' + RAR[r].nome + " " + n + "</span>";
-    }).join("");
-    const raros = s.raros.length
-      ? s.raros.map((it) => '<span class="gl-item ' + it.raridade + '" title="' + it.nome + ' — ' + RAR[it.raridade].nome + '" style="--cor:' + RAR[it.raridade].cor + '">' + it.ico + "</span>").join("")
-      : '<span class="bicho-est">nenhum ainda — os raros são 1 em cada ~3.226 sorteios…</span>';
+    const e = estado();
+    const hoje = new Date().toISOString().slice(0, 10);
+    const achadosHoje = e.achadoDia && e.achadoDia.dia === hoje ? e.achadoDia.n : 0;
+    const nome = cfgNome() || "Xodó";
+    const pct = (s.qtd / s.total) * 100;
+    const chip = (k, rotulo, cor, n) =>
+      '<button class="col-chip' + (filtroRar === k ? " sel" : "") + '" data-rar="' + k + '" style="--cor:' + cor + '" aria-pressed="' + (filtroRar === k) + '">' +
+      '<i></i>' + rotulo + " <span>" + n + "</span></button>";
+    const chips = chip("todos", "Todos", "var(--acento)", s.qtd) +
+      ORDEM.slice().reverse().filter((r) => s.porRar[r]).map((r) => chip(r, RAR[r].nome, RAR[r].cor, s.porRar[r])).join("");
+    const item = (it) => '<span class="col-item ' + it.raridade + '" title="' + it.nome + " — " + RAR[it.raridade].nome +
+      '" style="--cor:' + RAR[it.raridade].cor + '">' + it.ico + "</span>";
+    const raros = s.raros.slice(0, 8).map(item).join("");
     const ids = Object.keys(s.dono).sort((a, b) => (s.dono[b] || 0) - (s.dono[a] || 0));
-    const todos = ids.slice(0, 120).map((id) => {
-      const it = CATALOGO.find((x) => x.id === id);
-      if (!it) return "";
-      return '<span class="gl-item ' + it.raridade + '" title="' + it.nome + ' — ' + RAR[it.raridade].nome + '" style="--cor:' + RAR[it.raridade].cor + '">' + it.ico + "</span>";
-    }).join("");
-    const pct = ((s.qtd / s.total) * 100).toFixed(1);
+    const itens = ids.map((id) => CATALOGO.find((x) => x.id === id))
+      .filter((it) => it && (filtroRar === "todos" || it.raridade === filtroRar));
+    const titulo = filtroRar === "todos" ? "Tudo o que " + nome + " já ganhou" : "Só " + RAR[filtroRar].nome.toLowerCase();
     p.innerHTML =
-      '<div class="bicho-topo"><b>💎 Galeria do ' + (cfgNome() || "Xodó") + '</b>' +
-      '<span class="bicho-x" id="col-x">✕</span></div>' +
-      '<div class="gl-moeda">🪙 <b>' + s.moedas + "</b> moedas" +
-      '<span class="gl-prog">coleção ' + s.qtd + "/" + s.total + " (" + pct + "%)</span></div>" +
-      '<div class="gl-raros"><div class="gl-tit">em destaque — raros que eu já tenho</div>' +
-      '<div class="gl-grade">' + raros + "</div></div>" +
-      '<div class="gl-contadores">' + contador + "</div>" +
-      '<div class="gl-tit">tudo o que eu já ganhei</div>' +
-      '<div class="gl-grade gl-todos">' + (todos || '<span class="bicho-est">ainda não ganhei nada… os baús aparecem de vez em quando (até 4 por dia)</span>') + "</div>" +
-      (s.qtd > 120 ? '<div class="bicho-est">mostrando os 120 mais recentes</div>' : "") +
-      '<div class="bicho-linha-bt">' +
-      '<button class="bicho-bt" id="col-achar">🎁 procurar um baú</button>' +
-      "</div>";
+      '<div class="pp-topo"><span class="pp-quem"><b>Coleção da ' + nome + "</b><span>presentes que ela achou nos baús</span></span>" +
+      '<span class="col-moedas" title="moedas">' + (typeof icone === "function" ? icone("moeda", 15) : "") + s.moedas + " moedas</span>" +
+      '<button class="botao-x" id="col-x" aria-label="Fechar">' + (typeof icone === "function" ? icone("fechar", 18) : "✕") + "</button></div>" +
+      '<div class="col-prog"><span><span>Coleção</span><span><b>' + s.qtd + "</b> de " + s.total.toLocaleString("pt-BR") + " · " +
+      pct.toFixed(1).replace(".", ",") + '%</span></span><i><b style="width:' + Math.max(1.5, pct) + '%"></b></i></div>' +
+      '<div class="col-chips">' + chips + "</div>" +
+      (raros ? '<div class="col-raros"><span>Em destaque — os raros</span><div>' + raros + "</div></div>" : "") +
+      '<div class="col-sec">' + titulo + "</div>" +
+      '<div class="col-grade">' + (itens.slice(0, 160).map(item).join("") ||
+        '<span class="pn-nota">Ainda não ganhou nada… os baús aparecem de vez em quando (até 4 por dia).</span>') + "</div>" +
+      '<div class="col-rodape"><span>' + achadosHoje + " de 4 baús hoje · repetido vira moeda</span>" +
+      '<button class="pn-bt" id="col-achar">Procurar um baú</button></div>';
     p.classList.remove("oculto");
     p.querySelector("#col-x").onclick = () => { p.classList.add("oculto"); reportarHit(); };
-    p.querySelector("#col-achar").onclick = () => { const r = achar(false); if (!r) toast("🎁", "Já achei 4 hoje!", "volto a procurar amanhã 🙂", 3000); galeria(); };
+    p.querySelectorAll("[data-rar]").forEach((b) => { b.onclick = () => { filtroRar = b.dataset.rar; galeria(); }; });
+    p.querySelector("#col-achar").onclick = () => {
+      const r = achar(false);
+      if (!r) toast("colecao", "Já achei 4 hoje!", "volto a procurar amanhã", 3000, true);
+      galeria();
+    };
     if (typeof posicionaPertoDoPet === "function") {
       posicionaPertoDoPet(p);   // encostada no boneco, como os outros painéis (main.js)
     } else {

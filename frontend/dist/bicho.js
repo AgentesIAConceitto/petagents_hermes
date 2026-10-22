@@ -91,7 +91,7 @@
   // ── recado do bicho: balãozinho (toast), SEM abrir o chat ──────────────────
   // Regra do dono (03/10/2026): só o tile "Conversar" e as respostas do agente
   // abrem a conversa. Pedido/carinho/achado do bicho é RECADO — não sequestra o chat.
-  function fala(texto) {
+  function fala(texto, acoes, ico) {
     try {
       // prova externa: todo recado do bicho fica também no petagent.log (canal G.Log
       // que o front já tem para o Go). Acabou o "será que o balão saiu?".
@@ -101,7 +101,11 @@
         }
       } catch (e) { }
       if (window.petBipe) window.petBipe();      // sininho suave (pedido do dono)
-      if (typeof toast === "function") toast("🐾", cfg.nome || "Bicho", texto, 7000, true);
+      if (typeof toast === "function") {
+        // com ação, o aviso espera mais (45 s) — dá tempo de levantar e voltar
+        const tem = acoes && acoes.length;
+        toast(ico || "🐾", cfg.nome || "Bicho", texto, tem ? 45000 : 7000, !tem, { acoes: acoes || [] });
+      }
       else if (typeof msg === "function") msg(texto, "ele");
     } catch (e) { /* nunca deixa o bicho derrubar o app */ }
   }
@@ -149,6 +153,24 @@
     if (window.petBipe) window.petBipe();
     if (quanto >= 25) fala("Aaaah, carinho! 🥰");
   }
+  // LEMBRETE COM AÇÃO (22/10/2026, prancha "Avisos"): o aviso traz o botão que resolve
+  // — "Já bebi" conta como dar água, igual ao menu — e o "Daqui a 15 min", que repete o
+  // mesmo lembrete depois (o tique cuida, ver est.adiado).
+  const ACAO_LEMBRETE = {
+    agua: ["Já bebi", "agua", () => window.bichoAgua && window.bichoAgua()],
+    caminhada: ["Fui!", "exercicio", () => window.bichoExercicio && window.bichoExercicio()],
+    refeicao: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
+    lanche: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
+    atencao: ["Carinho", "cuidar", () => carinho(30)],
+  };
+  function lembra(tipo, frases) {
+    const a = ACAO_LEMBRETE[tipo];
+    const acoes = [];
+    if (a) acoes.push({ r: a[0], prim: true, fn: a[2] });
+    acoes.push({ r: "Daqui a 15 min", fn: () => { est.adiado = { tipo: tipo, frases: frases, ate: agora() + 15 * MIN }; salvar(); } });
+    fala(escolhe(frases), acoes, a ? a[1] : "");
+  }
+
   function alternarFoco() {
     cfg.foco = !cfg.foco; salvar(); pintaPainel();
     fala(cfg.foco
@@ -360,7 +382,7 @@
         : minFake;
       const ev = decide(est, agoraMin, cfg, { ini: cfg.trabIni, fim: cfg.trabFim });
       if (ev && (!estaEmFoco() || ev.tipo === "agua")) {   // no foco, só água
-        fala(escolhe(ev.frases));
+        lembra(ev.tipo, ev.frases);
         est.feitos[chaveEv(ev)] = 1;
         est.ultimoAviso = agoraMin;
         est.avisosHoje = (est.avisosHoje || 0) + 1;
@@ -371,6 +393,12 @@
         if (ev.tipo === "lanche") { est.fome = Math.min(est.fome, 35); pend("fome", agoraMin); }
         if (ev.tipo === "caminhada") { est.exercicio = Math.min(est.exercicio, 25); pend("exercicio", agoraMin); }
         if (ev.tipo === "atencao") { est.carinho = Math.min(est.carinho, 25); pend("carinho", agoraMin); }
+      }
+      // lembrete adiado ("Daqui a 15 min"): chegou a hora, avisa de novo (no foco, só água)
+      if (est.adiado && t >= est.adiado.ate) {
+        const ad = est.adiado;
+        delete est.adiado;
+        if (!estaEmFoco() || ad.tipo === "agua") lembra(ad.tipo, ad.frases && ad.frases.length ? ad.frases : [""]);
       }
       // pedido antigo sem resposta: o bicho se cuida sozinho e a barra se recupera
       // até 55 — ele NUNCA morre, e não fica sofrendo por causa do dono

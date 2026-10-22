@@ -636,22 +636,27 @@ function fecharPainelBonecos() { petPanelEl.classList.add("oculto"); reportarHit
 async function listaBonecos(termo, offset) {
   if (termo !== undefined) { petPanelTermo = termo || ""; petPanelOffset = 0; }
   if (offset !== undefined) petPanelOffset = offset;
-  document.getElementById("pets-termo").value = petPanelTermo === "*" ? "" : petPanelTermo;
+  const abaDe = { "": "pets-instalados", "*": "pets-galeria", creature: "pets-bichinhos", character: "pets-personagens" };
+  for (const id of Object.values(abaDe)) {
+    const b = document.getElementById(id), sel = abaDe[petPanelTermo] === id;
+    b.classList.toggle("sel", sel); b.setAttribute("aria-selected", sel);
+  }
+  document.getElementById("pets-termo").value = abaDe[petPanelTermo] ? "" : petPanelTermo;
   const alvo = document.getElementById("pets-lista");
   alvo.innerHTML = '<div class="aviso">carregando… (na primeira busca o catálogo da galeria pode levar alguns segundos)</div>';
   let d = null;
   try { d = JSON.parse(await G.PetGaleria(petPanelTermo, petPanelOffset)); } catch (e) {}
   if (!d || !d.ok) {
-    alvo.innerHTML = '<div class="aviso">' + ((d && d.erro) || "sem resposta do app") + '</div>';
+    alvo.innerHTML = '<div class="aviso">' + escMenu((d && d.erro) || "sem resposta do app") + '</div>';
     document.getElementById("pets-conta").textContent = "";
     return;
   }
   petsBase = d.base || petsBase;
   document.getElementById("pets-atual").textContent =
-    "· usando: " + ((dex && cfg.dexOn) ? dex.slug : "vetor (nosso)");
+    "agora: " + ((dex && cfg.dexOn) ? dex.slug : "boneco padrão");
   const n = (d.itens || []).length;
   document.getElementById("pets-conta").textContent =
-    petPanelTermo === "" ? (d.total + " bonecos na sua máquina · a galeria tem 4.873")
+    petPanelTermo === "" ? (d.total + " bonecos nesta máquina")
     : petPanelTermo === "*" ? ("galeria completa · " + d.total + " bonecos · mostrando de " + (petPanelOffset + 1) + " a " + (petPanelOffset + n))
     : (d.total + " encontrados · " + (n ? "mostrando " + n : "nenhum"));
   document.getElementById("pets-mais").style.display = d.tem_mais ? "" : "none";
@@ -665,20 +670,14 @@ async function listaBonecos(termo, offset) {
     if (url) t.style.backgroundImage = "url(" + url + ")";
     const nn = document.createElement("div");
     nn.className = "nome"; nn.textContent = nome;
-    const u = document.createElement("div");
-    u.className = "usar";
-    u.textContent = local ? (sel ? "em uso" : "usar") : "baixar e usar";
-    c.appendChild(t); c.appendChild(nn);
-    if (tipo) {
-      const ty = document.createElement("div");
-      ty.className = "tipo"; ty.textContent = tipo;
-      c.appendChild(ty);
-    }
-    c.appendChild(u);
+    const u = document.createElement("button");
+    u.className = "usar" + (sel ? " em-uso" : local ? " prim" : "");
+    u.textContent = sel ? "Em uso" : local ? "Usar" : "Baixar e usar";
+    c.appendChild(t); c.appendChild(nn); c.appendChild(u);
     c.onclick = () => usarBoneco(slug, local);
     alvo.appendChild(c);
   };
-  if (!petPanelTermo) cartao("__vetor__", "vetor (nosso)", "sem download", "", !cfg.dexOn, true);
+  if (!petPanelTermo) cartao("__vetor__", "boneco padrão", "sem download", "", !cfg.dexOn, true);
   for (const it of (d.itens || [])) {
     const local = !!it.local && !!petsBase;
     const url = local ? (petsBase + "/sheet/" + it.slug) : (it.sprite || "");
@@ -694,7 +693,7 @@ async function usarBoneco(slug, local) {
     cfg.dexOn = false; clearInterval(dexTimer);
     pet.classList.remove("dex"); aplicaTamanho();
     salvarPet(); aplicaPosicao();
-    toast("🐾", "Boneco vetor (nosso)", "", 2400, true);
+    toast("🐾", "Boneco padrão", "", 2400, true);
     fecharPainelBonecos(); // volta a mostrar o boneco, como o usuário espera
     return;
   }
@@ -711,7 +710,6 @@ async function usarBoneco(slug, local) {
   fecharPainelBonecos(); // escolheu → fecha e mostra o boneco novo
 }
 
-document.getElementById("pets-buscar").onclick = () => listaBonecos(document.getElementById("pets-termo").value);
 document.getElementById("pets-termo").addEventListener("keydown", (e) => {
   if (e.key === "Enter") listaBonecos(e.target.value);
 });
@@ -721,7 +719,6 @@ document.getElementById("pets-bichinhos").onclick = () => listaBonecos("creature
 document.getElementById("pets-personagens").onclick = () => listaBonecos("character");
 document.getElementById("pets-mais").onclick = () => listaBonecos(undefined, petPanelOffset + 24);
 document.getElementById("pets-vetor").onclick = () => usarBoneco("__vetor__", true);
-document.getElementById("pets-fechar").onclick = () => fecharPainelBonecos();
 document.getElementById("pets-x").onclick = () => fecharPainelBonecos();
 
 /* ───────── estado do boneco ───────── */
@@ -1068,9 +1065,18 @@ async function enviarTexto(texto, input) {
   // a bolha ao vivo sai de cena: entra a mensagem de verdade, com hora e tempo no rodapé
   encerraAoVivo();
   const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  // a pessoa fechou o chat enquanto esperava? então não reabre na cara dela: avisa
+  // ("Aurora respondeu" + Ver resposta). Com o chat aberto, segue como sempre.
+  const chatFechado = balao.classList.contains("oculto") && (!cg || cg.classList.contains("oculto"));
   msg(resp, "ele", { hora: hora, seg: levou });
   classePet(estado.state || "idle");
-  abrirBalao(false);                    // garante o balão aberto para mostrar a resposta
+  if (chatFechado) {
+    const ver = () => abrirBalao();
+    toast("conversar", nomeDoPet() + " respondeu", String(resp).replace(/\s+/g, " ").slice(0, 110), 30000, false,
+      { acoes: [{ r: "Ver resposta", prim: true, fn: ver }], clique: ver });
+  } else {
+    abrirBalao(false);                  // garante o balão aberto para mostrar a resposta
+  }
   atualizaInfoChat();                   // o modelo pode ter chegado agora, com a resposta
   reiniciarAuto();
   reportarHit();
@@ -1372,45 +1378,86 @@ function rotuloCanto(c) {
 async function abrirSeletorTela() {
   fecharMenu();
   telaPanel.classList.remove("oculto");
-  posicionaJunto(telaPanel);
 
+  // 1) as telas, desenhadas em ESCALA e na posição real (prancha "Tela e borda")
   const boxM = document.getElementById("tela-mon");
   boxM.innerHTML = "";
   let ms = [];
   try { ms = JSON.parse((G ? await G.ListarMonitores() : "[]") || "[]"); } catch (e) {}
-  if (!ms.length) {
-    boxM.innerHTML = '<div class="b">nao consegui listar as telas</div>';
-  }
   const d = DPR();
-  ms.forEach((m) => {
-    const b = document.createElement("div");
-    b.className = "b" + (m.indice === telaSel.monitor ? " sel" : "");
-    b.innerHTML = `Tela ${m.indice}${m.primario ? " ★" : ""}<br><span style="opacity:.6">${Math.round(m.w / d)}x${Math.round(m.h / d)}</span>`;
-    b.onclick = async () => {
-      telaSel.monitor = m.indice; cfg.monitor = m.indice;
-      try { G && await G.ConfigurarTela(m.indice, cfg.borda); } catch (e) {}
-      abrirSeletorTela();
-    };
-    boxM.appendChild(b);
-  });
+  if (!ms.length) {
+    boxM.innerHTML = '<span class="pn-nota">não consegui listar as telas</span>';
+  } else {
+    const x0 = Math.min(...ms.map((m) => m.x)), y0 = Math.min(...ms.map((m) => m.y));
+    const x1 = Math.max(...ms.map((m) => m.x + m.w)), y1 = Math.max(...ms.map((m) => m.y + m.h));
+    const esc = Math.min(296 / (x1 - x0), 92 / (y1 - y0));
+    boxM.style.height = Math.round((y1 - y0) * esc) + "px";
+    boxM.style.width = Math.round((x1 - x0) * esc) + "px";
+    ms.forEach((m) => {
+      const b = document.createElement("button");
+      const sel = m.indice === telaSel.monitor;
+      b.className = "tela-un" + (sel ? " sel" : "");
+      b.setAttribute("aria-pressed", sel);
+      b.style.left = Math.round((m.x - x0) * esc + 2) + "px";
+      b.style.top = Math.round((m.y - y0) * esc + 2) + "px";
+      b.style.width = Math.round(m.w * esc - 4) + "px";
+      b.style.height = Math.round(m.h * esc - 4) + "px";
+      b.innerHTML = `<b>Tela ${m.indice}</b><span>${Math.round(m.w / d)} × ${Math.round(m.h / d)}${m.primario ? " · principal" : ""}</span>`;
+      b.onclick = async () => {
+        telaSel.monitor = m.indice; cfg.monitor = m.indice;
+        try { G && await G.ConfigurarTela(m.indice, cfg.borda); } catch (e) {}
+        abrirSeletorTela();
+      };
+      boxM.appendChild(b);
+    });
+  }
+  pintaMapaTela();
+  posicionaJunto(telaPanel);
+  reportarHit();
+}
 
-  const boxC = document.getElementById("tela-canto");
-  boxC.innerHTML = "";
-  [["baixo", "▼ baixo"], ["cima", "▲ cima"], ["esquerda", "◀ esq"], ["direita", "▶ dir"]].forEach(([k, rot]) => {
-    const b = document.createElement("div");
-    b.className = "b" + (k === cfg.borda ? " sel" : "");
-    b.textContent = rot;
+// 2) onde ele fica: os 4 cantos e o meio de cada borda, num desenho de tela
+const ALVOS_TELA = [
+  ["cima", "ini", "canto superior esquerdo", 0, 0], ["cima", "", "meio da borda de cima", 0.5, 0],
+  ["cima", "fim", "canto superior direito", 1, 0], ["esquerda", "", "meio da borda esquerda", 0, 0.5],
+  ["direita", "", "meio da borda direita", 1, 0.5], ["baixo", "ini", "canto inferior esquerdo", 0, 1],
+  ["baixo", "", "meio da borda de baixo", 0.5, 1], ["baixo", "fim", "canto inferior direito", 1, 1],
+];
+// (borda, canto) → ponto na tela: na borda de cima/baixo "ini" é a esquerda; nas laterais, o alto
+function pontoDaPosicao(borda, canto) {
+  const horiz = borda === "cima" || borda === "baixo";
+  const ao = canto === "ini" ? 0 : canto === "fim" ? 1 : 0.5;
+  return horiz ? [ao, borda === "cima" ? 0 : 1] : [borda === "esquerda" ? 0 : 1, ao];
+}
+function pintaMapaTela() {
+  const mapa = document.getElementById("tela-canto");
+  mapa.innerHTML = '<span class="tela-moldura"></span>';
+  const [ax, ay] = pontoDaPosicao(cfg.borda, cfg.canto || "");
+  let rotuloAtual = "";
+  for (const [borda, canto, rotulo, fx, fy] of ALVOS_TELA) {
+    const sel = fx === ax && fy === ay;
+    if (sel) rotuloAtual = rotulo;
+    const b = document.createElement("button");
+    b.className = "tela-alvo" + (sel ? " sel" : "");
+    b.setAttribute("aria-pressed", sel);
+    b.setAttribute("aria-label", rotulo);
+    b.title = rotulo;
+    b.style.left = `calc(${fx * 100}% * 0.72 + 14% - 18px)`;
+    b.style.top = `calc(${fy * 100}% * 0.7 + 8% - 18px)`;
     b.onclick = async () => {
-      cfg.borda = k; cfg.offset = 120; cfg.canto = ""; aplicaPosicao(); salvarPet();
-      try { G && await G.ConfigurarTela(telaSel.monitor, k); } catch (e) {}
-      fecharSeletorTela();
+      cfg.borda = borda; cfg.canto = canto;
+      const horiz = borda === "cima" || borda === "baixo";
+      const r = pet.getBoundingClientRect();
+      cfg.offset = canto ? 0 : Math.round(((horiz ? innerWidth : innerHeight) - (horiz ? r.width : r.height)) / 2);
+      aplicaPosicao(); salvarPet();
+      try { G && await G.ConfigurarTela(telaSel.monitor, borda); } catch (e) {}
+      pintaMapaTela();
+      posicionaJunto(telaPanel);
     };
-    boxC.appendChild(b);
-  });
-
+    mapa.appendChild(b);
+  }
   document.getElementById("tela-atual").textContent =
-    "Tela " + telaSel.monitor + " · borda " + cfg.borda + " · " + cfg.offset + "px — " +
-    "ou arraste o boneco para onde quiser: ele gruda na borda (ou no canto) mais próximo.";
+    "agora: Tela " + telaSel.monitor + (rotuloAtual ? " · " + rotuloAtual : " · borda " + cfg.borda);
   reportarHit();
 }
 
@@ -1419,6 +1466,7 @@ async function aplicarTela() {
   fecharSeletorTela();
 }
 function fecharSeletorTela() { telaPanel.classList.add("oculto"); reportarHit(); }
+document.getElementById("tela-x").onclick = () => fecharSeletorTela();
 
 /* ───────── painel de E-MAIL (triagem que aprende) ───────── */
 const emailPanel = document.getElementById("email");
@@ -1439,38 +1487,45 @@ async function abrirEmail() {
 async function renderEmail() {
   const box = document.getElementById("email-lista");
   const res = document.getElementById("email-resumo");
+  // opcionais (o teste-painel-email.js só monta a lista e o resumo)
+  const contaEl = document.getElementById("email-conta"), faltamEl = document.getElementById("email-faltam");
   box.innerHTML = "";
+  res.innerHTML = "";
+  if (faltamEl) faltamEl.textContent = "";
   let d = {};
   try { d = JSON.parse((G ? await G.EmailResumo() : "{}") || "{}"); } catch (e) {}
   if (d.erro) {
-    res.innerHTML = "⚠ " + escHtml(d.erro);
-    box.innerHTML = '<div class="email-vazio">Clique em "↻ Verificar agora" para ler o Outlook.</div>';
+    res.innerHTML = '<div class="pn-aviso">' + escHtml(d.erro) + "</div>";
+    box.innerHTML = '<div class="email-vazio">Clique em "Verificar agora" para ler o Outlook.</div>';
     return;
   }
   const imp = d.importantes || [], des = d.desconhecidos || [];
-  res.innerHTML =
-    "Conta <b>" + escHtml(d.conta || "?") + "</b> · lida em " + escHtml(String(d.verificado_em || "?").replace("T", " ")) +
-    "<br>caixa: " + (d.total_pasta || 0) + " mensagens · " + (d.nao_lidas || 0) + " não lidas · amostra: " + (d.lidas_agora || 0) +
-    "<br><b>" + imp.length + " importantes</b> · " + des.length + " desconhecidos · " + (d.spam_n || 0) + " spam";
-  if (!des.length) {
-    box.innerHTML = '<div class="email-vazio">Nenhum remetente desconhecido na última leitura. 🎉</div>';
-    return;
-  }
-  // agrupa por domínio: 1 cartão por domínio, com contagem
+  // agrupa por domínio: 1 linha por domínio, com contagem
   const porDom = {};
   des.forEach((m) => { const k = dominioDe(m.de_email); (porDom[k] = porDom[k] || []).push(m); });
-  Object.keys(porDom).slice(0, 14).forEach((k) => {
+  const doms = Object.keys(porDom);
+  if (contaEl) contaEl.textContent = (d.conta || "?") + " · lido às " + String(d.verificado_em || "").slice(11, 16);
+  const num = (n, r, cls) => '<div class="pn-num ' + cls + '"><b>' + Number(n || 0) + "</b><span>" + r + "</span></div>";
+  res.innerHTML = num(imp.length, "importantes", "ok") + num(doms.length, "para decidir", "acento") +
+    num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "");
+  if (faltamEl && doms.length) faltamEl.textContent = doms.length + " para decidir";
+  if (!doms.length) {
+    box.innerHTML = '<div class="email-vazio">Tudo ensinado. Na próxima leitura eu já sei separar sozinha.</div>';
+    return;
+  }
+  doms.slice(0, 14).forEach((k) => {
     const ms = porDom[k], m = ms[0];
     const el = document.createElement("div");
     el.className = "email-item";
     // remetente, endereço e assunto são escritos por QUEM MANDA o e-mail: só texto escapado
-    el.innerHTML = '<div class="txt"><b>' + (m.nao_lida ? "🔵 " : "") + escHtml(k) + "</b><span>" + ms.length + "x · " +
-      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 60)) + "</span></div>";
-    const bi = document.createElement("div");
-    bi.className = "bt"; bi.textContent = "✅"; bi.title = "sempre importante: " + k;
+    el.innerHTML = '<span class="ponto' + (m.nao_lida ? " on" : "") + '" title="' + (m.nao_lida ? "não lido" : "lido") + '"></span>' +
+      '<div class="txt"><b>' + escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i></b><span>" +
+      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)) + "</span></div>";
+    const bi = document.createElement("button");
+    bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "sempre importante: " + k;
     bi.onclick = () => marcarEmail(k, "importante");
-    const bs = document.createElement("div");
-    bs.className = "bt"; bs.textContent = "🚫"; bs.title = "sempre lixo: " + k;
+    const bs = document.createElement("button");
+    bs.className = "bt lixo"; bs.textContent = "Lixo"; bs.title = "sempre lixo: " + k;
     bs.onclick = () => marcarEmail(k, "spam");
     el.appendChild(bi); el.appendChild(bs);
     box.appendChild(el);
@@ -1524,25 +1579,63 @@ function carinho() {
   setTimeout(() => aplicarEstado({ state: anterior === "carinho" ? "idle" : anterior }), 1700);
 }
 
-// toast — balãozinho na tela; posiciona acima do boneco (ou abaixo, se não couber)
-function toast(ico, titulo, texto, ms, mini) {
+/* toast — o balãozinho de aviso, encostado no boneco.
+   22/10/2026 (prancha "Avisos"): ícone de TRAÇO no lugar do emoji (cada chamada ainda
+   manda um emoji; esta tabela traduz), texto sem emoji e, quando faz sentido, AÇÕES
+   ("Já bebi", "Daqui a 15 min", "Ver resposta"). opts = { acoes: [{ r, fn, prim }],
+   clique: fn } — clicar no corpo do aviso roda `clique` (se houver) e fecha. */
+const ICONE_DO_EMOJI = {
+  "💧": "agua", "🍖": "alimentar", "🍲": "alimentar", "🍽": "alimentar", "🍎": "alimentar", "🥪": "alimentar",
+  "☕": "alimentar", "🚶": "exercicio", "🏃": "exercicio", "🥰": "cuidar", "💚": "cuidar", "🐾": "boneco",
+  "👋": "boneco", "📏": "tamanho", "🎭": "perfil", "🖱": "interacao", "📧": "email", "✅": "ok", "⚠": "alerta",
+  "🔌": "alerta", "🌟": "colecao", "🎁": "colecao", "💎": "colecao", "⬇": "baixar", "🔔": "sino", "🪙": "moeda",
+  "😴": "dormir", "🎯": "foco", "📌": "passear",
+};
+const TOM_DO_ICONE = { ok: "ok", alerta: "aviso" };
+const semEmoji = (t) => String(t || "")
+  .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}‍️⃣]/gu, "")
+  .replace(/\s{2,}/g, " ").replace(/^[\s·—-]+/, "").trim();
+function iconeDoAviso(ico, texto) {
+  if (typeof ICONES !== "undefined" && ICONES[ico]) return ico;   // já veio o nome do ícone
+  const daChamada = ICONE_DO_EMOJI[String(ico || "").replace(/️/g, "")];
+  // o bicho manda 🐾 em tudo: o emoji do COMEÇO do texto ("💧 Hora da água!") diz mais
+  const primeiro = ((String(texto || "").trim().match(/^\p{Extended_Pictographic}/u) || [""])[0]);
+  if (daChamada && daChamada !== "boneco") return daChamada;
+  return ICONE_DO_EMOJI[primeiro] || daChamada || "sino";
+}
+let toastClique = null;
+function toast(ico, titulo, texto, ms, mini, opts) {
   if (!cfg.interagir) return; // modo "não me interaja": nenhum balãozinho
-  document.getElementById("toast-ico").textContent = ico;
-  document.getElementById("toast-tit").textContent = titulo;
-  document.getElementById("toast-sub").textContent = texto || "";
-  toastEl.classList.toggle("mini", !!mini);
+  opts = opts || {};
+  const acoes = opts.acoes || [];
+  const nome = iconeDoAviso(ico, texto);
+  const icoEl = document.getElementById("toast-ico");
+  icoEl.innerHTML = icone(nome, 18);
+  icoEl.className = "toast-ico " + (TOM_DO_ICONE[nome] || "");
+  document.getElementById("toast-tit").textContent = semEmoji(titulo);
+  document.getElementById("toast-sub").textContent = semEmoji(texto);
+  const box = document.getElementById("toast-acoes");
+  box.innerHTML = "";
+  for (const a of acoes) {
+    const b = document.createElement("button");
+    b.className = "pn-bt" + (a.prim ? "" : " sec");
+    b.textContent = a.r;
+    b.onclick = (ev) => { ev.stopPropagation(); fechaToast(); try { a.fn(); } catch (e) { } };
+    box.appendChild(b);
+  }
+  box.style.display = acoes.length ? "" : "none";
+  toastClique = opts.clique || null;
+  toastEl.classList.toggle("mini", !!mini && !acoes.length);
+  toastEl.classList.toggle("com-acoes", acoes.length > 0);
   toastEl.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  const w = toastEl.offsetWidth || 300, h = toastEl.offsetHeight || 60;
-  let top = r.top - h - 12;
-  if (top < 8) top = r.bottom + 12;
-  toastEl.style.left = Math.max(8, Math.min(r.left - 10, innerWidth - w - 8)) + "px";
-  toastEl.style.top = Math.max(8, Math.min(top, innerHeight - h - 8)) + "px";
+  posicionaPertoDoPet(toastEl);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.classList.add("oculto"); reportarHit(); }, ms || 7000);
+  toastTimer = setTimeout(fechaToast, ms || 7000);
   reportarHit();
 }
-toastEl.onclick = () => { toastEl.classList.add("oculto"); reportarHit(); };
+function fechaToast() { toastEl.classList.add("oculto"); reportarHit(); }
+toastEl.onclick = () => { const f = toastClique; fechaToast(); if (f) { try { f(); } catch (e) { } } };
+document.getElementById("toast-x").onclick = (ev) => { ev.stopPropagation(); fechaToast(); };
 
 // tarefa concluída — é o momento "ele termina e avisa na tela"
 function tarefaConcluida(titulo, texto) {
@@ -1668,7 +1761,12 @@ function ligarEventos() {
   R.EventsOn("pet-state", (s) => aplicarEstado(s));
   // avisos do Go (gateway voltou, saldo baixo, tarefa concluída) → balãozinho na tela
   R.EventsOn("aviso", (a) => {
-    toast(a.icone || "🔔", a.titulo || "Aviso", a.texto || "", 9000);
+    if (/saldo/i.test(a.texto || "")) {   // saldo baixo: dá para resolver dali mesmo
+      toast("alerta", "Saldo baixo", (estado.balance || "").replace(".", ",") + " — recarregue para o chat não parar.", 20000, false,
+        { acoes: [{ r: "Abrir Inteligência", fn: () => abrirInteligencia() }] });
+    } else {
+      toast(a.icone || "🔔", a.titulo || "Aviso", a.texto || "", 9000);
+    }
     explosao([a.icone || "🔔"], 3);
   });
   R.EventsOn("status-panel", (texto) => { abrirBalao(); msg(texto, "ele"); });
