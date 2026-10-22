@@ -49,18 +49,20 @@
 
   <!-- ================= BALÃO (HQ) ================= -->
   <div id="balao" class="balao oculto">
-    <div class="balao-topo">
+    <!-- cabeçalho: nome do pet · modelo · saldo (main.js, pintaCabecalhoChat) -->
+    <div class="balao-topo chat-topo">
       <span class="dot" id="dot"></span>
-      <strong id="balao-titulo">Hermes</strong>
-      <span id="balao-sub" class="sub"></span>
-      <button id="balao-estender" class="x" title="Abrir o chat estendido">⤢</button>
-      <button id="balao-min" class="x" title="Esconder balão (Esc)">—</button>
+      <span class="chat-quem"><b id="balao-titulo"></b><span id="balao-sub" class="sub"></span></span>
+      <button id="balao-estender" class="botao-x" data-ic="tamanho" title="Abrir o chat estendido" aria-label="Abrir o chat estendido"></button>
+      <button id="balao-min" class="botao-x" data-ic="menos" title="Esconder (Esc)" aria-label="Esconder o chat"></button>
     </div>
     <div id="msgs" class="msgs"></div>
     <div class="balao-rodape">
       <input id="txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
-      <button id="enviar">→</button>
+      <button id="enviar" data-ic="enviar" aria-label="Enviar"></button>
     </div>
+    <!-- redimensionar: canto de cima, do lado oposto ao rabinho (o balão cresce para cima) -->
+    <div class="balao-puxa" id="balao-puxa" title="arraste para redimensionar"></div>
   </div>
 
   <!-- ============ MENU (dock com abas — montado pelo main.js) ============ -->
@@ -78,16 +80,15 @@
   <!-- ============ CHAT ESTENDIDO (janela arrastável e redimensionável) ============ -->
   <div id="chatGrande" class="cg oculto">
     <div class="cg-topo" id="cg-topo">
-      <span class="cg-tit">Chat Estendido</span>
-      <span class="cg-marca">PETAGENTS · Hermes</span>
-      <span class="cg-sub" id="cg-sub"></span>
-      <button class="cg-bt sec" id="cg-min" title="voltar ao chat pequeno (reabre o balão)">⤡ chat pequeno</button>
-      <span class="cg-x" id="cg-x" title="fechar o chat (a conversa fica guardada)">✕</span>
+      <span class="dot" id="cg-dot"></span>
+      <span class="chat-quem"><b id="cg-tit"></b><span class="sub" id="cg-sub"></span></span>
+      <button class="cg-bt sec" id="cg-min" title="voltar ao chat pequeno (reabre o balão)"><span data-ic="recolher"></span>chat pequeno</button>
+      <button class="botao-x" id="cg-x" data-ic="fechar" title="fechar o chat (a conversa fica guardada)" aria-label="Fechar o chat"></button>
     </div>
     <div id="cg-msgs" class="msgs cg-msgs"></div>
     <div class="cg-rodape">
       <input id="cg-txt" type="text" placeholder="Escreva e dê Enter…" autocomplete="off" />
-      <button id="cg-enviar" class="cg-bt">Enviar</button>
+      <button id="cg-enviar" class="cg-bt"><span data-ic="enviar"></span>Enviar</button>
     </div>
     <div class="cg-puxa" id="cg-puxa" title="arraste para redimensionar"></div>
   </div>

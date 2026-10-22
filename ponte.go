@@ -37,6 +37,9 @@ var (
 	ponteSeq    int         // id da pergunta em andamento (só muda com ponteMu)
 	ponteUma    sync.Once
 
+	ponteModeloMu sync.Mutex
+	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
+
 	// escritos pelo leitor da ponte e lidos a cada pergunta: sempre com a trava
 	ponteEstadoMu sync.Mutex
 	ponteErro     string
@@ -46,6 +49,23 @@ var (
 	// encurtar; o porquê dos 330 s está em perguntaPonte).
 	prazoPonte = 330 * time.Second
 )
+
+// guardaModelo — a ponte manda o modelo no handshake e em cada resposta (vazio = não sabe,
+// e não apaga o que já se sabia).
+func guardaModelo(m string) {
+	if m = strings.TrimSpace(m); m == "" {
+		return
+	}
+	ponteModeloMu.Lock()
+	ponteModelo = m
+	ponteModeloMu.Unlock()
+}
+
+func modeloPonte() string {
+	ponteModeloMu.Lock()
+	defer ponteModeloMu.Unlock()
+	return ponteModelo
+}
 
 // caminhoPonte — o script da ponte, ao lado do executável do app.
 func caminhoPonte() string {
@@ -172,6 +192,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 		var d struct {
 			Pronto bool   `json:"pronto"`
 			Erro   string `json:"erro"`
+			Modelo string `json:"modelo"`
 		}
 		if json.Unmarshal([]byte(linha), &d) != nil {
 			marcaPonte(false, "handshake ilegível: "+strings.TrimSpace(linha))
@@ -181,6 +202,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 			marcaPonte(false, "ponte sem agente: "+d.Erro)
 			return
 		}
+		guardaModelo(d.Modelo)
 		marcaPonte(true, "")
 		logMsg("ponte: agente quente confirmado (handshake ok)")
 		for {
@@ -240,6 +262,7 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				Texto     string  `json:"texto"`
 				Erro      string  `json:"erro"`
 				Segundos  float64 `json:"segundos"`
+				Modelo    string  `json:"modelo"`
 			}
 			if err := json.Unmarshal([]byte(linha), &d); err != nil {
 				txt := strings.TrimSpace(linha)
@@ -286,6 +309,7 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				}
 				return "", false
 			}
+			guardaModelo(d.Modelo)
 			logMsg(fmt.Sprintf("ponte: resposta quente em %.1fs", time.Since(t0).Seconds()))
 			return d.Resposta, true
 		case <-time.After(prazoPonte):

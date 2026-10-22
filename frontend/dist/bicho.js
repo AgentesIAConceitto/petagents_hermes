@@ -768,6 +768,8 @@
   };
 
   /* ── tarefa concluída: balão quando o chat está fechado ──────────────────── */
+  // (a linha "✅ tarefa concluída" no chat saiu em 22/10/2026, pedido da dona: poluía a
+  // conversa. A contagem de tarefas e o baú com o chat fechado continuam.)
   try {
     const msgOriginal = window.msg;
     if (typeof msgOriginal === "function") {
@@ -779,7 +781,6 @@
             const e = garante();
             e.tarefas = (e.tarefas || 0) + 1; feliz(4); salvaEst();
             const fechado = balao && balao.classList.contains("oculto");
-            msgOriginal.call(null, "✅ tarefa concluída", "meta");
             if (fechado) window.bichoAchar();   // chat fechado? ele aparece com o aviso
           }
         } catch (e) { /* nunca quebra o chat */ }

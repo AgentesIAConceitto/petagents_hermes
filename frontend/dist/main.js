@@ -11,8 +11,6 @@ const msgs = document.getElementById("msgs");
 const txt = document.getElementById("txt");
 const menu = document.getElementById("menu");
 const telaPanel = document.getElementById("tela");
-const dot = document.getElementById("dot");
-const dotSub = document.getElementById("balao-sub");
 
 let estado = { state: "idle", detail: "", heartbeat: -1, balance: "", agent: "hermes" };
 let hideTimer = null, balaoTimer = null, arrastando = false, ultimoMenu = 0;
@@ -735,9 +733,7 @@ document.getElementById("pets-x").onclick = () => fecharPainelBonecos();
 function aplicarEstado(s) {
   estado = Object.assign(estado, s || {});
   classePet(estado.state || "idle");
-  const mapa = { idle: "", pensando: "pensando", dormindo: "dormindo", erro: "erro", falando: "pensando" };
-  dot.className = "dot " + (mapa[estado.state] || "");
-  dotSub.textContent = [estado.detail, estado.balance].filter(Boolean).join(" · ");
+  atualizaInfoChat(); // cabeçalho do chat: nome, modelo, saldo e o ponto de status
   destacarPendencia();
   reportarHit();
 }
@@ -745,7 +741,7 @@ function aplicarEstado(s) {
 /* ───────── balão (conversa) ─────────
    A conversa é UMA só: o balão e o chat estendido desenham a mesma lista. */
 const conversa = [];
-let ocupado = false; // true enquanto o Hermes está pensando
+let ocupado = false; // true enquanto o agente está pensando
 
 // escHtml — texto de FORA (e-mail, rede) entra no innerHTML só por aqui.
 // Sem isto, um remetente "<img onerror=...>" roda JS no overlay, que alcança
@@ -764,12 +760,74 @@ function formata(t) {
   return s;
 }
 
-function msg(texto, quem = "ele") {
-  conversa.push({ quem: quem, texto: texto });
-  // a conversa sobrevive ao reiniciar o app (o Hermes pode responder depois de ele
+// `extra` vai junto na mensagem guardada (ex.: { hora, seg } no rodapé da resposta)
+function msg(texto, quem = "ele", extra) {
+  conversa.push(Object.assign({ quem: quem, texto: texto }, extra || {}));
+  // a conversa sobrevive ao reiniciar o app (o agente pode responder depois de ele
   // já ter sido fechado/reaberto — foi o que aconteceu em 02/10/2026)
   try { localStorage.setItem("conversa", JSON.stringify(conversa.slice(-60))); } catch (e) {}
   pintaConversa();
+}
+
+/* ───────── cabeçalho do chat: nome do pet · modelo · saldo · gasto de hoje ─────────
+   Pedido da dona (22/10/2026): sai "Hermes · gateway ativo (4s) · saldo indisponível
+   (chave não encontrada)". O ponto de status agora fala do AGENTE QUE RESPONDE O CHAT
+   (a ponte), não do heartbeat do gateway — esse detalhe técnico vai para o tooltip. */
+let infoChat = { modelo: "", saldo: "", pronta: false, erro: "" };
+
+const numeroSaldo = (t) => { const m = /US\$\s*([\d.]+)/.exec(t || ""); return m ? parseFloat(m[1]) : null; };
+const moeda = (v) => "US$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// gasto de hoje = quanto o saldo caiu desde a primeira leitura do dia. Recarga (o saldo
+// SOBE) recomeça a conta. É a conta inteira da chave: inclui o que se gastou fora do boneco.
+function gastoHoje(saldo) {
+  const d = new Date(), dia = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  let g = {};
+  try { g = JSON.parse(localStorage.getItem("saldo.dia") || "{}"); } catch (e) { }
+  if (g.dia !== dia || !(saldo <= g.inicial)) {
+    g = { dia: dia, inicial: saldo };
+    try { localStorage.setItem("saldo.dia", JSON.stringify(g)); } catch (e) { }
+  }
+  return g.inicial - saldo;
+}
+
+function nomeDoPet() {
+  try { if (window.bichoResumo) return window.bichoResumo().nome || "Seu pet"; } catch (e) { }
+  return "Seu pet";
+}
+
+function pintaCabecalhoChat() {
+  const nome = nomeDoPet();
+  const saldoTxt = infoChat.saldo || estado.balance || "";
+  const saldo = numeroSaldo(saldoTxt);
+  const partes = [];
+  if (infoChat.modelo) partes.push(infoChat.modelo);
+  if (saldo !== null) {
+    partes.push(moeda(saldo));
+    const g = gastoHoje(saldo);
+    if (g >= 0.005) partes.push("hoje −" + moeda(g));
+  } else if (/chave/.test(saldoTxt)) {
+    partes.push("saldo: configure a chave");
+  }
+  // o ponto: pensando (esperando resposta) › fora do ar › saldo baixo › ok
+  let cls = "", linha = partes.join(" · ");
+  if (ocupado) { cls = "pensando"; linha = nome + " está pensando…"; }
+  else if (!infoChat.pronta && infoChat.erro) { cls = "erro"; linha = "agente fora do ar — respondo pelo modo lento"; }
+  else if (!infoChat.pronta) { cls = "aviso"; linha = "conectando ao agente…"; }
+  else if (saldo !== null && saldo < 3) { cls = "aviso"; linha = "saldo baixo · " + linha; }
+  // o detalhe técnico (gateway, motivo do saldo) continua acessível: passar o mouse
+  const dica = [estado.detail, saldoTxt, infoChat.erro].filter(Boolean).join(" · ");
+  for (const [d, t, s] of [["dot", "balao-titulo", "balao-sub"], ["cg-dot", "cg-tit", "cg-sub"]]) {
+    const elD = document.getElementById(d), elT = document.getElementById(t), elS = document.getElementById(s);
+    if (elD) { elD.className = "dot " + cls; elD.title = dica; }
+    if (elT) elT.textContent = nome;
+    if (elS) { elS.textContent = linha; elS.title = dica; }
+  }
+}
+
+async function atualizaInfoChat() {
+  try { if (G && G.InfoChat) infoChat = Object.assign(infoChat, JSON.parse(await G.InfoChat())); } catch (e) { }
+  pintaCabecalhoChat();
 }
 
 /* Levar a conversa SEMPRE para a última mensagem — no balão E no chat estendido.
@@ -785,63 +843,62 @@ function rolarAoFim() {
   setTimeout(fazer, 60);
 }
 
-/* PAINEL AO VIVO — mostra o que o agente está fazendo ENQUANTO faz (10/10/2026).
+/* BOLHA AO VIVO — o pet "digitando" enquanto o agente trabalha (10/10/2026; virou
+   bolha com três pontinhos em 22/10/2026, no lugar de "⏳ consultando o Hermes…").
    O dono: "eu não fico nunca no vácuo aqui no chat".
 
    MEDIDO: o modelo passa o tempo PENSANDO e o texto só sai em rajada no fim — transmitir
    só o texto deixaria o balão parado de novo. Por isso há DOIS movimentos: os passos que a
-   ponte manda (ferramentas) e um RELÓGIO que mantém a linha viva a cada segundo.
+   ponte manda (ferramentas) e um RELÓGIO que mantém a bolha viva a cada segundo.
 
    ⚠️ Não abre o balão: a regra do dono é que nada abre o chat sozinho.
    ⚠️ Não usa `conversa` (é const — reatribuir quebra a função): mexe só no DOM. */
 let _vivoRotulo = "";
+let _vivoTexto = "";
 let _vivoInicio = 0;
 let _vivoTimer = null;
 
 function _pintaVivo() {
-  if (!_vivoRotulo) return;
-  const seg = _vivoInicio ? Math.round((Date.now() - _vivoInicio) / 1000) : 0;
-  const texto = '<span class="passo">⚙️ ' + formata(_vivoRotulo) + (seg > 2 ? " · " + seg + "s" : "") + "…</span>";
+  if (!_vivoInicio) return;
+  const seg = Math.round((Date.now() - _vivoInicio) / 1000);
+  let html;
+  if (_vivoTexto) {
+    html = formata(_vivoTexto);   // o texto já está chegando: mostra o que veio
+  } else {
+    const rotulo = [_vivoRotulo ? formata(_vivoRotulo) : "", seg > 2 ? seg + " s" : ""].filter(Boolean).join(" · ");
+    html = '<span class="digitando"><i></i><i></i><i></i></span>' + (rotulo ? '<span class="passo">' + rotulo + "</span>" : "");
+  }
   for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
     if (!alvo) continue;
     let el = alvo.querySelector(".ao-vivo");
     if (!el) {
       el = document.createElement("div");
-      el.className = "m meta ao-vivo";
+      el.className = "m ele ao-vivo";
       alvo.appendChild(el);
     }
-    el.innerHTML = texto;
+    el.innerHTML = html;
   }
   rolarAoFim();
 }
 
+function iniciaAoVivo() {
+  _vivoRotulo = ""; _vivoTexto = ""; _vivoInicio = Date.now();
+  _pintaVivo();
+  if (!_vivoTimer) _vivoTimer = setInterval(_pintaVivo, 1000);
+}
+
 function progressoAoVivo(p) {
   if (!p || !p.tipo) return;
-  if (p.tipo === "passo") {
-    _vivoRotulo = String(p.texto || "trabalhando");
-    if (!_vivoInicio) _vivoInicio = Date.now();
-    _pintaVivo();
-  } else {
-    // texto chegando: mostra o que já veio (e mantém o relógio se ele ainda pensa)
-    const alvo = msgs || document.getElementById("cg-msgs");
-    if (alvo) {
-      let el = alvo.querySelector(".ao-vivo");
-      if (!el) {
-        el = document.createElement("div");
-        el.className = "m meta ao-vivo";
-        alvo.appendChild(el);
-      }
-      el.innerHTML = formata(String(p.texto || ""));
-      rolarAoFim();
-    }
-  }
+  if (p.tipo === "passo") _vivoRotulo = String(p.texto || "trabalhando");
+  else _vivoTexto = String(p.texto || "");
+  if (!_vivoInicio) _vivoInicio = Date.now();
+  _pintaVivo();
   if (!_vivoTimer) _vivoTimer = setInterval(_pintaVivo, 1000);
 }
 
 function encerraAoVivo() {
   if (_vivoTimer) { clearInterval(_vivoTimer); _vivoTimer = null; }
-  _vivoRotulo = "";
-  _vivoInicio = 0;
+  _vivoRotulo = ""; _vivoTexto = ""; _vivoInicio = 0;
   for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
     if (!alvo) continue;
     const vivo = alvo.querySelector(".ao-vivo");
@@ -858,10 +915,17 @@ function pintaConversa() {
       const el = document.createElement("div");
       el.className = "m " + m.quem;
       el.innerHTML = formata(m.texto);
+      // rodapé discreto da resposta: hora e quanto levou (era a linha "via Hermes · 13.9 s")
+      if (m.hora || m.seg) {
+        const rp = document.createElement("span");
+        rp.className = "rodape-msg";
+        rp.textContent = [m.hora, m.seg ? String(m.seg).replace(".", ",") + " s" : ""].filter(Boolean).join(" · ");
+        el.appendChild(rp);
+      }
       if (m.quem !== "meta") { // linhas de status não ganham botão de copiar
         const cp = document.createElement("span");
         cp.className = "copiar";
-        cp.textContent = "⧉";
+        cp.innerHTML = icone("copiar", 14);
         cp.title = "copiar esta mensagem";
         cp.onclick = (ev) => { ev.stopPropagation(); copiarTexto(m.texto, cp); };
         el.appendChild(cp);
@@ -869,6 +933,7 @@ function pintaConversa() {
       alvo.appendChild(el);
     }
   }
+  if (_vivoInicio) _pintaVivo(); // repintar a conversa não pode sumir com a bolha "digitando"
   rolarAoFim();   // antes era `alvo.scrollTop` por alvo: não pegava com o balão oculto
   ancoraBalao();
 }
@@ -877,10 +942,9 @@ function pintaConversa() {
    sempre está disponível, então há reserva com textarea + execCommand. */
 function copiarTexto(t, el) {
   const ok = () => {
-    const antes = el.textContent;
-    el.textContent = "✓";
+    el.innerHTML = icone("ok", 14);
     el.classList.add("copiado");
-    setTimeout(() => { el.textContent = antes; el.classList.remove("copiado"); }, 1200);
+    setTimeout(() => { el.innerHTML = icone("copiar", 14); el.classList.remove("copiado"); }, 1200);
   };
   const reserva = () => {
     const ta = document.createElement("textarea");
@@ -899,24 +963,69 @@ function copiarTexto(t, el) {
   }
 }
 
-// o balão é ancorado pelo RODAPÉ: cresce para cima, nunca por cima do pet
+/* o balão é ancorado pelo RODAPÉ: cresce para cima, nunca por cima do pet.
+   Tamanho (22/10/2026): 460 × até 55% da tela por padrão, e a dona redimensiona pela
+   alça (fica salvo em cfg.chat). Aqui só se garante que ele CABE acima do boneco. */
+const BALAO_MIN = { w: 320, h: 260 };
+function tamanhoBalao() {
+  const c = cfg.chat || {};
+  return { w: c.w || 460, h: c.h || Math.round(Math.min(innerHeight * 0.55, 560)) };
+}
 function ancoraBalao() {
   if (!balao || balao.classList.contains("oculto")) return;
   const r = pet.getBoundingClientRect();
-  const larg = balao.offsetWidth || 420;
-  balao.style.top = "";
-  balao.style.bottom = Math.max(10, innerHeight - r.top + 18) + "px";
-  let x = r.left + 20;
-  if (x + larg > innerWidth - 10) {
-    x = Math.max(10, innerWidth - larg - 10);
-    balao.classList.add("flip");
+  const t = tamanhoBalao();
+  const larg = Math.max(BALAO_MIN.w, Math.min(t.w, innerWidth - 20));
+  // boneco encostado em CIMA: não cabe o balão acima dele — abre embaixo (ancorado no topo)
+  const embaixo = r.top - 28 < BALAO_MIN.h;
+  balao.classList.toggle("embaixo", embaixo);
+  balao.style.width = larg + "px";
+  if (embaixo) {
+    const topo = Math.round(r.bottom + 18);
+    balao.style.height = Math.max(BALAO_MIN.h, Math.min(t.h, innerHeight - topo - 10)) + "px";
+    balao.style.bottom = "";
+    balao.style.top = topo + "px";
+  } else {
+    const base = Math.max(10, innerHeight - r.top + 18);
+    balao.style.height = Math.max(BALAO_MIN.h, Math.min(t.h, innerHeight - base - 10)) + "px";
+    balao.style.top = "";
+    balao.style.bottom = base + "px";
   }
+  let x = r.left + 20;
+  const flip = x + larg > innerWidth - 10;
+  if (flip) x = Math.max(10, innerWidth - larg - 10);
+  balao.classList.toggle("flip", flip); // antes só ADICIONAVA: virado uma vez, ficava virado
   balao.style.left = x + "px";
 }
+
+(function redimensionarBalao() { // pela alça do canto de cima (oposto ao rabinho)
+  const puxa = document.getElementById("balao-puxa");
+  if (!puxa || !balao) return;
+  let p = null;
+  puxa.addEventListener("mousedown", (e) => {
+    p = { x: e.clientX, y: e.clientY, w: balao.offsetWidth, h: balao.offsetHeight, flip: balao.classList.contains("flip"), embaixo: balao.classList.contains("embaixo") };
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!p) return;
+    const dx = (e.clientX - p.x) * (p.flip ? -1 : 1);  // virado: a alça fica à esquerda
+    cfg.chat = {
+      w: Math.round(Math.max(BALAO_MIN.w, p.w + dx)),
+      // ancorado embaixo: subir = crescer (aberto embaixo do boneco, a alça desce)
+      h: Math.round(Math.max(BALAO_MIN.h, p.h + (e.clientY - p.y) * (p.embaixo ? 1 : -1))),
+    };
+    ancoraBalao();
+    reportarHit();
+    reiniciarAuto();
+  });
+  window.addEventListener("mouseup", () => { if (p) { p = null; salvarPet(); } });
+})();
 
 function abrirBalao(posicionar = true) {
   balao.classList.remove("oculto");
   if (posicionar) ancoraBalao();
+  pintaCabecalhoChat();
   rolarAoFim();   // abrir = cair na ÚLTIMA mensagem, sem arrastar até o fim
   txt.focus();
   reiniciarAuto();
@@ -925,7 +1034,7 @@ function abrirBalao(posicionar = true) {
 function fecharBalao() { balao.classList.add("oculto"); reportarHit(); }
 function reiniciarAuto() {
   clearTimeout(balaoTimer);
-  if (ocupado) return; // esperando o Hermes: NÃO esconde (a resposta chega depois)
+  if (ocupado) return; // esperando o agente: NÃO esconde (a resposta chega depois)
   balaoTimer = setTimeout(() => fecharBalao(), 20000); // auto-esconde: 20 s sem interação
 }
 
@@ -935,16 +1044,16 @@ async function enviarTexto(texto, input) {
   input.value = "";
   msg(texto, "eu");
   classePet("pensando");
-  msg("⏳ consultando o Hermes…", "meta");
   ocupado = true;                       // esperando resposta: o balão NÃO se esconde
+  iniciaAoVivo();                       // a bolha "digitando" (era a linha "⏳ consultando…")
   input.disabled = true;
-  input.placeholder = "o Hermes está pensando…";
+  input.placeholder = nomeDoPet() + " está pensando…";
+  pintaCabecalhoChat();
   reiniciarAuto();
   let resp = "(sem resposta)";
   const t0 = Date.now();
   try { resp = G ? await G.SendChat(texto) : "(fora do Wails)"; } catch (e) { resp = "erro: " + e; }
-  const levou = ((Date.now() - t0) / 1000).toFixed(1);
-  if (conversa.length && conversa[conversa.length - 1].quem === "meta") conversa.pop();
+  const levou = Math.round((Date.now() - t0) / 100) / 10;
   ocupado = false;
   input.disabled = false;
   input.placeholder = "Escreva e dê Enter…";
@@ -954,20 +1063,20 @@ async function enviarTexto(texto, input) {
   // recado do comando ser a primeira linha do chat limpo.
   const _cmd = texto.toLowerCase().split(/\s+/)[0];
   if (["/clear", "/limpar", "/new", "/nova", "/reset"].includes(_cmd)) {
-    // ⚠️ `conversa` é CONST (linha 568): reatribuir (`conversa = []`) lança TypeError e QUEBRA
+    // ⚠️ `conversa` é CONST: reatribuir (`conversa = []`) lança TypeError e QUEBRA
     // a função aqui — a resposta nunca aparecia e o chat não limpava. Defeito medido em
     // 10/10/2026: o /clear zerava o contexto no motor (log: 0,6 s) e na tela "não funcionava".
     // Limpar o MESMO array (length = 0) mantém a referência e o resto do código intacto.
     conversa.length = 0;
     try { localStorage.setItem("conversa", JSON.stringify([])); } catch (e) {}
   }
-  // a linha "ao vivo" (progresso + relógio) sai de cena: entra a mensagem de verdade
+  // a bolha ao vivo sai de cena: entra a mensagem de verdade, com hora e tempo no rodapé
   encerraAoVivo();
-  msg(resp, "ele");
-  // marcador honesto: mostra quanto tempo levou (quente = segundos / reserva = ~1 min)
-  msg("via Hermes · " + levou + " s", "meta");
+  const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  msg(resp, "ele", { hora: hora, seg: levou });
   classePet(estado.state || "idle");
   abrirBalao(false);                    // garante o balão aberto para mostrar a resposta
+  atualizaInfoChat();                   // o modelo pode ter chegado agora, com a resposta
   reiniciarAuto();
   reportarHit();
 }
@@ -976,21 +1085,26 @@ function enviar() { return enviarTexto(txt.value, txt); }
 
 /* ───────── chat estendido (janela arrastável e redimensionável) ─────────
    Abre no centro da tela atual, arrasta pela barra de título e redimensiona pelo
-   canto. É a MESMA conversa do balão — só maior. */
+   canto. É a MESMA conversa do balão — só maior. Posição e tamanho ficam salvos
+   em cfg.chatGrande (22/10/2026): reabrir volta onde a dona deixou. */
 const cg = document.getElementById("chatGrande");
 
 function abrirChatGrande() {
   if (!cg) return;
   fecharBalao(); // pedido do dono (02/10/2026): o balão pequeno SAI de cena
   cg.classList.remove("oculto");
+  pintaCabecalhoChat();
   rolarAoFim();   // idem: o chat estendido abre no fim da conversa
   if (!cg.dataset.pos) {
-    const larg = Math.max(420, Math.round(innerWidth * 0.62));
-    const alt = Math.max(300, Math.round(innerHeight * 0.6));
+    const s = cfg.chatGrande || {};
+    const larg = Math.min(innerWidth - 20, s.w || Math.max(420, Math.round(innerWidth * 0.62)));
+    const alt = Math.min(innerHeight - 20, s.h || Math.max(300, Math.round(innerHeight * 0.6)));
+    const x = s.x !== undefined ? s.x : Math.round((innerWidth - larg) / 2);
+    const y = s.y !== undefined ? s.y : Math.round((innerHeight - alt) / 2);
     cg.style.width = larg + "px";
     cg.style.height = alt + "px";
-    cg.style.left = Math.round((innerWidth - larg) / 2) + "px";
-    cg.style.top = Math.round((innerHeight - alt) / 2) + "px";
+    cg.style.left = Math.max(-40, Math.min(innerWidth - 120, x)) + "px";
+    cg.style.top = Math.max(0, Math.min(innerHeight - 40, y)) + "px";
     cg.dataset.pos = "1";
   }
   document.getElementById("cg-txt").focus();
@@ -999,13 +1113,17 @@ function abrirChatGrande() {
 function fecharChatGrande() {
   if (cg) { cg.classList.add("oculto"); reportarHit(); }
 }
+function guardaChatGrande() {
+  cfg.chatGrande = { x: cg.offsetLeft, y: cg.offsetTop, w: cg.offsetWidth, h: cg.offsetHeight };
+  salvarPet();
+}
 
 (function arrastarChat() { // arrastar pela barra de título
   const topo = document.getElementById("cg-topo");
   if (!topo || !cg) return;
   let d = null;
   topo.addEventListener("mousedown", (e) => {
-    if (e.target.id === "cg-x" || e.target.id === "cg-min") return; // botões não arrastam
+    if (e.target.closest("button")) return; // botões não arrastam (o alvo pode ser o ícone)
     d = { x: e.clientX - cg.offsetLeft, y: e.clientY - cg.offsetTop };
     e.preventDefault();
   });
@@ -1015,7 +1133,7 @@ function fecharChatGrande() {
     cg.style.top = Math.max(0, Math.min(innerHeight - 40, e.clientY - d.y)) + "px";
     reportarHit();
   });
-  window.addEventListener("mouseup", () => { d = null; });
+  window.addEventListener("mouseup", () => { if (d) { d = null; guardaChatGrande(); } });
 })();
 
 (function redimensionarChat() { // redimensionar pelo canto
@@ -1033,7 +1151,7 @@ function fecharChatGrande() {
     cg.style.height = Math.max(280, p.h + (e.clientY - p.y)) + "px";
     reportarHit();
   });
-  window.addEventListener("mouseup", () => { p = null; });
+  window.addEventListener("mouseup", () => { if (p) { p = null; guardaChatGrande(); } });
 })();
 
 document.getElementById("balao-estender").onclick = () => abrirChatGrande();
@@ -1046,20 +1164,24 @@ document.getElementById("cg-enviar").onclick = () =>
 document.getElementById("cg-txt").addEventListener("keydown", (e) => {
   if (e.key === "Enter") enviarTexto(e.target.value, e.target);
 });
-(async () => { // deixa escrito na tela se o chat está mesmo ligado no Hermes
-  try {
-    const i = JSON.parse(await G.ChatIntegrado());
-    document.getElementById("cg-sub").textContent =
-      i.ok ? "ligado ao Hermes · sessão " + i.sessao : "Hermes não encontrado";
-  } catch (e) {}
-})();
 try { // recupera a conversa anterior (inclusive resposta que chegou com o balão fechado)
   const c = JSON.parse(localStorage.getItem("conversa") || "[]");
   if (Array.isArray(c) && c.length) {
-    for (const m of c) conversa.push(m);
+    for (const m of c) {
+      // conversa guardada antes de 22/10/2026: "via Hermes · 13.9 s" vira o rodapé da
+      // resposta anterior; "⏳ consultando…" e "✅ tarefa concluída" não aparecem mais
+      if (m.quem === "meta") {
+        const via = /^via \S+ · ([\d.]+) s$/.exec(m.texto || "");
+        const ant = conversa[conversa.length - 1];
+        if (via && ant && ant.quem === "ele" && !ant.seg) { ant.seg = parseFloat(via[1]); continue; }
+        if (via || /^⏳|tarefa concluída/.test(m.texto || "")) continue;
+      }
+      conversa.push(m);
+    }
     pintaConversa();
   }
 } catch (e) {}
+pintaCabecalhoChat();
 
 /* ───────── menu (dock com abas: Pet · Recursos · Sistema) ─────────
    Escolha da dona em 22/10/2026 (prancha "PetAgent — Menu novo", opção A): o
@@ -1605,6 +1727,7 @@ setInterval(reportarHit, 500);
 (async function boot() {
   montarMenu();
   await esperarBindings(); // ← antes de tudo: sem bindings, nada é clicável
+  atualizaInfoChat();
   // lê a tela/canto salvos e já alinha o boneco
   try {
     const c = JSON.parse((G ? await G.TelaAtual() : "{}") || "{}");
@@ -1619,6 +1742,6 @@ setInterval(reportarHit, 500);
   // Antes isto abria o balão sozinho no boot E deixava um "Pronto." DENTRO da
   // conversa, que parecia resposta do agente e poluía o histórico.
   setTimeout(() => toast("🐾", "PetAgent",
-    "Pronto. Duplo clique em mim para conversar — eu respondo pelo Hermes.", 8000, true), 800);
+    "Pronto. Duplo clique em mim para conversar.", 8000, true), 800);
   log("frontend boot ok");
 })();
