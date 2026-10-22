@@ -55,10 +55,13 @@ bicho que *também* cuida de você é útil.
   com animação **por sentido** de caminhada, comemoração, carinho, sono e fala.
 - **Sininho suave** a cada recado (dois toques de seno sintetizados, sem arquivo de
   áudio) — para você saber que chegou mensagem mesmo sem olhar a tela.
-- Passeios sozinho pela linha da barra, volta completa contornando a tela, dormir de
-  1 a 4 h, modo foco 🎯 (só água), "esconder por 15 min/1 h".
-- Encaixa na borda mais próxima quando você solta, e a janela é **click-through**: fora
-  do boneco, seus cliques vão para o que está atrás.
+- Fica **parado** onde você soltou (padrão); "Deixar passear" no menu liga os passeios
+  sozinho pela borda. Volta completa contornando a tela, dormir de 1 a 4 h, modo foco 🎯
+  (só água), "esconder por 15 min/1 h".
+- Gruda na borda (ou no canto) mais próximo quando você solta, sem o transparente do
+  sprite sobrando, e a janela é **click-through**: fora do boneco, seus cliques vão para
+  o que está atrás.
+- **Tamanho** de 30% a 150%: rodinha do mouse em cima do boneco, ou "Tamanho" no menu.
 - Bandeja do sistema, atalho `Ctrl+Alt+Q`, menu com o botão DESLIGAR.
 
 **Presentes e coleção**
@@ -236,10 +239,13 @@ human biology, because a pet that only asks for things is annoying, and a pet th
   talking.
 - A **soft chime** on every message (two synthesized sine notes, no audio file) so you
   know something arrived even if you are not looking at the screen.
-- Wanders along the taskbar line, full lap around the screen, sleep 1–4 h, focus mode
-  🎯 (water only), "hide for 15 min/1 h".
-- Snaps to the nearest edge when you drop it, and the window is **click-through**:
-  outside the pet, your clicks go to whatever is behind.
+- **Stays put** where you drop it (default); "Deixar passear" in the menu turns on
+  wandering along the edge. Full lap around the screen, sleep 1–4 h, focus mode 🎯
+  (water only), "hide for 15 min/1 h".
+- Sticks to the nearest edge (or corner) when you drop it, with no sprite transparency
+  left over, and the window is **click-through**: outside the pet, your clicks go to
+  whatever is behind.
+- **Size** from 30% to 150%: mouse wheel over the pet, or "Tamanho" in the menu.
 
 **Gifts and collection**
 - The pet finds chests and receives gifts: **~2,500 items** with rarities from 60%
