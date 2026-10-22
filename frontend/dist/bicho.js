@@ -475,7 +475,7 @@
     reportarHit();
   }
 
-  // O MENU tem UM dono: montarMenu() (main.js) + repintaMenu() (bloco 2 abaixo).
+  // O MENU tem UM dono: montarMenu() (main.js) + repintaMenu() (bloco 2 abaixo, aba Pet).
   // Existia aqui um enfeitaMenu() que ANEXAVA uma 7ª linha em #menu com
   // alimentar/água/exercício: duplicava os tiles (e escapava por baixo da
   // moldura) e os tiles dele só abriam o balão. Removido em 03/10/2026.
@@ -726,33 +726,46 @@
     fala("Minha galeria não carregou… 🥺");
   };
 
-  /* ── menu: o bicho dirige o menu — UMA ação, UM botão ───────────────────── */
+  /* ── menu: o bicho dirige a aba Pet — UMA ação, UM botão ─────────────────────
+     22/10/2026: o menu virou dock com abas (main.js, MENU). Conversar e E-mail
+     foram para a aba Recursos; aqui ficam só os cuidados e o estado DELE. */
   function repintaMenu() {
     try {
-      if (typeof TILES === "undefined") return;
-      // linha 1 — os cuidados que ele pede, todos com reação visível no boneco
-      TILES.linha1 = [
-        ["🍖", "Alimentar", () => window.bichoAlimentar()],
-        ["💧", "Água", () => window.bichoAgua()],
-        ["🏃", "Exercício", () => window.bichoExercicio()],
-        ["🎾", "Brincar", () => window.bichoBrincar()],
+      if (typeof MENU === "undefined") return;
+      MENU.pet = [
+        ["alimentar", "Alimentar", () => window.bichoAlimentar()],
+        ["agua", "Água", () => window.bichoAgua()],
+        ["exercicio", "Exercício", () => window.bichoExercicio()],
+        ["brincar", "Brincar", () => window.bichoBrincar()],
+        ["dormir", "Dormir", () => window.bichoDormirMenu()],
+        ["status", "Como está", () => window.bichoGrafico()],
+        ["colecao", "Coleção", () => window.bichoColecao()],
+        ["cuidar", "Cuidar dele", () => window.bicho.abrirPainel()],
       ];
-      // linha 2 (destaque, botão grande) — as duas portas de entrada
-      TILES.linha2 = [
-        ["🐾", "Cuidar dele", () => window.bicho.abrirPainel()],
-        ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
-      ];
-      // linha 3 — estado e sistema. Água saiu daqui: agora mora na linha 1.
-      TILES.linha3 = [
-        ["📊", "Como ele está", () => window.bichoGrafico()],
-        ["💎", "Coleção", () => window.bichoColecao()],
-        ["😴", "Dormir", () => window.bichoDormirMenu()],
-        ["📧", "E-mail", () => abrirEmail()],
-      ];
-      // linha 6 — ZERADA: era depósito de resto ("Testar balãozinho" = debug)
-      TILES.linha6 = [];
     } catch (e) { /* menu ainda não existe */ }
   }
+
+  /* ── cabeçalho do menu: nome, humor e o que ele está pedindo ─────────────────
+     `pendente` é o ícone do botão que ganha o pontinho de "pedindo agora". */
+  window.bichoResumo = () => {
+    const e = garante(), c = cfgB(), nome = c.nome || "Xodó";
+    if (c.dormirAte > Date.now()) {
+      const ate = new Date(c.dormirAte).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      return { nome, linha: "Dormindo até " + ate, pendente: "" };
+    }
+    const h = e.humor || 80;
+    const humor = h >= 70 ? "Feliz" : h >= 40 ? "Tranquilo" : "Meio pra baixo";
+    const nec = [
+      ["agua", e.sede, "com sede", "com um pouco de sede"],
+      ["alimentar", e.fome, "com fome", "com um pouco de fome"],
+      ["", e.carinho, "querendo carinho", "com saudade de você"],
+      ["exercicio", e.exercicio, "precisando se mexer", "meio parado"],
+    ].sort((a, b) => a[1] - b[1]);
+    const [ico, valor, forte, leve] = nec[0];
+    if (valor < 40) return { nome, linha: humor + " · " + forte, pendente: ico };
+    if (valor < 60) return { nome, linha: humor + " · " + leve, pendente: "" };
+    return { nome, linha: humor + " · tudo em dia", pendente: "" };
+  };
 
   /* ── tarefa concluída: balão quando o chat está fechado ──────────────────── */
   try {
