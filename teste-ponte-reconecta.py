@@ -27,11 +27,7 @@ import chat_bridge as cb  # noqa: E402
 
 
 def limpar(bk):
-    try:
-        if bk.proc and bk.proc.poll() is None:
-            bk.proc.terminate()
-    except Exception:
-        pass
+    cb._derruba_arvore(bk.proc)  # a árvore toda: só o lançador deixava o serve órfão
 
 
 async def principal() -> int:
@@ -59,12 +55,11 @@ async def principal() -> int:
         return 1
 
     # ---- 2) mata o backend (o que aconteceu às 17:36) ----
+    # a ÁRVORE: no Hermes 0.21 o serve de verdade é filho (às vezes neto) do lançador;
+    # matar só o lançador podia deixar o serve vivo — o canal nem caía e o teste não
+    # reproduzia nada (ver _derruba_arvore)
     print(f"[teste] matando o backend (pid {pid_antes}) para simular o serve travado…")
-    try:
-        bk.proc.kill()
-        bk.proc.wait(timeout=20)
-    except Exception:
-        pass
+    cb._derruba_arvore(bk.proc)
     await asyncio.sleep(3)
 
     # ---- 3) pergunta de novo: TEM de reconectar sozinho ----
