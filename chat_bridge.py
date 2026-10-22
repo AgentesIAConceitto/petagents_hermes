@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -426,6 +427,7 @@ _EV_CONHECIDOS = {
     # ponte.log — 3.802 linhas num único turno de 224 s (e o disco pagando por isso).
     # "reasoning.delta" é o pensamento token a token; não serve para diagnosticar nada.
     "reasoning.delta", "tool.generating", "message.interim",
+    "error",  # tem log próprio e completo em _perguntar_uma (o genérico cortava em 200)
 }
 
 
@@ -839,6 +841,7 @@ Deste chat (sempre funcionam):
                                        "params": {"session_id": self.sessao, "text": texto}}))
         self.seq += 1
         pedacos: list[str] = []
+        erro_hermes = ""  # evento `error` do turno (ver _erro_legivel)
         while time.time() - t0 < timeout:
             try:
                 raw = await asyncio.wait_for(self.ws.recv(),
@@ -873,12 +876,19 @@ Deste chat (sempre funcionam):
                 carga = p.get("payload") if isinstance(p.get("payload"), dict) else p
                 nome = str(carga.get("name") or carga.get("tool") or "ferramenta")
                 _progresso("passo", nome)
+            elif tipo == "error":
+                carga = p.get("payload") if isinstance(p.get("payload"), dict) else p
+                erro_hermes = str(carga.get("message") or carga.get("error") or carga)
+                log(f"erro do Hermes no turno: {erro_hermes[:1500]}")
             elif tipo == "message.complete":
                 break
             # thinking.delta / reasoning.available são PENSAMENTO: não entram na resposta
             if "error" in d and not pedacos:
                 return "erro: " + json.dumps(d.get("error"))[:300], time.time() - t0
-        return "".join(pedacos).strip() or "(sem texto)", time.time() - t0
+        resp = "".join(pedacos).strip()
+        if not resp and erro_hermes:
+            return _erro_legivel(erro_hermes), time.time() - t0
+        return resp or "(sem texto)", time.time() - t0
 
 
 def porta_livre() -> int:
@@ -956,6 +966,29 @@ async def servico(bk: "Backend", args) -> int:
 # ---------------------------------------------------------------------------
 # Helpers dos comandos de barra (10/10/2026)
 # ---------------------------------------------------------------------------
+
+def _erro_legivel(msg: str) -> str:
+    """O que o chat mostra quando o Hermes falha ANTES de responder (22/10/2026).
+
+    O Hermes avisa por um EVENTO `error` (payload.message) — e a ponte só olhava o campo
+    `error` do topo, então o chat dizia "(sem texto)" em 0,1 s e ninguém sabia por quê. Caso
+    medido: Anthropic escolhida e o Hermes sem o extra `anthropic` ("The 'anthropic' package
+    is required for the Anthropic provider: ..."). O app instala esse extra ao salvar a IA e
+    ao subir a ponte (inteligencia.go, garanteComplemento); se mesmo assim faltar, a pessoa lê
+    o que fazer.
+    """
+    m = re.search(r"The '([\w.-]+)' package is required", msg)
+    if m:
+        return (f"Não consegui responder: o Hermes desta máquina não tem o complemento "
+                f"`{m.group(1)}`, que esta IA exige, e a instalação automática falhou.\n\n"
+                "Abra **Sistema › Inteligência** e clique em **Salvar**: eu tento instalar de novo e "
+                "reinicio o agente. Se continuar, rode no terminal:\n"
+                f"`hermes pm install --extra {m.group(1)}`")
+    msg = re.sub(r"^Hermes could not start the assistant for this session\.\s*(Details:\s*)?", "", msg.strip())
+    if len(msg) > 400:
+        msg = msg[:400] + "…"
+    return f"Não consegui responder — o Hermes avisou um erro:\n\n{msg}\n\n(Detalhe no ponte.log.)"
+
 
 def _dados_do_rpc(r) -> dict:
     """Extrai o dicionario util de uma resposta JSON-RPC do gateway.

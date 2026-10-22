@@ -125,6 +125,12 @@ func (a *App) sobePonte() {
 		return
 	}
 	func() {
+		// provedor que exige complemento do Hermes (inteligencia.go, garanteComplemento): quem
+		// trocou para a Anthropic direto no Hermes, sem o painel, também fica coberto. ~1 s
+		// quando já está instalado; falhando, a ponte sobe igual e o chat mostra o erro.
+		if p, ok := provedorPorID(iaAgora().Provedor); ok {
+			_, _ = garanteComplemento(p)
+		}
 		script, py := caminhoPonte(), caminhoPythonHermes()
 		if script == "" || py == "" {
 			marcaPonte(false, "ponte indisponível (script ou python não encontrados)")
