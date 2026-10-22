@@ -40,6 +40,7 @@ const ICONES = (() => {
     enviar: "M5 12h14M13 6l6 6-6 6",
     copiar: "M9 9h11v11H9zM5 15H4V4h11v1",
     ok: "M20 6 9 17l-5-5",
+    inteligencia: "M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2zM19 3v4M17 5h4",
   };
 })();
 

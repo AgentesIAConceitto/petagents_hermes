@@ -148,6 +148,24 @@ Nome do bicho, horário de trabalho (início/fim), **água a cada (h)**, **camin
 cada (min)**, modo foco, dormir (1–4 h), perfil de animação, escolha de boneco na
 galeria, gráfico do bicho e a coleção 💎. Tudo pelo painel — sem editar arquivo.
 
+### Configurar a IA (menu › Sistema › Inteligência)
+
+Provedor (OpenRouter, OpenAI, Anthropic, Google Gemini, DeepSeek, xAI), **chave**,
+**modelo** (lista vinda do provedor, com busca) e **Testar acesso**, que valida a chave
+sem gastar token e mostra o saldo quando o provedor informa. Sem nenhuma chave
+configurada, o painel abre sozinho na primeira vez.
+
+Você escolhe **onde vale**:
+
+- **Igual ao Hermes** — grava no `config.yaml` e no `.env` do Hermes (com cópia
+  `*.bak-petagent`). Vale para o boneco, o Telegram e o terminal.
+- **Só para o boneco** — o resto do Hermes não muda. A escolha fica em
+  `%LOCALAPPDATA%\petagent\inteligencia.json`, com a chave **cifrada pelo Windows**
+  (DPAPI: só o seu usuário abre). O boneco usa um home espelhado do Hermes com esse
+  modelo e essa chave.
+
+A chave nunca aparece inteira na tela, só mascarada (`sk-or-v1-…a3f9`).
+
 ### Atalho no desktop e início automático
 
 O projeto traz os atalhos prontos (Windows):
@@ -330,6 +348,24 @@ wails build -s                      # produces build/bin/petagent.exe
 Pet name, working hours (start/end), **water every (h)**, **walk every (min)**, focus
 mode, sleep (1–4 h), animation profile, character gallery, pet stats graph and the 💎
 collection. Everything from the panel — no file editing.
+
+### Configuring the AI (menu › Sistema › Inteligência)
+
+Provider (OpenRouter, OpenAI, Anthropic, Google Gemini, DeepSeek, xAI), **key**,
+**model** (list fetched from the provider, searchable) and **Test access**, which checks
+the key without spending tokens and shows the balance when the provider reports it. With
+no key configured at all, the panel opens by itself on first run.
+
+You choose **where it applies**:
+
+- **Same as Hermes** — writes Hermes' `config.yaml` and `.env` (with a `*.bak-petagent`
+  copy). Applies to the pet, Telegram and the terminal.
+- **Pet only** — the rest of Hermes is untouched. The choice lives in
+  `%LOCALAPPDATA%\petagent\inteligencia.json`, with the key **encrypted by Windows**
+  (DPAPI: only your user can open it). The pet runs a mirrored Hermes home with that
+  model and key.
+
+The key is never shown in full, only masked (`sk-or-v1-…a3f9`).
 
 ### Desktop shortcut and auto-start
 
