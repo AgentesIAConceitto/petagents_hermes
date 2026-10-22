@@ -70,6 +70,12 @@ def _achar_hermes() -> list[str]:
     for v in venvs:
         if v and os.path.exists(os.path.join(v, "Scripts", "python.exe")):
             return [os.path.join(v, "Scripts", "python.exe"), "-m", "hermes_cli.main"]
+    # Hermes 0.21+ (Windows): não há mais venv fixo. O lançador `bin\hermes.exe` escolhe
+    # o python e o venv da instalação, tira PYTHONPATH/PYTHONHOME e respeita HERMES_HOME
+    # (o home espelhado) — a armadilha 2 acima era do lançador antigo.
+    novo = os.path.join(LOCALAPPDATA, "hermes", "bin", "hermes.exe")
+    if os.path.exists(novo):
+        return [novo]
     # nada encontrado: o log de "não encontrado" aponta onde eu olhei
     return [os.path.join(venvs[-1], "Scripts", "python.exe"), "-m", "hermes_cli.main"]
 
@@ -91,7 +97,8 @@ HERMES_CMD = _achar_hermes()
 # therefore get_config_path()"). Então o backend sobe com um HOME ESPELHADO: tudo do
 # home real entra por junction (pasta) ou hardlink (arquivo) — skills, plugins,
 # memórias, sessões, .env — e o `config.yaml` é um arquivo NOSSO: cópia do dele sem a
-# entrada `mcp_servers.cua-driver`, regerada a cada subida (não envelhece).
+# entrada `mcp_servers.cua-driver`, regerada a cada subida (não envelhece). Os bancos
+# SQLite e as travas da raiz ficam DE FORA (ver _fora_do_espelho).
 HOME_ESPELHO = os.path.join(os.environ.get("LOCALAPPDATA", AQUI), "petagent", "hermes-home")
 MCP_A_REMOVER = ("cua-driver",)
 BLOCO_CLARIFY = '\n\n# PetAgent: o boneco NAO tem tela de escolhas e o `clarify` espera 3600 s por padrao\n# (medido 10/10/2026: o agente travava em clarify.request e a ponte estourava aos 300 s).\n# Com 8 s ele pergunta, ninguem responde e ele SEGUE SOZINHO, respondendo em texto normal.\n# NAO usar 0: no Hermes 0 = espera ILIMITADA.\nclarify:\n  timeout: 8\n'
@@ -140,25 +147,58 @@ def _tira_mcp(texto: str, nomes) -> str:
     return "".join(saida)
 
 
+def _fora_do_espelho(nome: str) -> bool:
+    """Arquivos da raiz que NÃO entram no espelho por hardlink.
+
+    Bancos SQLite (com o -wal/-shm/-journal deles) e travas/pids de processo. O SQLite
+    acha o -wal/-shm pelo CAMINHO do banco: com o mesmo arquivo aberto por dois caminhos
+    (hermes\\state.db no gateway do dono, hermes-home\\state.db no backend do boneco), cada
+    processo pode acabar com o próprio WAL para o MESMO banco — receita de corrupção do
+    histórico do dono. Fora do espelho, o boneco cria os bancos dele; memórias, skills,
+    plugins e personalidade continuam os do dono. (Pastas vão por junction: lá dentro o
+    caminho real é um só e o -wal cai no mesmo lugar.)
+    """
+    n = nome.lower()
+    return n in ("config.yaml", "config.yml") or n.endswith(
+        (".db", ".sqlite", ".sqlite3", "-wal", "-shm", "-journal", ".lock", ".pid"))
+
+
 def _home_do_backend() -> str:
     """Prepara o home espelhado e devolve o caminho (vai em HERMES_HOME)."""
     real = _home_real()
     try:
         os.makedirs(HOME_ESPELHO, exist_ok=True)
-        # 1) espelha o que NÃO é config.yaml (junction para pasta, hardlink para arquivo)
+        # 1) espelha o resto (junction para pasta, hardlink para arquivo)
         for nome in os.listdir(real):
-            if nome in ("config.yaml", "config.yml"):
-                continue
             origem = os.path.join(real, nome)
             destino = os.path.join(HOME_ESPELHO, nome)
-            if os.path.exists(destino):
+            if _fora_do_espelho(nome):
+                # espelho de versão anterior: o banco/trava estava LIGADO ao do dono. Desfaz
+                # o link (some só o nome no espelho; o arquivo do dono fica intacto).
+                if (nome.lower() not in ("config.yaml", "config.yml") and os.path.isfile(destino)
+                        and os.path.samefile(destino, origem)):
+                    try:
+                        os.remove(destino)
+                        log(f"espelho: {nome} desligado do home do dono")
+                    except OSError as e:
+                        log(f"AVISO: {nome} segue ligado ao do dono ({e})")
                 continue
             if os.path.isdir(origem):
-                subprocess.run(["cmd", "/c", "mklink", "/J", destino, origem],
-                               capture_output=True)
-            else:
-                subprocess.run(["cmd", "/c", "mklink", "/H", destino, origem],
-                               capture_output=True)
+                if not os.path.exists(destino):
+                    subprocess.run(["cmd", "/c", "mklink", "/J", destino, origem],
+                                   capture_output=True)
+                continue
+            # arquivo: link REFEITO a cada subida. O Hermes regrava alguns TROCANDO o arquivo
+            # (o .env ao mudar a chave, por exemplo) e o hardlink antigo seguia apontando para
+            # a versão velha.
+            try:
+                if os.path.lexists(destino):
+                    os.remove(destino)
+            except OSError as e:
+                log(f"AVISO: não consegui renovar o link de {nome} ({e})")
+                continue
+            subprocess.run(["cmd", "/c", "mklink", "/H", destino, origem],
+                           capture_output=True)
         # 2) config.yaml: cópia do dele sem os MCPs que poluem a tela
         with open(os.path.join(real, "config.yaml"), "r", encoding="utf-8") as fh:
             bruto = fh.read()
@@ -344,7 +384,7 @@ class Backend:
             return False
         env = _env_do_backend(self.token)
         cmd = HERMES_CMD + ["serve", "--port", str(self.porta), "--host", "127.0.0.1", "--skip-build"]
-        log(f"backend: {HERMES_CMD[0]} -m hermes_cli.main serve (PYTHONPATH herdado fora)")
+        log(f"backend: {' '.join(HERMES_CMD)} serve (PYTHONPATH herdado fora)")
         kwargs: dict = {}
         if os.name == "nt":
             si = subprocess.STARTUPINFO()

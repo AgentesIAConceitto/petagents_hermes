@@ -171,7 +171,27 @@ func (a *App) ConfigurarTela(indice int, borda string) string {
 	wDIP := int(float64(m.W) / es)
 	hDIP := int(float64(m.H) / es)
 
-	if a.ctx != nil {
+	a.mu.Lock()
+	hwnd := a.hwnd
+	a.mu.Unlock()
+	if a.ctx != nil && hwnd != 0 && modoTeste == "cheio" {
+		// caminho normal: tamanho e posição em pixel FÍSICO pelo Win32 (ver encaixaNaArea)
+		if encaixaNaArea(hwnd, m) {
+			runtime.WindowSetBackgroundColour(a.ctx, 0, 0, 0, 0) // senão o WebView2 pinta branco
+		}
+		tamanhoAtual[0], tamanhoAtual[1] = wDIP, hDIP
+		// mexer no tamanho faz o Windows reancorar a janela: reafirma logo depois
+		go func() {
+			time.Sleep(350 * time.Millisecond)
+			if encaixaNaArea(hwnd, m) {
+				runtime.WindowSetBackgroundColour(a.ctx, 0, 0, 0, 0)
+			}
+		}()
+		runtime.EventsEmit(a.ctx, "tela-aplicada", map[string]interface{}{
+			"borda": borda, "w": wDIP, "h": hDIP, "dpi": dpi, "monitor": indice,
+		})
+	} else if a.ctx != nil {
+		// reserva (boot sem hwnd / modos de teste): o caminho antigo, em DIP pelo Wails.
 		// Barra removida por Win32 → sem moldura. Posiciona de modo que o CLIENTE
 		// caia exatamente na área útil: se o cliente não alcança o rodapé da
 		// janela, empurra a janela para baixo o quanto falta.
@@ -210,8 +230,8 @@ func (a *App) ConfigurarTela(indice int, borda string) string {
 		})
 	}
 	gravaTela(TelaConfig{Monitor: indice, Borda: borda})
-	logMsg(fmt.Sprintf("tela: monitor %d (%s) util=%dx%d dpi=%d -> janela %dx%d DIP em %d,%d fisico | borda=%s",
-		indice, m.Nome, m.W, m.H, dpi, wDIP, hDIP, int(m.X)-offCliente[0], int(m.Y), borda))
+	logMsg(fmt.Sprintf("tela: monitor %d (%s) util=%dx%d em %d,%d dpi=%d (%dx%d DIP) | borda=%s",
+		indice, m.Nome, m.W, m.H, m.X, m.Y, dpi, wDIP, hDIP, borda))
 	// confere onde o cliente realmente caiu (o Windows pode cortar a altura)
 	go func() {
 		time.Sleep(1200 * time.Millisecond)
@@ -223,12 +243,51 @@ func (a *App) ConfigurarTela(indice int, borda string) string {
 		}
 		cli := point{0, 0}
 		procClientToScreen.Call(uintptr(hw), uintptr(unsafe.Pointer(&cli)))
-		var wr rect
+		var wr, cr rect
 		procGetWindowRect.Call(uintptr(hw), uintptr(unsafe.Pointer(&wr)))
-		logMsg(fmt.Sprintf("medicao real: janela=(%d,%d)-(%d,%d) cliente_comeca=(%d,%d)",
-			wr.L, wr.T, wr.R, wr.B, cli.X, cli.Y))
+		procGetClientRect.Call(uintptr(hw), uintptr(unsafe.Pointer(&cr)))
+		cobre := cli.X == m.X && cli.Y == m.Y && cr.R == m.W && cr.B == m.H
+		logMsg(fmt.Sprintf("medicao real: janela=(%d,%d)-(%d,%d) cliente=(%d,%d) %dx%d | area util %dx%d em %d,%d | cobre=%v",
+			wr.L, wr.T, wr.R, wr.B, cli.X, cli.Y, cr.R, cr.B, m.W, m.H, m.X, m.Y, cobre))
 	}()
 	return "ok"
+}
+
+// encaixaNaArea — tamanho E posição exatos, em pixel FÍSICO, para o CLIENTE da
+// janela cobrir a área útil `m`. Devolve se precisou mexer na janela.
+//
+// ⚠️ MEDIDO 13/10/2026 (log): na Tela 2 (2560x1032, 96 dpi) a janela ficava com 882 px
+// de altura — o pé do boneco 150 px acima da barra de tarefas. O tamanho ia em DIP
+// pelo Wails (WindowSetSize e o tamanho do startup), que converte pelo DPI do monitor
+// ONDE A JANELA ESTÁ, a Tela 1 (120 dpi): 1032 × 1,25 = 1290 px físicos. O Windows corta
+// no limite de arrasto (altura do desktop virtual + bordas = 1102) e, ao chegar na
+// Tela 2, o WM_DPICHANGED escala por 96/120: 1102 × 0,8 = 882.
+// Aqui não há conversão: a primeira passada já põe a janela inteira sobre o monitor
+// (o Windows troca o DPI dela e o Wails aplica o retângulo sugerido, escalado); a
+// segunda, já no DPI certo, crava o tamanho; a terceira só confere.
+func encaixaNaArea(hwnd syscall.Handle, m Monitor) bool {
+	mexeu := false
+	for i := 0; i < 3; i++ {
+		var wr, cr rect
+		cli := point{0, 0}
+		procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&wr)))
+		procGetClientRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&cr)))
+		procClientToScreen.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&cli)))
+		// moldura que sobrar em volta do cliente (com a barra removida, zero)
+		esq, topo := cli.X-wr.L, cli.Y-wr.T
+		dir, pe := wr.R-(cli.X+cr.R), wr.B-(cli.Y+cr.B)
+		x, y := m.X-esq, m.Y-topo
+		w, h := m.W+esq+dir, m.H+topo+pe
+		if wr.L == x && wr.T == y && wr.R-wr.L == w && wr.B-wr.T == h {
+			break
+		}
+		procSetWindowPos.Call(uintptr(hwnd), 0,
+			uintptr(uint32(x)), uintptr(uint32(y)), uintptr(uint32(w)), uintptr(uint32(h)),
+			swpNozorder|swpNoactivate)
+		mexeu = true
+		time.Sleep(120 * time.Millisecond) // deixa o WM_DPICHANGED ser atendido antes de medir de novo
+	}
+	return mexeu
 }
 
 // AplicarTelaSalva — chamado quando a janela já existe (senão não há o que posicionar).

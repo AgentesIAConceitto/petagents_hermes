@@ -50,6 +50,11 @@ func caminhoHermes() string {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
+		// Hermes 0.21+ (Windows): sem venv fixo, o lançador fica em hermes\bin
+		p = filepath.Join(base, "hermes", "bin", "hermes.exe")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
 	}
 	if p, err := exec.LookPath("hermes"); err == nil {
 		return p

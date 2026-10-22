@@ -234,11 +234,22 @@ func (a *App) PetGaleria(termo string, deslocamento int) string {
 	return string(b)
 }
 
+// respostaErro — {"ok":false,"erro":msg} montado pelo encoding/json. Colar o erro na
+// mão quebrava o JSON quando ele trazia caminho do Windows ("C:\Users" → "\U" é escape
+// inválido) ou aspas, e o painel mostrava "sem rede?" no lugar do motivo.
+func respostaErro(msg string) string {
+	b, _ := json.Marshal(struct {
+		OK   bool   `json:"ok"`
+		Erro string `json:"erro"`
+	}{false, msg})
+	return string(b)
+}
+
 // PetDexBaixar — baixa um boneco da galeria para a pasta de pets do Hermes.
 func (a *App) PetDexBaixar(slug string) string {
 	slug = strings.TrimSpace(slug)
 	if slug == "" || strings.ContainsAny(slug, "/\\.") {
-		return `{"ok":false,"erro":"slug inválido"}`
+		return respostaErro("slug inválido")
 	}
 	if dir := filepath.Join(pastaPetsHermes(), slug); dir != "" {
 		if _, err := os.Stat(filepath.Join(dir, "spritesheet.webp")); err == nil {
@@ -247,7 +258,7 @@ func (a *App) PetDexBaixar(slug string) string {
 	}
 	pets, err := catalogoPetdex()
 	if err != nil {
-		return `{"ok":false,"erro":"` + err.Error() + `"}`
+		return respostaErro(err.Error())
 	}
 	var alvo map[string]any
 	for _, m := range pets {
@@ -257,11 +268,11 @@ func (a *App) PetDexBaixar(slug string) string {
 		}
 	}
 	if alvo == nil {
-		return `{"ok":false,"erro":"boneco não encontrado na galeria"}`
+		return respostaErro("boneco não encontrado na galeria")
 	}
 	destino := filepath.Join(pastaPetsHermes(), slug)
 	if err := os.MkdirAll(destino, 0o755); err != nil {
-		return `{"ok":false,"erro":"` + err.Error() + `"}`
+		return respostaErro(err.Error())
 	}
 	cli := &http.Client{Timeout: 180 * time.Second}
 	baixa := func(url, nomeDestino string) error {
@@ -290,10 +301,10 @@ func (a *App) PetDexBaixar(slug string) string {
 		return err
 	}
 	if err := baixa(campo(alvo, "petJsonUrl"), "pet.json"); err != nil {
-		return `{"ok":false,"erro":"pet.json: ` + err.Error() + `"}`
+		return respostaErro("pet.json: " + err.Error())
 	}
 	if err := baixa(campo(alvo, "spritesheetUrl"), "spritesheet.webp"); err != nil {
-		return `{"ok":false,"erro":"folha: ` + err.Error() + `"}`
+		return respostaErro("folha: " + err.Error())
 	}
 	logMsg("galeria: baixado boneco " + slug)
 	return `{"ok":true}`
@@ -303,10 +314,10 @@ func (a *App) PetDexBaixar(slug string) string {
 func (a *App) PetDexEscolher(slug string) string {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
-		return `{"ok":false,"erro":"slug vazio"}`
+		return respostaErro("slug vazio")
 	}
 	if err := os.WriteFile(filepath.Join(pastaPetAgente(), "petdex.txt"), []byte(slug), 0o644); err != nil {
-		return `{"ok":false,"erro":"` + err.Error() + `"}`
+		return respostaErro(err.Error())
 	}
 	logMsg("galeria: boneco escolhido = " + slug)
 	return `{"ok":true}`
