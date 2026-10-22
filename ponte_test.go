@@ -11,7 +11,7 @@ import (
 // TestPonteNaoTrocaRespostas — a resposta ATRASADA de uma pergunta não pode virar a
 // resposta da pergunta seguinte.
 //
-// Cenário real: a pergunta 1 estoura o prazo do app (que cai na reserva lenta), mas a
+// Cenário real: a pergunta 1 estoura o prazo do app (que desiste e avisa), mas a
 // ponte continua trabalhando nela e manda progresso e, depois, a resposta. Quando o
 // dono faz a pergunta 2, a primeira linha "de resposta" que chega é a da pergunta 1.
 //
@@ -55,12 +55,18 @@ func TestPonteNaoTrocaRespostas(t *testing.T) {
 
 	a := NewApp()
 
-	// pergunta 1: a ponte demora mais que o prazo -> o app desiste
-	feito1 := make(chan bool)
-	go func() { _, ok := a.perguntaPonte("pergunta 1"); feito1 <- ok }()
+	// pergunta 1: a ponte demora mais que o prazo -> o app desiste, mas AVISA em vez de
+	// cair na reserva: a ponte segue trabalhando nela e a reserva repetiria a pergunta,
+	// gastando créditos em dobro
+	type resultado struct {
+		resp string
+		ok   bool
+	}
+	feito1 := make(chan resultado)
+	go func() { r, ok := a.perguntaPonte("pergunta 1"); feito1 <- resultado{r, ok} }()
 	id1 := leID()
-	if ok := <-feito1; ok {
-		t.Fatal("a pergunta 1 deveria ter estourado o prazo")
+	if r := <-feito1; !r.ok || r.resp == "" {
+		t.Fatalf("a pergunta 1 deveria estourar o prazo com aviso e sem reserva (ok=true), veio %+v", r)
 	}
 	// ...mas a ponte segue trabalhando nela e manda progresso
 	escreve(map[string]any{"ok": true, "progresso": "passo", "texto": "terminal", "id": id1})

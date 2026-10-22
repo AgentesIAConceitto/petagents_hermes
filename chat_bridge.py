@@ -102,6 +102,13 @@ HERMES_CMD = _achar_hermes()
 HOME_ESPELHO = os.path.join(os.environ.get("LOCALAPPDATA", AQUI), "petagent", "hermes-home")
 MCP_A_REMOVER = ("cua-driver",)
 BLOCO_CLARIFY = '\n\n# PetAgent: o boneco NAO tem tela de escolhas e o `clarify` espera 3600 s por padrao\n# (medido 10/10/2026: o agente travava em clarify.request e a ponte estourava aos 300 s).\n# Com 8 s ele pergunta, ninguem responde e ele SEGUE SOZINHO, respondendo em texto normal.\n# NAO usar 0: no Hermes 0 = espera ILIMITADA.\nclarify:\n  timeout: 8\n'
+# TETO DE ITERAÇÕES DA IA POR MENSAGEM (pedido da dona, 13/10/2026): o laço que gasta
+# crédito é o do agente — chama o modelo, roda ferramenta, chama de novo. O config do dono
+# deixa 150 voltas por mensagem (e 250 por subagente): um agente em loop queimava os
+# créditos de uma vez. Ao chegar no teto o Hermes pede um resumo ao modelo e responde em
+# texto normal. ⚠️ NÃO usar 0, -1 ou "none": no Hermes isso é ILIMITADO. O app Go repete
+# este número na reserva lenta (`maxIteracoesIA` em chat.go) — os dois andam juntos.
+MAX_ITERACOES_IA = 20
 
 
 def _home_real() -> str:
@@ -206,6 +213,12 @@ def _home_do_backend() -> str:
         limpo, trocou = _troca_reasoning(limpo)
         log("config do backend: reasoning_effort=%s (era medium)"
             % ("low" if trocou else "ja estava fora do padrao"))
+        # TETO DE ITERAÇÕES (ver MAX_ITERACOES_IA). No `hermes serve` quem manda é a variável
+        # HERMES_TUI_MAX_TURNS (_env_do_backend); aqui o config espelhado passa a dizer o
+        # mesmo e os SUBAGENTES (delegation), que não têm variável, também ganham o teto.
+        limpo, mudou = _limita_iteracoes(limpo)
+        log("config do backend: max_turns e delegation.max_iterations <= %d (%s)"
+            % (MAX_ITERACOES_IA, "ajustado" if mudou else "ja estava dentro"))
         # O BONECO NÃO TEM TELA DE ESCOLHAS — e o `clarify` espera 1 HORA por padrão.
         #
         # Medido em 10/10/2026 (dono: "pergunta simples levou 205 s" e depois 300 s): o agente
@@ -247,9 +260,14 @@ def _env_do_backend(token: str) -> dict:
     HERMES_HOME vai para o HOME ESPELHADO: herda skills/plugins/memórias/sessões/.env
     do dono por junction+hardlink, mas o config.yaml é nosso — sem o MCP `cua-driver`,
     que abria uma janela de 3840x1440 em cima de tudo (ver _home_do_backend).
+
+    HERMES_TUI_MAX_TURNS é o teto de iterações da IA por mensagem: no `hermes serve` a
+    variável VENCE o `agent.max_turns` do config (tui_gateway/agent_callbacks.py) — vale
+    mesmo se o espelho falhar e o backend subir com o config do dono.
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    env["HERMES_TUI_MAX_TURNS"] = str(MAX_ITERACOES_IA)
     espelho = _home_do_backend()
     if espelho:
         env["HERMES_HOME"] = espelho
@@ -859,6 +877,53 @@ def _troca_reasoning(texto: str) -> tuple:
                 return "\n".join(linhas), True
             return "\n".join(linhas), False     # já está em outro valor: não mexo
     return texto, False
+
+
+def _limita_iteracoes(texto: str) -> tuple:
+    """Teto de MAX_ITERACOES_IA em `agent.max_turns` e `delegation.max_iterations` no
+    config do BONECO (13/10/2026).
+
+    Mesmo molde de _troca_reasoning: textual e só DENTRO do bloco certo — `goals:` também
+    tem `max_turns` e não é para mexer. Valor de 1 a MAX_ITERACOES_IA fica (menos é mais
+    barato); qualquer outro vira o teto — inclusive 0, -1 e "none", que no Hermes são
+    ILIMITADO. Chave ausente entra no topo do bloco; bloco ausente vai no fim.
+    Devolve (texto, mudou).
+    """
+    linhas = texto.split("\n")
+    mudou = False
+    for bloco, chave in (("agent", "max_turns"), ("delegation", "max_iterations")):
+        inicio = next((i for i, l in enumerate(linhas) if l.startswith(bloco + ":")), None)
+        if inicio is None:
+            while linhas and not linhas[-1].strip():
+                linhas.pop()
+            linhas += ["", f"{bloco}:", f"  {chave}: {MAX_ITERACOES_IA}", ""]
+            mudou = True
+            continue
+        recuo, achou = None, False
+        for i in range(inicio + 1, len(linhas)):
+            l = linhas[i]
+            if l and not l[0].isspace() and not l.startswith("#"):
+                break                               # saiu do bloco
+            if not l.strip() or l.strip().startswith("#"):
+                continue
+            if recuo is None:
+                recuo = l[:len(l) - len(l.lstrip())]
+            if l.strip().startswith(chave + ":"):
+                achou = True
+                bruto = l.split(":", 1)[1].split("#")[0].strip().strip("\"'")
+                try:
+                    dentro = 1 <= int(bruto) <= MAX_ITERACOES_IA
+                except ValueError:
+                    dentro = False
+                if not dentro:
+                    linhas[i] = (f"{l[:len(l) - len(l.lstrip())]}{chave}: {MAX_ITERACOES_IA}"
+                                 f"  # PetAgent: teto de creditos (era {bruto or 'vazio'})")
+                    mudou = True
+                break
+        if not achou:
+            linhas.insert(inicio + 1, f"{recuo or '  '}{chave}: {MAX_ITERACOES_IA}")
+            mudou = True
+    return "\n".join(linhas), mudou
 
 
 def _paresDoCatalogo(r) -> list:

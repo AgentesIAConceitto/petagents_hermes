@@ -197,6 +197,11 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 }
 
 // perguntaPonte — manda uma pergunta e espera a resposta da ponte.
+//
+// ok=true: a ponte cuidou da pergunta — o texto é a resposta OU um aviso para a tela.
+// ok=false: a ponte está fora do ar e vale a reserva lenta. Se a ponte está de pé e só
+// demorou, NÃO é caso de reserva: ela segue trabalhando na pergunta e a reserva repetiria
+// a mesma pergunta, gastando créditos em dobro (13/10/2026).
 func (a *App) perguntaPonte(texto string) (string, bool) {
 	if pronta, erro := estadoPonte(); !pronta {
 		if erro != "" {
@@ -295,10 +300,19 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 			//
 			// Com 330 s a ponte tem a janela dela inteira: ou responde quente, ou reconecta
 			// sozinha — e a reserva lenta volta a ser ÚLTIMO recurso em vez de caminho comum.
-			logMsg("ponte: tempo esgotado (330s) — reserva lenta")
-			return "", false
+			//
+			// SEM RESERVA AQUI (13/10/2026, para não queimar créditos): estourar o prazo não
+			// para a ponte — o agente segue trabalhando na pergunta (até o teto de iterações).
+			// Cair na reserva rodava a MESMA pergunta num segundo agente, as duas gastando ao
+			// mesmo tempo. Agora o boneco avisa e a pessoa decide se pergunta de novo.
+			logMsg("ponte: tempo esgotado (330s) — sem reserva (a ponte segue na pergunta)")
+			return msgPonteDemorou, true
 		}
 	}
-	logMsg("ponte: frames demais sem resposta — reserva lenta")
-	return "", false
+	// ponte de pé, só confusa: mesma regra do tempo esgotado — nada de repetir a pergunta
+	logMsg("ponte: frames demais sem resposta — sem reserva")
+	return msgPonteDemorou, true
 }
+
+const msgPonteDemorou = "A resposta está demorando demais — parei de esperar para não gastar " +
+	"créditos em dobro (o Hermes ainda pode estar terminando). Tente de novo daqui a pouco."

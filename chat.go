@@ -2,11 +2,15 @@ package main
 
 // Chat do boneco com o HERMES de verdade.
 //
-// Como funciona (verificado 02/10/2026):
+// Caminho normal: a ponte quente (ponte.go + chat_bridge.py). A RESERVA, só com a ponte
+// fora do ar, roda (13/10/2026):
 //
-//	hermes -z "texto" --continue petagent_chat
+//	hermes chat -Q --query=texto --max-turns 20 --continue petagent_chat --create-if-missing
 //
-// * `-z` é o modo one-shot: roda o agente completo e imprime a resposta;
+// * `chat -Q` é o modo de uma pergunta só: roda o agente completo e imprime SÓ a
+//   resposta no stdout (o session_id vai para o stderr);
+// * `--max-turns` é o teto de iterações da IA. Antes era `hermes -z`, que monta o agente
+//   SEM limite (sys.maxsize): um agente em loop só parava no timeout de 5 min, gastando;
 // * `--continue <sessão>` mantém a conversa — o chat do boneco tem continuidade,
 //   então ele lembra do que foi dito antes;
 // * custa ~30 s e tokens da conta compartilhada (por isso "saldo" e "status"
@@ -23,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -31,6 +36,11 @@ import (
 const (
 	sessaoChat    = "petagent_chat" // sessão do Hermes usada pelo chat do boneco
 	tempoResposta = 300 * time.Second
+	// maxIteracoesIA — teto de voltas do agente (modelo → ferramenta → modelo) por
+	// mensagem, para um loop não queimar os créditos de uma vez. O mesmo número está em
+	// MAX_ITERACOES_IA no chat_bridge.py (caminho quente) — os dois andam juntos.
+	// ⚠️ NÃO usar 0: no Hermes 0 é ILIMITADO.
+	maxIteracoesIA = 20
 )
 
 // caminhoHermes — onde está o executável do Hermes nesta máquina.
@@ -56,7 +66,7 @@ func caminhoHermes() string {
 //
 // Caminho normal: a PONTE QUENTE (hermes acp via chat_bridge.py) — o agente fica
 // vivo e responde no tempo do modelo (~3-8 s; medido 02/10/2026).
-// Reserva: `hermes -z`, que sobe um agente novo do zero a cada mensagem (~30 s).
+// Reserva: `hermes chat -Q`, que sobe um agente novo do zero a cada mensagem (~30 s).
 func (a *App) chamarHermes(texto string) string {
 	if resp, ok := a.perguntaPonte(texto); ok {
 		return resp
@@ -64,7 +74,16 @@ func (a *App) chamarHermes(texto string) string {
 	return a.chamarHermesFrio(texto)
 }
 
-// chamarHermesFrio — reserva (lenta). Só usada se a ponte não estiver de pé.
+// argsReserva — argumentos do `hermes` na reserva lenta, com o teto de iterações.
+// `--query=` vai colado: um texto que começa com "-" viraria flag no argparse.
+func argsReserva(texto string) []string {
+	return []string{"chat", "-Q", "--query=" + texto,
+		"--max-turns", strconv.Itoa(maxIteracoesIA),
+		"--continue", sessaoChat, "--create-if-missing"}
+}
+
+// chamarHermesFrio — reserva (lenta). Só usada com a ponte fora do ar: se a ponte só
+// demorou, ela segue trabalhando e a reserva repetiria a pergunta (ver perguntaPonte).
 func (a *App) chamarHermesFrio(texto string) string {
 	exe := caminhoHermes()
 	if exe == "" {
@@ -72,7 +91,7 @@ func (a *App) chamarHermesFrio(texto string) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, "-z", texto, "--continue", sessaoChat)
+	cmd := exec.CommandContext(ctx, exe, argsReserva(texto)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW (nada de console piscando)
@@ -83,7 +102,7 @@ func (a *App) chamarHermesFrio(texto string) string {
 	cmd.Stderr = &erros
 	saida, err := cmd.Output()
 	resp := strings.TrimSpace(string(saida))
-	logMsg(fmt.Sprintf("chat: reserva (hermes -z) respondeu %d chars (err=%v)", len(resp), err != nil))
+	logMsg(fmt.Sprintf("chat: reserva (hermes chat -Q) respondeu %d chars (err=%v)", len(resp), err != nil))
 	if err != nil && resp == "" {
 		if ctx.Err() == context.DeadlineExceeded {
 			return "O Hermes demorou demais para responder (mais de 5 min) — tente de novo."
