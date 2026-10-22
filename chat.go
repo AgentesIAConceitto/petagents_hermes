@@ -136,7 +136,9 @@ func (a *App) InfoChat() string {
 	a.mu.Lock()
 	saldo := a.balance
 	a.mu.Unlock()
+	ponteEstadoMu.Lock()
 	pronta, erro := pontePronta, ponteErro
+	ponteEstadoMu.Unlock()
 	ef := iaAgora()
 	nome := ef.Provedor
 	if p, ok := provedorPorID(ef.Provedor); ok {
