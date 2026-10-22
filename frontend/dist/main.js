@@ -1292,8 +1292,10 @@ document.addEventListener("keydown", (e) => {
 document.getElementById("enviar").onclick = enviar;
 document.getElementById("email-fechar").onclick = fecharEmail;
 document.getElementById("email-verificar").onclick = async () => {
+  let r = "ok";
+  try { if (G) r = await G.EmailVerificarAgora(); } catch (e) {}
+  if (r !== "ok") { toast("📧", "E-mail não lido", r, 7000, true); return; } // ex.: não configurado
   toast("📧", "Lendo o Outlook…", "aguarde ~40 s (o JSON é regravado)", 4000, true);
-  try { G && await G.EmailVerificarAgora(); } catch (e) {}
   setTimeout(() => renderEmail(), 45000);
 };
 document.getElementById("balao-min").onclick = fecharBalao;
