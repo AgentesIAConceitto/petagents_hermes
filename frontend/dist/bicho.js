@@ -150,48 +150,26 @@
   }
 
   // ── movimento ───────────────────────────────────────────────────────────────
-  let passo = null;
-  function posicaoAtual() {
-    const m = /(-?[\d.]+)px/.exec(pet.style.left || "");
-    return m ? parseFloat(m[1]) : pet.offsetLeft;
-  }
-  function caminhar(destino, ms) {
-    const de = posicaoAtual();
-    const fim = Math.max(4, Math.min(innerWidth - pet.offsetWidth - 4, destino));
-    if (Math.abs(fim - de) < 8) return;
-    // ⚠️ 04/10/2026: a folha do Petdex NÃO troca só com a classe — quem troca a
-    // linha do sprite é window.petAndar (main.js), e o SENTIDO importa: a linha 2
-    // é o ciclo espelhado (andando para a esquerda).
-    const dir = fim >= de ? 1 : -1;
-    if (window.petAndar) window.petAndar(true, dir); else pet.classList.add("andando");
-    const t0 = performance.now();
-    clearInterval(passo);
-    passo = setInterval(() => {
-      const k = Math.min(1, (performance.now() - t0) / ms);
-      pet.style.left = (de + (fim - de) * k) + "px";
-      if (k >= 1) {
-        clearInterval(passo); passo = null;
-        if (window.petAndar) window.petAndar(false); else pet.classList.remove("andando");
-      }
-    }, 30);
-  }
+  // ⚠️ 13/10/2026: o passeio andava aqui mexendo só no `left` — numa borda lateral o
+  // boneco saía andando para o meio da tela, descolado da borda. Quem sabe em que
+  // borda ele está é o main.js: window.petCaminhar anda AO LONGO dela (e cuida da
+  // linha do sprite e do sentido, que já eram de lá — window.petAndar).
+  // 📌 parado (padrão desde 13/10/2026, pedido do dono): fica onde foi solto — sem
+  // passeio nem volta sozinho. petParado() mora no main.js (o `cfg` de lá).
+  const parado = () => typeof petParado === "function" && petParado();
   function passeio() {
     // durante a volta na tela o passeio fica de fora: ele mexeria no left/top do
     // boneco e a volta deixaria de terminar no lugar de origem
-    if (estaDormindo() || !pet || pet.classList.contains("oculto") || pet.classList.contains("volta")) return;
-    const alvo = posicaoAtual() + entre(-320, 320);
-    caminhar(alvo, entre(3000, 6500));
+    if (parado() || estaDormindo() || !pet || pet.classList.contains("oculto") || pet.classList.contains("volta")) return;
+    if (window.petCaminhar) window.petCaminhar(entre(-320, 320), entre(3000, 6500));
   }
   /* corta um passeio em andamento: a volta na tela precisa da pista livre, senão o
      passeio continua mexendo no left/top por baixo dela */
   function pararAndar() {
-    try {
-      clearInterval(passo); passo = null;
-      if (window.petAndar) window.petAndar(false); else pet.classList.remove("andando");
-    } catch (e) { }
+    try { if (window.petPararCaminhada) window.petPararCaminhada(); } catch (e) { }
   }
   function voltaCompleta() {
-    if (estaDormindo() || !pet || pet.classList.contains("volta")) return;
+    if (parado() || estaDormindo() || !pet || pet.classList.contains("volta")) return;
     // ⚠️ a volta vem com recado ("você já fez o seu cárdio?") = pedido. Fora do
     // expediente o bicho anda pela tela, mas não cobra exercício de ninguém.
     if (!emExpediente()) return;

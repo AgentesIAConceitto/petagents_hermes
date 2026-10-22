@@ -36,7 +36,7 @@ function reportarHit() {
     if (!el || el.classList.contains("oculto") || el.classList.contains("escondido")) continue;
     // o boneco fica SEMPRE registrado: com a interação desligada o clique esquerdo
     // é ignorado pelos handlers, mas o botão direito precisa continuar vivo
-    const r = el.getBoundingClientRect();
+    const r = el === pet ? retPet() : el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;
     rs.push({
       L: Math.round(r.left * d), T: Math.round(r.top * d),
@@ -54,7 +54,10 @@ const PERFIS = {
   agitado:    { respira: 1500, salto: 1.0,  vagueia: 7000,  andar: 1.0, rotulo: "⚡ agitado" },
   brincalhao: { respira: 2300, salto: 0.8,  vagueia: 12000, andar: 0.8, rotulo: "🤹 brincalhão" },
 };
-const cfg = { borda: "baixo", offset: 120, perfil: "calmo", interagir: true, monitor: 1, dexOn: true };
+// canto: "" | "ini" | "fim" — encostado também no começo/fim da borda (um canto da tela)
+// parado: não anda sozinho (pedido do dono, 13/10/2026) · tamanho: escala do boneco
+const cfg = { borda: "baixo", offset: 120, canto: "", perfil: "calmo", interagir: true, monitor: 1, dexOn: true,
+              parado: true, tamanho: 1 };
 const ORDEM_PERFIL = ["calmo", "agitado", "brincalhao"];
 
 function aplicaPerfil() {
@@ -129,37 +132,150 @@ function voltaNaTela(ms, aoTerminar) {
   requestAnimationFrame(passo);
 }
 
-// posição a partir de {borda, offset}
+/* ───────── colado na borda, parado e no tamanho escolhido ─────────
+   Pedido do dono (13/10/2026): "quero que ele fique parado no canto que eu soltar,
+   o mais grudado possível na tela, e poder reduzir o tamanho dele".
+   O quadro do sprite tem transparente em volta do desenho (no yi-dog, 31 px embaixo
+   na pose parada) e cada linha da folha centraliza o desenho de um jeito. Por isso:
+   a CAIXA (.pet) encosta na borda com margem zero, e o DESENHO (folha ou svg) é
+   empurrado o que sobra de transparente na linha atual, pelo `translate` — que soma
+   com as animações de `transform` (brincar, gingado) em vez de brigar com elas. */
+const TAM_MIN = 0.3, TAM_MAX = 1.5, TAMANHOS = [1, 0.85, 0.7, 0.55, 0.4];
+const SVG_FOLGA = { l: 18, t: 0, r: 18, b: 8 }; // sobra do desenho vetor no viewBox 120x120
+const escala = () => Math.max(TAM_MIN, Math.min(TAM_MAX, Number(cfg.tamanho) || 1));
+const comDex = () => !!(dex && cfg.dexOn);
+const petSvg = pet.querySelector("svg");
+const desenho = () => comDex() ? dexEl : petSvg;
+
+// transparente em volta do desenho ATUAL, em px CSS (a folha mede por linha)
+function folga() {
+  const r = pet.getBoundingClientRect();
+  if (comDex()) {
+    const c = dexCaixas[dexLinha] || dexCaixas[0];
+    if (!c) return { l: 0, t: 0, r: 0, b: 0 };
+    const kx = r.width / dex.fw, ky = r.height / dex.fh;
+    return { l: c.l * kx, t: c.t * ky, r: c.r * kx, b: c.b * ky };
+  }
+  const kx = r.width / 120, ky = r.height / 120;
+  return { l: SVG_FOLGA.l * kx, t: SVG_FOLGA.t * ky, r: SVG_FOLGA.r * kx, b: SVG_FOLGA.b * ky };
+}
+
+// lados da tela em que ele está encostado: a borda e, se houver, o canto
+function encostado() {
+  const horiz = cfg.borda === "cima" || cfg.borda === "baixo";
+  const e = { l: cfg.borda === "esquerda", t: cfg.borda === "cima", r: cfg.borda === "direita", b: cfg.borda === "baixo" };
+  if (cfg.canto === "ini") e[horiz ? "l" : "t"] = true;
+  if (cfg.canto === "fim") e[horiz ? "r" : "b"] = true;
+  return e;
+}
+
+// leva o desenho até a beirada da tela. `solto` (durante o arrasto) = sem empurrão,
+// o desenho acompanha o cursor
+function ajustaFolga(solto) {
+  const el = desenho();
+  for (const o of [dexEl, petSvg]) if (o && o !== el) o.style.translate = "";
+  if (!el) return;
+  let dx = 0, dy = 0;
+  if (!solto && !(arrastando && arrastouAgora)) {
+    const f = folga(), e = encostado();
+    dx = (e.r ? f.r : 0) - (e.l ? f.l : 0);
+    dy = (e.b ? f.b : 0) - (e.t ? f.t : 0);
+  }
+  const dpr = DPR(), snap = (v) => Math.round(v * dpr) / dpr;
+  el.style.translate = (dx || dy) ? snap(dx) + "px " + snap(dy) + "px" : "";
+}
+
+// a caixa de clique do boneco = .pet + o desenho (que pode passar da caixa)
+function retPet() {
+  const a = pet.getBoundingClientRect(), d = desenho();
+  const b = d ? d.getBoundingClientRect() : null;
+  if (!b || b.width < 2) return a;
+  const left = Math.min(a.left, b.left), top = Math.min(a.top, b.top);
+  const right = Math.max(a.right, b.right), bottom = Math.max(a.bottom, b.bottom);
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function aplicaTamanho() {
+  if (comDex()) { dexPinta(); return; }
+  const dpr = DPR(), lado = Math.round(120 * escala() * dpr) / dpr;
+  pet.style.width = lado + "px"; pet.style.height = lado + "px";
+}
+
+// muda o tamanho mantendo o MEIO no mesmo ponto da borda (ou o canto, se estiver num)
+function mudaTamanho(novo) {
+  const s = Math.round(Math.max(TAM_MIN, Math.min(TAM_MAX, novo)) * 100) / 100;
+  const horiz = cfg.borda === "cima" || cfg.borda === "baixo";
+  const lado = () => { const r = pet.getBoundingClientRect(); return horiz ? r.width : r.height; };
+  const antes = lado();
+  cfg.tamanho = s;
+  aplicaTamanho();
+  if (!cfg.canto) cfg.offset = Math.round(cfg.offset + (antes - lado()) / 2);
+  aplicaPosicao(); salvarPet();
+  toast("📏", "Tamanho " + Math.round(s * 100) + "%", "gire a rodinha do mouse em cima de mim para ajustar", 1800, true);
+}
+// tile do menu: desce um degrau (100 → 85 → 70 → 55 → 40 → volta a 100)
+function cicloTamanho() {
+  const prox = TAMANHOS.find((t) => t < escala() - 0.01);
+  mudaTamanho(prox !== undefined ? prox : 1);
+}
+
+function aplicaParado() { document.body.classList.toggle("parado", !!cfg.parado); }
+/* petParado() é global de propósito (como interagindo()): o bicho.js consulta antes
+   de passear sozinho — lá existe um `cfg` próprio, que sombrearia o daqui. */
+function petParado() { return !!cfg.parado; }
+function alternaParado() {
+  cfg.parado = !cfg.parado;
+  aplicaParado();
+  if (cfg.parado) {
+    try { if (window.bicho && window.bicho.pararAndar) window.bicho.pararAndar(); } catch (e) { }
+    pet.style.transition = ""; aplicaPosicao();
+  }
+  salvarPet();
+  toast(cfg.parado ? "📌" : "🚶", cfg.parado ? "Fico parado aqui" : "Vou passear de vez em quando",
+    cfg.parado ? "só saio do lugar se você me arrastar (ou mandar brincar)" : "ando pela borda e volto a me mexer", 2600, true);
+}
+
+// posição a partir de {borda, offset, canto}: a caixa encosta na borda com margem
+// zero e ajustaFolga() leva o desenho até a beirada
 function aplicaPosicao() {
-  const W = innerWidth, H = innerHeight, m = 6;
-  const pw = pet.offsetWidth || 120, ph = pet.offsetHeight || 120;
-  let left = cfg.offset, top = H - ph - m; // padrão: borda de baixo (acima da barra)
-  if (cfg.borda === "cima")          { left = cfg.offset; top = m; }
-  else if (cfg.borda === "esquerda") { left = m; top = cfg.offset; }
-  else if (cfg.borda === "direita")  { left = W - pw - m; top = cfg.offset; }
+  const W = innerWidth, H = innerHeight;
+  const r = pet.getBoundingClientRect(), pw = r.width || 120, ph = r.height || 120;
+  const horiz = cfg.borda === "cima" || cfg.borda === "baixo";
+  const max = Math.max(0, horiz ? W - pw : H - ph);
+  let ao = Math.max(0, Math.min(max, Number(cfg.offset) || 0)); // posição AO LONGO da borda
+  if (cfg.canto === "ini") ao = 0;
+  else if (cfg.canto === "fim") ao = max;
+  let left = ao, top = Math.max(0, H - ph); // padrão: borda de baixo (acima da barra)
+  if (cfg.borda === "cima")          { top = 0; }
+  else if (cfg.borda === "esquerda") { left = 0; top = ao; }
+  else if (cfg.borda === "direita")  { left = Math.max(0, W - pw); top = ao; }
   // encaixa em pixel físico inteiro: posição sub-pixel faz o navegador reamostrar
   // o sprite e volta a serrilhar (mesmo com o desenho 1:1)
   const dpr = window.devicePixelRatio || 1;
   const snap = (v) => Math.round(v * dpr) / dpr;
-  pet.style.left = snap(Math.max(0, Math.min(W - pw, left))) + "px";
-  pet.style.top  = snap(Math.max(0, Math.min(H - ph, top))) + "px";
+  pet.style.left = snap(left) + "px";
+  pet.style.top  = snap(top) + "px";
+  ajustaFolga();
   reportarHit();
 }
 
-// ao soltar o arrasto: encaixa na borda mais próxima (regra do dono)
+// ao soltar o arrasto: encaixa na borda mais próxima (regra do dono) e, se soltou
+// perto de um canto, no canto — e fica ali, colado
+const CANTO_IMA = 48; // px CSS
 function encaixa() {
   const W = innerWidth, H = innerHeight;
-  const pw = pet.offsetWidth, ph = pet.offsetHeight;
-  const cx = pet.offsetLeft + pw / 2, cy = pet.offsetTop + ph / 2;
+  const r = pet.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
   const d = { baixo: H - cy, cima: cy, esquerda: cx, direita: W - cx };
   let borda = "baixo";
   for (const k in d) { if (d[k] < d[borda]) borda = k; }
+  const horiz = borda === "cima" || borda === "baixo";
+  const ao = horiz ? r.left : r.top, max = horiz ? W - r.width : H - r.height;
   cfg.borda = borda;
-  cfg.offset = Math.round((borda === "cima" || borda === "baixo") ? cx - pw / 2 : cy - ph / 2);
-  cfg.offset = Math.max(6, cfg.offset);
+  cfg.canto = ao <= CANTO_IMA ? "ini" : (ao >= max - CANTO_IMA ? "fim" : "");
+  cfg.offset = Math.round(Math.max(0, Math.min(max, ao)));
   pet.style.transition = "";
-  aplicaPosicao(); salvarPet();
-  toast("📌", "Encaixado", "borda " + borda + " · " + cfg.offset + " px", 2000, true);
+  aplicaPosicao(); salvarPet(); // sem aviso: soltar o boneco não precisa de confirmação (pedido da dona, 22/10/2026)
 }
 
 // vagueia — anda um pouco e para; ritmo depende do PERFIL
@@ -167,17 +283,18 @@ function vagueia() {
   // NÃO vagueia durante a volta na tela / brincadeira: vaguear mexe na BASE
   // (pet.left/top), e aí a volta deixaria de terminar no lugar de origem
   // (medido 03/10/2026 — o perfil "calmo" vagueia a cada 24 s e atropelava os 22 s
-  // da volta).
-  if (emEfeito()) return;
+  // da volta). E parado (o padrão) ele não sai do lugar sozinho.
+  if (cfg.parado || emEfeito()) return;
   const p = PERFIS[cfg.perfil] || PERFIS.calmo;
   const passo = Math.round((40 + Math.random() * 90) * p.andar) * (Math.random() < 0.5 ? -1 : 1);
   const W = innerWidth, H = innerHeight, pw = pet.offsetWidth, ph = pet.offsetHeight;
   pet.classList.add("andando");
+  cfg.canto = ""; ajustaFolga();   // andando, ele sai do canto
   if (cfg.borda === "cima" || cfg.borda === "baixo") {
-    const novo = Math.max(6, Math.min(W - pw - 6, pet.offsetLeft + passo));
+    const novo = Math.max(0, Math.min(W - pw, pet.offsetLeft + passo));
     pet.style.transition = "left 1.7s ease-in-out"; pet.style.left = novo + "px"; cfg.offset = novo;
   } else {
-    const novo = Math.max(6, Math.min(H - ph - 6, pet.offsetTop + passo));
+    const novo = Math.max(0, Math.min(H - ph, pet.offsetTop + passo));
     pet.style.transition = "top 1.7s ease-in-out"; pet.style.top = novo + "px"; cfg.offset = novo;
   }
   setTimeout(() => {
@@ -185,6 +302,46 @@ function vagueia() {
     salvarPet(); reportarHit();
   }, 1900);
 }
+
+/* caminharNaBorda(delta, ms) — o PASSEIO do bicho.js: anda `delta` px em `ms` e para.
+   ⚠️ 13/10/2026: o passeio mexia só no `left`, então numa borda lateral o boneco saía
+   andando para o meio da tela, descolado da borda. Agora ele anda AO LONGO da borda
+   em que está, e onde ele para vira o cfg.offset (antes o próximo aplicaPosicao o
+   puxava de volta para o lugar de antes do passeio). */
+let caminhadaTimer = null;
+function caminharNaBorda(delta, ms) {
+  if (arrastando || emEfeito()) return;
+  pararCaminhada(true);
+  const horiz = cfg.borda === "cima" || cfg.borda === "baixo";
+  const r = pet.getBoundingClientRect();
+  const de = horiz ? r.left : r.top;
+  const fim = Math.max(0, Math.min(horiz ? innerWidth - r.width : innerHeight - r.height, de + delta));
+  if (Math.abs(fim - de) < 8) return;
+  cfg.canto = "";
+  // sentido do sprite: na horizontal, para onde vai; nas laterais, de frente para a tela
+  const dir = horiz ? (fim >= de ? 1 : -1) : (cfg.borda === "direita" ? -1 : 1);
+  pet.style.transition = "";
+  andar(true, dir);
+  ajustaFolga();
+  const t0 = performance.now();
+  caminhadaTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    pet.style[horiz ? "left" : "top"] = (de + (fim - de) * k) + "px";
+    if (k >= 1) pararCaminhada();
+  }, 30);
+}
+// para onde estiver; `semAssentar` = quem chamou já vai reposicionar (arrasto, nova caminhada)
+function pararCaminhada(semAssentar) {
+  if (!caminhadaTimer) return;
+  clearInterval(caminhadaTimer); caminhadaTimer = null;
+  andar(false);
+  if (semAssentar) return;
+  const horiz = cfg.borda === "cima" || cfg.borda === "baixo";
+  cfg.offset = Math.round(horiz ? pet.offsetLeft : pet.offsetTop);
+  aplicaPosicao(); salvarPet();
+}
+window.petCaminhar = caminharNaBorda;
+window.petPararCaminhada = pararCaminhada;
 
 function salvarPet() {
   try { G && G.SavePet(JSON.stringify({ agent: "hermes", cfg: cfg })); } catch (e) {}
@@ -201,7 +358,7 @@ async function carregarPet() {
       cfg.offset = Math.max(6, d.left);
     }
   } catch (e) {}
-  aplicaPerfil(); aplicaInteracao(); aplicaPosicao();
+  aplicaPerfil(); aplicaInteracao(); aplicaParado(); aplicaTamanho(); aplicaPosicao();
   carregarPetDex(); // boneco da galeria (Petdex), se houver um instalado
 }
 
@@ -230,11 +387,13 @@ function alternaInteracao() {
 /* ───────── boneco do Petdex (galeria pública do Hermes) ─────────
    Formato medido: pets/<slug>/{pet.json, spritesheet.webp} = folha 8x9 de
    frames 192x208. Linhas: 0=repouso, 1/2=andando, 4=pulinho, 5=caído, 6=falando. */
-let dex = null, dexTimer = null, dexLinha = 0, dexFrame = 0, dexFrames = [];
+let dex = null, dexTimer = null, dexLinha = 0, dexFrame = 0, dexFrames = [], dexCaixas = [];
 
 // Mede, célula por célula, quais frames têm desenho de verdade. Várias folhas do
 // Petdex têm células vazias no meio da linha — e aí o boneco "pisca"/some quando
 // o ciclo chega nelas. Aqui a gente só anda pelos frames que existem.
+// Mede também a CAIXA do desenho em cada linha (união dos frames): o transparente
+// que sobra de cada lado, para ele encostar de verdade na borda (ver ajustaFolga).
 async function medirFrames(url, fw, fh, cols, linhas) {
   const img = new Image();
   img.src = url;
@@ -243,18 +402,30 @@ async function medirFrames(url, fw, fh, cols, linhas) {
   cv.width = img.width; cv.height = img.height;
   const cx = cv.getContext("2d", { willReadFrequently: true });
   cx.drawImage(img, 0, 0);
-  const mapa = [];
+  const mapa = [], caixas = [];
   for (let l = 0; l < linhas; l++) {
     const validos = [];
+    let x0 = fw, y0 = fh, x1 = -1, y1 = -1;
     for (let c = 0; c < cols; c++) {
       const d = cx.getImageData(c * fw, l * fh, fw, fh).data;
       let soma = 0, n = 0;
       for (let i = 3; i < d.length; i += 4 * 5) { soma += d[i]; n++; }  // amostra do alfa
-      if (n && (soma / n) > 6) validos.push(c);                        // célula com conteúdo
+      if (!(n && (soma / n) > 6)) continue;                            // célula vazia
+      validos.push(c);
+      for (let y = 0; y < fh; y++) {
+        for (let x = 0, i = y * fw * 4 + 3; x < fw; x++, i += 4) {
+          if (d[i] <= 16) continue;                                    // quase transparente
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
     }
     mapa.push(validos.length ? validos : [0]);
+    caixas.push(x1 < 0 ? null : { l: x0, t: y0, r: fw - 1 - x1, b: fh - 1 - y1 });
   }
-  return mapa;
+  return { mapa, caixas };
 }
 const DEX_LINHA = { idle: 0, dormindo: 0, andando: 1, andando_esq: 2, comemorando: 4, carinho: 4, erro: 5, falando: 6, pensando: 6 };
 const dexEl = document.getElementById("petdex");
@@ -284,7 +455,10 @@ async function carregarPetDex() {
   // 2,1 MB) e o boneco simplesmente não aparecia.
   dexEl.style.backgroundImage = "url(" + d.sheet + ")";
   if (cfg.dexOn) {
-    try { dexFrames = await medirFrames(d.sheet, d.fw, d.fh, d.cols, d.linhas); } catch (e) { dexFrames = []; }
+    try {
+      const m = await medirFrames(d.sheet, d.fw, d.fh, d.cols, d.linhas);
+      dexFrames = m.mapa; dexCaixas = m.caixas;
+    } catch (e) { dexFrames = []; dexCaixas = []; }
     pet.classList.add("dex");
     dexLinha = -1; clearInterval(dexTimer); dexTimer = null; // força reiniciar o ciclo
     dexToca(estado.state || "idle");
@@ -294,6 +468,7 @@ async function carregarPetDex() {
   if (G && G.Log) {
     try {
       G.Log("petdex frames por linha: " + JSON.stringify(dexFrames) +
+            " | folga da pose parada=" + JSON.stringify(dexCaixas[0] || null) +
             " | dpr=" + (window.devicePixelRatio || 1) +
             " | cliente css=" + innerWidth + "x" + innerHeight +
             " | tela fisica=" + screen.width + "x" + screen.height);
@@ -311,6 +486,7 @@ function dexToca(est) {
   // fazia o boneco engasgar/piscar no meio da animação)
   if (linha === dexLinha && dexTimer) return;
   dexLinha = linha; dexFrame = 0; dexPinta();
+  ajustaFolga();   // cada linha da folha tem a sua sobra de transparente
   clearInterval(dexTimer);
   const ms = (est === "idle" || est === "dormindo") ? 170 : 115;
   dexTimer = setInterval(dexAvanca, ms);
@@ -329,9 +505,11 @@ function dexAvanca() {
 
 function dexPinta() {
   if (!dex) return;
-  // pixel exato: 1 pixel do sprite = 1 pixel físico da tela (senão reamostra e serrilha)
-  const dpr = window.devicePixelRatio || 1;
-  const cw = dex.fw / dpr, ch = dex.fh / dpr;
+  // em 100%, pixel exato: 1 pixel do sprite = 1 pixel físico da tela (senão reamostra
+  // e serrilha). Em outro tamanho o quadro é arredondado para pixel físico inteiro,
+  // para a folha não escorregar de um frame para o vizinho.
+  const dpr = window.devicePixelRatio || 1, s = escala();
+  const cw = Math.max(1, Math.round(dex.fw * s)) / dpr, ch = Math.max(1, Math.round(dex.fh * s)) / dpr;
   pet.style.width = cw + "px"; pet.style.height = ch + "px";
   dexEl.style.backgroundSize = (dex.cols * cw) + "px " + (dex.linhas * ch) + "px";
   dexEl.style.backgroundPosition = (-dexFrame * cw) + "px " + (-dexLinha * ch) + "px";
@@ -432,8 +610,8 @@ function alternaBoneco() {
   cfg.dexOn = !cfg.dexOn;
   pet.classList.toggle("dex", !!cfg.dexOn);
   if (cfg.dexOn) { toast("🐾", "Boneco da galeria: " + dex.nome, "as linhas viram as emoções dele", 2600, true); dexToca(estado.state || "idle"); }
-  else { clearInterval(dexTimer); pet.style.width = ""; pet.style.height = ""; toast("🐾", "Boneco vetor (nosso)", "", 2400, true); }
-  salvarPet(); reportarHit();
+  else { clearInterval(dexTimer); aplicaTamanho(); toast("🐾", "Boneco vetor (nosso)", "", 2400, true); }
+  aplicaPosicao(); salvarPet();
 }
 
 /* ───────── painel de bonecos (galeria Petdex) ─────────
@@ -520,7 +698,7 @@ async function usarBoneco(slug, local) {
   if (!G) return;
   if (slug === "__vetor__") {
     cfg.dexOn = false; clearInterval(dexTimer);
-    pet.classList.remove("dex"); pet.style.width = ""; pet.style.height = "";
+    pet.classList.remove("dex"); aplicaTamanho();
     salvarPet(); aplicaPosicao();
     toast("🐾", "Boneco vetor (nosso)", "", 2400, true);
     fecharPainelBonecos(); // volta a mostrar o boneco, como o usuário espera
@@ -902,8 +1080,11 @@ const TILES = {
     ["🖐", "Gestos", () => reagir("Olha eu me mexendo! 🎩", "pensando")],
     ["📧", "E-mail", () => abrirEmail()],
   ],
+  // ícone/rótulo podem ser função: o tile mostra o estado ATUAL a cada abertura
   linha4: [
     ["🐾", "Boneco", () => abrirPainelBonecos()],
+    ["📏", () => "Tamanho " + Math.round(escala() * 100) + "%", () => cicloTamanho()],
+    [() => cfg.parado ? "🚶" : "📌", () => cfg.parado ? "Deixar passear" : "Ficar parado", () => alternaParado()],
     ["🎭", "Perfil", () => cicloPerfil()],
     ["🖱", "Interação", () => alternaInteracao()],
     ["🖥", "Tela e borda", () => abrirSeletorTela()],
@@ -929,7 +1110,9 @@ function montarMenu() {
     const lista = TILES[id] || [];
     // linha vazia não ocupa espaço (era o buraco onde sobrava menu velho)
     box.style.display = lista.length ? "" : "none";
-    for (const [ico, rotulo, acao] of lista) {
+    for (const [icoT, rotuloT, acao] of lista) {
+      const ico = typeof icoT === "function" ? icoT() : icoT;
+      const rotulo = typeof rotuloT === "function" ? rotuloT() : rotuloT;
       const b = document.createElement("div");
       b.className = "tile"; b.dataset.acao = rotulo;
       b.innerHTML = `<span class="ico">${ico}</span>${rotulo}`;
@@ -1063,7 +1246,7 @@ async function abrirSeletorTela() {
     b.className = "b" + (k === cfg.borda ? " sel" : "");
     b.textContent = rot;
     b.onclick = async () => {
-      cfg.borda = k; cfg.offset = 120; aplicaPosicao(); salvarPet();
+      cfg.borda = k; cfg.offset = 120; cfg.canto = ""; aplicaPosicao(); salvarPet();
       try { G && await G.ConfigurarTela(telaSel.monitor, k); } catch (e) {}
       fecharSeletorTela();
     };
@@ -1072,7 +1255,7 @@ async function abrirSeletorTela() {
 
   document.getElementById("tela-atual").textContent =
     "Tela " + telaSel.monitor + " · borda " + cfg.borda + " · " + cfg.offset + "px — " +
-    "ou arraste o boneco para onde quiser: ele encaixa na borda mais próxima.";
+    "ou arraste o boneco para onde quiser: ele gruda na borda (ou no canto) mais próximo.";
   reportarHit();
 }
 
@@ -1237,11 +1420,18 @@ pet.addEventListener("mousedown", (e) => {
   try { if (G && G.Log) G.Log("clique: mousedown no boneco | interagir=" + cfg.interagir + " | botao=" + e.button); } catch (e2) { }
   if (e.button !== 0 || !cfg.interagir) return;   // interação desligada: não arrasta
   e.preventDefault();
+  pararCaminhada();   // pegou no meio de um passeio: ele para ali, e o clique/arrasto manda
   const sx = e.clientX, sy = e.clientY, ox = pet.offsetLeft, oy = pet.offsetTop;
+  // zera aqui: se o último arrasto terminou fora do boneco, o click que limparia
+  // isto não veio — e o próximo clique simples seria engolido como "arrasto"
+  arrastouAgora = false;
   arrastando = true; pet.classList.add("arrastando");
   const move = (ev) => {
     if (!arrastando) return;
-    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 6) arrastouAgora = true;
+    if (!arrastouAgora && Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 6) {
+      arrastouAgora = true;
+      ajustaFolga(true);   // desgrudou: o desenho volta para dentro da caixa e segue o cursor
+    }
     // limite: o boneco nunca sai da janela (senão ele desaparece e você não acha mais)
     const maxX = Math.max(0, innerWidth - pet.offsetWidth);
     const maxY = Math.max(0, innerHeight - pet.offsetHeight);
@@ -1279,6 +1469,17 @@ pet.addEventListener("dblclick", () => {
 });
 // BOTÃO DIREITO SEMPRE: é a porta de volta quando a interação está desligada.
 pet.addEventListener("contextmenu", (e) => { e.preventDefault(); abrirMenu(e.clientX, e.clientY); });
+// RODINHA em cima do boneco = tamanho (5% por passo). O freio de 90 ms segura o
+// touchpad, que manda dezenas de eventos num gesto só.
+let rodaUltima = 0;
+pet.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  if (!cfg.interagir) return;
+  const agora = performance.now();
+  if (agora - rodaUltima < 90 || !e.deltaY) return;
+  rodaUltima = agora;
+  mudaTamanho(escala() + (e.deltaY < 0 ? 0.05 : -0.05));
+}, { passive: false });
 
 document.addEventListener("click", (e) => {
   if (!menu.contains(e.target) && e.target !== pet && !pet.contains(e.target)) {
@@ -1325,10 +1526,13 @@ function ligarEventos() {
   });
 
   R.EventsOn("tela-aplicada", (t) => {
-    // payload: {borda, w, h, dpi, monitor} — a janela passa a cobrir a tela escolhida
+    // payload: {borda, w, h, dpi, monitor} — a janela passa a cobrir a tela escolhida.
+    // A borda do payload NÃO manda: quem sabe onde o boneco foi solto é o cfg salvo
+    // (pets.json). O config.json do Go só muda pelo seletor de tela — que já põe a
+    // borda no cfg antes de chamar o Go —, então no boot ele pode vir velho e, depois
+    // de um arrasto, devolver o boneco para a borda antiga ao reiniciar o app.
     if (t && typeof t === "object") {
       cfg.monitor = t.monitor || cfg.monitor;
-      if (t.borda) cfg.borda = t.borda;
     }
     setTimeout(() => { aplicaPosicao(); salvarPet(); }, 300); // deixa o Windows redimensionar
   });
