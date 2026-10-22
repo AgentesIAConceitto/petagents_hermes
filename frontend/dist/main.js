@@ -262,10 +262,6 @@ function aplicaPosicao() {
 // ao soltar o arrasto: encaixa na borda mais próxima (regra do dono) e, se soltou
 // perto de um canto, no canto — e fica ali, colado
 const CANTO_IMA = 48; // px CSS
-const NOME_CANTO = {
-  baixo: ["inferior esquerdo", "inferior direito"], cima: ["superior esquerdo", "superior direito"],
-  esquerda: ["superior esquerdo", "inferior esquerdo"], direita: ["superior direito", "inferior direito"],
-};
 function encaixa() {
   const W = innerWidth, H = innerHeight;
   const r = pet.getBoundingClientRect();
@@ -279,10 +275,7 @@ function encaixa() {
   cfg.canto = ao <= CANTO_IMA ? "ini" : (ao >= max - CANTO_IMA ? "fim" : "");
   cfg.offset = Math.round(Math.max(0, Math.min(max, ao)));
   pet.style.transition = "";
-  aplicaPosicao(); salvarPet();
-  toast("📌", "Encaixado", cfg.canto
-    ? "canto " + NOME_CANTO[borda][cfg.canto === "ini" ? 0 : 1]
-    : "borda " + borda + " · " + cfg.offset + " px", 2000, true);
+  aplicaPosicao(); salvarPet(); // sem aviso: soltar o boneco não precisa de confirmação (pedido da dona, 22/10/2026)
 }
 
 // vagueia — anda um pouco e para; ritmo depende do PERFIL
