@@ -31,6 +31,10 @@ bicho que *também* cuida de você é útil.
 - O agente responde **com as ferramentas dele** — roda comando, lê arquivo, olha o
   sistema. A ponte sobe um `hermes serve` **próprio** (mesmo perfil do dono, mesma
   memória), então o boneco conversa com o mesmo agente que você usa no resto do dia.
+- **Conversa por áudio**: 🎤 no rodapé do chat — clique, fale e pare; depois de ~2 s de
+  silêncio ele transcreve (Groq Whisper) e envia sozinho (a seta envia já; ✕ ou Esc cancelam). O 🔊
+  no cabeçalho liga/desliga a leitura das respostas em voz alta, com as vozes pt-BR do
+  próprio Windows. A chave do Groq (grátis) vai em Sistema › Inteligência › Voz.
 - Mas só o que é conversa abre o chat: **recado do bicho é balão**, nunca sequestra a
   conversa. Um clique no boneco é carinho; dois cliques abrem o chat.
 
