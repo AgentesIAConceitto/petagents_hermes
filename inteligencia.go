@@ -15,6 +15,7 @@ package main
 // segurança e troca atômica do arquivo — o resto (comentários, outras chaves) fica intacto.
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,9 +23,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -38,7 +41,10 @@ type provedorIA struct {
 	Pagina  string `json:"pagina"`  // onde se cria a chave
 	Prefixo string `json:"prefixo"` // começo típico da chave (só dica no campo)
 	Saldo   bool   `json:"saldo"`   // o provedor informa saldo?
-	modelos string // rota que lista os modelos
+	// Complemento — extra opcional do Hermes sem o qual o provedor não funciona (ver
+	// garanteComplemento). Vazio = só a biblioteca que já vem com o Hermes.
+	Complemento string `json:"complemento,omitempty"`
+	modelos     string // rota que lista os modelos
 	teste   string // rota que valida a chave sem gastar token
 }
 
@@ -53,7 +59,7 @@ var provedoresIA = []provedorIA{
 		Pagina: "https://platform.openai.com/api-keys", Prefixo: "sk-",
 		modelos: "https://api.openai.com/v1/models"},
 	{ID: "anthropic", Nome: "Anthropic (Claude)", Var: "ANTHROPIC_API_KEY", BaseURL: "https://api.anthropic.com",
-		Pagina: "https://console.anthropic.com/settings/keys", Prefixo: "sk-ant-",
+		Pagina: "https://console.anthropic.com/settings/keys", Prefixo: "sk-ant-", Complemento: "anthropic",
 		modelos: "https://api.anthropic.com/v1/models"},
 	{ID: "gemini", Nome: "Google Gemini", Var: "GEMINI_API_KEY", BaseURL: "https://generativelanguage.googleapis.com/v1beta",
 		Pagina:  "https://aistudio.google.com/app/apikey",
@@ -378,6 +384,74 @@ func envPonte() []string {
 	return []string{"PETAGENT_IA=" + string(cfg), "PETAGENT_IA_CHAVE=" + e.Chave}
 }
 
+// ── complemento do Hermes que o provedor exige ─────────────────────────────────────
+//
+// Medido em 22/10/2026: com a Anthropic escolhida no painel, o "Testar acesso" passava (a
+// chave vale) e o chat respondia "(sem texto)" em 0,1 s. O Hermes só fala com a Anthropic
+// pelo pacote `anthropic`, que é um EXTRA OPCIONAL dele — e a instalação automática que ele
+// tenta no primeiro uso falha dentro do backend do boneco (HERMES_HOME espelhado: o lançador
+// trata essa pasta como a instalação, ver o aviso no topo deste arquivo). Quem escolheu a
+// Anthropic quer usá-la: o app instala o extra pelo comando oficial, no Hermes de verdade.
+// Já instalado, o comando volta em ~1 s sem mexer em nada.
+
+var complementoMu sync.Mutex // um `pm install` por vez (salvar + subir a ponte)
+
+// instalaComplemento — `hermes pm install --extra <extra>` no Hermes do dono. instalou=true
+// quando o extra não estava lá (processos do Hermes já abertos só o veem ao reiniciar).
+// Variável para o teste trocar.
+var instalaComplemento = func(extra string) (instalou bool, err error) {
+	exe := caminhoHermes()
+	if exe == "" {
+		return false, errors.New("não encontrei o Hermes nesta máquina")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "pm", "install", "--extra", extra)
+	cmd.Dir = hermesDir()
+	// SEM o HERMES_HOME do espelho (se herdado): é ele que fazia a instalação falhar
+	var env []string
+	for _, v := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(v), "HERMES_HOME=") {
+			env = append(env, v)
+		}
+	}
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000} // CREATE_NO_WINDOW
+	saida, err := cmd.CombinedOutput()
+	txt := strings.TrimSpace(string(saida))
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return false, errors.New("a instalação passou de 5 min")
+		}
+		if len(txt) > 300 {
+			txt = "…" + txt[len(txt)-300:]
+		}
+		if txt == "" {
+			txt = err.Error()
+		}
+		return false, errors.New(txt)
+	}
+	return strings.Contains(txt, "Installing"), nil
+}
+
+// garanteComplemento — instala o extra do provedor, se ele exigir um.
+func garanteComplemento(p provedorIA) (instalou bool, err error) {
+	if p.Complemento == "" {
+		return false, nil
+	}
+	complementoMu.Lock()
+	defer complementoMu.Unlock()
+	t0 := time.Now()
+	instalou, err = instalaComplemento(p.Complemento)
+	switch {
+	case err != nil:
+		logMsg(fmt.Sprintf("ia: complemento %q do Hermes NÃO instalou: %v", p.Complemento, err))
+	case instalou:
+		logMsg(fmt.Sprintf("ia: complemento %q instalado no Hermes em %.0fs", p.Complemento, time.Since(t0).Seconds()))
+	}
+	return instalou, err
+}
+
 // ── rede: lista de modelos e teste de acesso (sem gastar token) ────────────────────
 
 func pedidoIA(p provedorIA, url, chave string) (int, []byte, error) {
@@ -565,6 +639,13 @@ func (a *App) IASalvar(js string) string {
 	if chave == "" {
 		return falha("falta a chave do " + p.Nome)
 	}
+	// ANTES de gravar: se o complemento não instala, a IA que funciona hoje fica como está
+	instalou, err := garanteComplemento(p)
+	if err != nil {
+		return falha("não consegui instalar no Hermes o complemento que o " + p.Nome +
+			" exige (" + p.Complemento + "): " + err.Error())
+	}
+	salvo := respostaJSON(map[string]any{"ok": true, "instalou": instalou})
 	if d.Modo == "boneco" {
 		c, err := cifra(chave)
 		if err != nil {
@@ -586,7 +667,7 @@ func (a *App) IASalvar(js string) string {
 			_ = gravaIA(iaSalva{Modo: "hermes"})
 			logMsg("ia: o boneco voltou a usar a IA do Hermes (" + p.ID + " / " + d.Modelo + ")")
 			depoisDeSalvarIA(a)
-			return respostaJSON(map[string]any{"ok": true})
+			return salvo
 		}
 		if err := gravaComBackup(cfgPath, trocaModeloNoConfig(string(cfgTxt), p.ID, d.Modelo, p.BaseURL)); err != nil {
 			return falha("não consegui gravar o config.yaml do Hermes: " + err.Error())
@@ -601,7 +682,7 @@ func (a *App) IASalvar(js string) string {
 		logMsg(fmt.Sprintf("ia: Hermes inteiro agora usa %s / %s (backup em *.bak-petagent)", p.ID, d.Modelo))
 	}
 	depoisDeSalvarIA(a)
-	return respostaJSON(map[string]any{"ok": true})
+	return salvo
 }
 
 // depoisDeSalvarIA — relê o saldo e reinicia a ponte com a IA nova. Variável só para o
