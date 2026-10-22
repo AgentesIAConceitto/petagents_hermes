@@ -1,9 +1,16 @@
 /* PetAgent — overlay transparente. Só o boneco, o balão e o menu são clicáveis. */
+/* fontes embutidas (o app funciona offline): latin, peso variável */
+@font-face { font-family: "Inter"; src: url("fontes/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Nunito"; src: url("fontes/nunito-latin-wght-normal.woff2") format("woff2"); font-weight: 200 1000; font-display: swap; }
+@font-face { font-family: "Fraunces"; src: url("fontes/fraunces-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fontes/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-display: swap; }
 * { box-sizing: border-box; }
+/* barra de rolagem fina e nas cores do tema em TODO lugar (chat, menu, galeria, e-mail) */
+* { scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent; }
 html, body {
   margin: 0; padding: 0; width: 100%; height: 100%;
   background: transparent; overflow: hidden;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: var(--fonte, "Segoe UI", system-ui, sans-serif);
   user-select: none; cursor: default;
 }
 
@@ -69,92 +76,420 @@ body.parado .pet.idle svg { animation: none; }
   animation: sobe 2.4s linear infinite; }
 @keyframes sobe { 0%{transform:translateY(6px); opacity:0} 40%{opacity:1} 100%{transform:translateY(-14px); opacity:0} }
 .pet.pensando .pensando-pontos { display: flex; gap: 4px; right: -22px; top: -4px; }
-.pensando-pontos i { width: 8px; height: 8px; border-radius: 50%; background: #eafff9; opacity:.5;
+.pensando-pontos i { width: 8px; height: 8px; border-radius: 50%; background: var(--texto); opacity:.5;
   animation: ponto 1s infinite; }
 .pensando-pontos i:nth-child(2){ animation-delay:.15s } .pensando-pontos i:nth-child(3){ animation-delay:.3s }
 @keyframes ponto { 0%,100%{opacity:.35; transform:translateY(0)} 50%{opacity:1; transform:translateY(-4px)} }
 
-/* ───────── BALÃO ───────── */
+/* ───────── BALÃO ─────────
+   22/10/2026: maior (460 × até 55% da tela) e redimensionável pela alça; o tamanho
+   (width/height) é do JS — ver ancoraBalao e cfg.chat. Ancorado pelo rodapé: cresce
+   para cima, nunca por cima do pet. */
 .balao {
-  position: absolute; width: 420px; max-width: 90vw; min-height: 150px;
+  position: absolute; width: 460px; max-width: calc(100vw - 20px);
   display: flex; flex-direction: column;
-  background: rgba(11, 32, 30, .96); color: #eafff9;
-  border: 2px solid #14a08a; border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.5);
-  overflow: hidden; z-index: 50;
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte);
+  border: 1px solid var(--borda); border-radius: var(--raio-painel);
+  box-shadow: var(--sombra);
+  z-index: 50;
 }
 .balao.oculto { display: none; }
 /* rabinho do balão */
 .balao::after {
   content: ""; position: absolute; bottom: -14px; left: 42px;
-  border: 8px solid transparent; border-top-color: #14a08a;
+  border: 8px solid transparent; border-top-color: var(--fundo);
 }
 .balao.flip::after { left: auto; right: 42px; }
-.balao-topo { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  background: rgba(20,160,138,.18); border-bottom: 1px solid rgba(20,160,138,.4); }
-.balao-topo strong { font-size: 13px; }
-.balao-topo .sub { font-size: 11px; opacity: .65; margin-left: auto; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: #35d07f; }
-.dot.erro { background: #ff5252; } .dot.dormindo { background: #8a93a0; }
-.dot.pensando { background: #ffc94a; animation: pulso 1s infinite; }
-.x { background: transparent; border: 0; color: #9fe9d8; font-size: 16px; cursor: pointer; }
-.msgs { flex: 1; max-height: none; overflow-y: auto; padding: 10px; display: flex;
-  flex-direction: column; gap: 8px; scrollbar-width: thin;
+/* aberto embaixo do boneco (ele está na borda de cima): rabinho em cima, alça embaixo */
+.balao.embaixo::after { bottom: auto; top: -14px; border-top-color: transparent; border-bottom-color: var(--fundo); }
+.balao.embaixo .balao-puxa { top: auto; bottom: 0; }
+/* alça de redimensionar: canto de cima, do lado oposto ao rabinho */
+.balao-puxa {
+  position: absolute; top: 0; right: 0; width: 16px; height: 16px; cursor: nesw-resize;
+  border-top-right-radius: var(--raio-painel); opacity: .45;
+  background: linear-gradient(45deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
+}
+.balao.flip .balao-puxa {
+  right: auto; left: 0; cursor: nwse-resize;
+  border-top-right-radius: 0; border-top-left-radius: var(--raio-painel);
+  background: linear-gradient(-45deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
+}
+.balao-puxa:hover { opacity: 1; }
+
+/* cabeçalho do balão e do chat estendido: ● nome do pet / modelo · saldo · gasto de hoje */
+.chat-topo, .cg-topo {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-bottom: 1px solid var(--borda);
+}
+.chat-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.chat-quem b { font-size: 14px; font-weight: 650; color: var(--texto); }
+.chat-quem .sub {
+  font-size: 12px; color: var(--sub);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #35d07f; }
+.dot.erro { background: #ff5252; }
+.dot.aviso { background: #ffc94a; }
+.dot.pensando { background: var(--acento); animation: pulso 1s infinite; }
+
+.msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex;
+  flex-direction: column; gap: 8px;
   /* a cor do texto vem DAQUI (e não só do balão): em 02/10/2026 o chat estendido
      ficou com texto preto porque só o .balao definia color */
-  color: #eafff9; }
-.msgs .m { font-size: 13px; line-height: 1.35; padding: 7px 10px; border-radius: 12px; max-width: 92%; white-space: pre-wrap; word-break: break-word; }
-.msgs .m code { background: rgba(0,0,0,.35); border-radius: 4px; padding: 0 4px; font-size: 12px; }
-.msgs .eu  { align-self: flex-end; background: #1d5f55; }
-.msgs .ele { align-self: flex-start; background: #0e2c2a; border: 1px solid rgba(20,160,138,.35); }
-.msgs .meta { font-size: 10px; opacity: .55; align-self: center; }
-.balao-rodape { display: flex; gap: 6px; padding: 8px; border-top: 1px solid rgba(20,160,138,.3); }
-#txt { flex: 1; background: #061a18; color: #eafff9; border: 1px solid #14a08a;
-  border-radius: 10px; padding: 8px 10px; font-size: 13px; outline: none; }
-#enviar { background: #14a08a; border: 0; color: #041412; font-weight: 700; width: 36px;
-  border-radius: 10px; cursor: pointer; }
+  color: var(--texto); }
+.msgs .m { font-size: 13.5px; line-height: 1.4; padding: 8px 12px; border-radius: var(--raio-botao); max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+.msgs .m code { background: var(--sup2); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+.msgs .eu  { align-self: flex-end; background: var(--acento); color: var(--acento-txt); }
+.msgs .ele { align-self: flex-start; background: var(--sup); border: 1px solid var(--borda); }
+.msgs .meta { font-size: 11px; color: var(--sub); align-self: center; }
+/* rodapé da resposta: hora · quanto levou (era a linha solta "via Hermes · 13.9 s") */
+.msgs .m .rodape-msg { display: block; margin-top: 6px; font-size: 11px; color: var(--sub); white-space: normal; }
+/* o pet "digitando": três pontinhos (+ o passo e o relógio que a ponte manda) */
+.msgs .ao-vivo .digitando { display: inline-flex; gap: 4px; padding: 4px 0; }
+.msgs .ao-vivo .digitando i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--sub); animation: ponto 1s infinite;
+}
+.msgs .ao-vivo .digitando i:nth-child(2) { animation-delay: .15s; }
+.msgs .ao-vivo .digitando i:nth-child(3) { animation-delay: .3s; }
+.msgs .ao-vivo .passo { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sub); white-space: normal; }
 
-/* ───────── MENU ───────── */
+.balao-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
+#txt { flex: 1; min-width: 0; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); padding: 9px 12px; font: inherit; font-size: 13.5px; outline: none; }
+#txt:focus { border-color: var(--acento); }
+#txt::placeholder { color: var(--sub); }
+#enviar { flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno); }
+#enviar:hover { filter: brightness(1.08); }
+
+/* ───────── MENU (dock com abas: Pet · Recursos · Sistema) ─────────
+   Opção A da prancha (22/10/2026). Cores, fonte, cantos e traço dos ícones vêm
+   das variáveis que o tema.js põe em :root — nada de cor fixa aqui. */
+:where(.menu, .aparencia, .balao, .cg, .pp) button {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+}
+svg.ic {
+  flex: none; fill: var(--ic-fill); fill-opacity: var(--ic-fo);
+  stroke: currentColor; stroke-width: var(--ic-sw); stroke-linecap: round; stroke-linejoin: round;
+}
 .menu {
-  position: absolute; z-index: 60;
-  background: rgba(9, 26, 24, .97);
-  border: 2px solid #14a08a; border-radius: 16px;
-  padding: 10px; width: 340px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.55);
+  position: absolute; z-index: 64; width: 392px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 16px;
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte);
+  border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
 }
 .menu.oculto { display: none; }
-.menu-linha { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
-.menu-linha:last-child { margin-bottom: 0; }
-.menu-linha.destaque { grid-template-columns: 1fr 1fr; }
-.tile {
-  background: rgba(20,160,138,.14); border: 1px solid rgba(20,160,138,.4);
-  border-radius: 12px; padding: 8px 4px; text-align: center; cursor: pointer;
-  color: #dffbf4; font-size: 10.5px; line-height: 1.2;
+.menu-topo { display: flex; align-items: center; gap: 12px; }
+.menu-avatar {
+  width: 40px; height: 40px; flex: none; border-radius: var(--raio-botao);
+  background: var(--acento-suave); color: var(--icone);
+  display: flex; align-items: center; justify-content: center;
 }
-.tile:hover { background: rgba(20,160,138,.3); }
-.tile .ico { display: block; font-size: 18px; margin-bottom: 3px; }
-.tile.alerta { border-color: #ffc94a; box-shadow: 0 0 0 2px rgba(255,201,74,.25) inset; }
-.tile.grande { padding: 12px 6px; font-size: 12.5px; }
-.tile.grande .ico { font-size: 22px; }
+.menu-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.menu-quem b { font-size: 15px; font-weight: 650; }
+.menu-quem span { font-size: 12.5px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.botao-x {
+  width: 34px; height: 34px; flex: none; border-radius: var(--raio-interno); color: var(--sub);
+  display: flex; align-items: center; justify-content: center;
+}
+.menu-abas {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px;
+  background: var(--sup); border-radius: var(--raio-botao);
+}
+.menu-abas button { height: 34px; border-radius: var(--raio-interno); font-size: 13.5px; font-weight: 600; color: var(--sub); }
+.menu-abas button.sel { background: var(--elev); color: var(--texto); box-shadow: var(--sombra-aba); }
+.menu-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mtile {
+  position: relative; height: 80px; border-radius: var(--raio-botao); background: var(--sup);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  font-size: 12.5px; font-weight: 500;
+}
+.mtile-ico {
+  width: 36px; height: 36px; border-radius: var(--raio-interno);
+  background: var(--acento-suave); color: var(--icone);
+  display: flex; align-items: center; justify-content: center;
+}
+.mtile .pendente {
+  position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--acento); box-shadow: 0 0 0 3px var(--acento-suave);
+}
+.mlista { display: flex; flex-direction: column; gap: 2px; }
+.mlista.largo { gap: 8px; }
+.menu-secao {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--sub); padding: 0 10px 6px;
+}
+.mlinha {
+  height: 38px; flex: none; border-radius: var(--raio-interno); text-align: left;
+  display: flex; align-items: center; gap: 12px; padding: 0 10px; font-size: 13.5px;
+}
+.mlinha .ic { color: var(--sub); }
+.mlinha .nome { flex: 1; }
+.mlinha .valor { font-size: 12.5px; color: var(--sub); }
+.mlinha.perigo, .mlinha.perigo .ic { color: var(--perigo); }
+.mlinha.perigo { font-weight: 600; }
+.menu-sep { height: 1px; background: var(--borda); margin: 6px 4px; }
+.mcartao {
+  display: flex; align-items: center; gap: 14px; padding: 14px; text-align: left;
+  border-radius: var(--raio-botao); background: var(--sup);
+}
+.mcartao > .ic { color: var(--sub); }
+.mcartao-ico {
+  width: 42px; height: 42px; flex: none; border-radius: var(--raio-interno);
+  background: var(--acento); color: var(--acento-txt);
+  display: flex; align-items: center; justify-content: center;
+}
+.mcartao-ico .ic { fill: none; }
+.mcartao .txt { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.mcartao .txt b { font-size: 14.5px; font-weight: 600; }
+.mcartao .txt span { font-size: 12.5px; color: var(--sub); }
+/* o mesmo "acender" serve para tudo que é clicável no menu e no painel */
+.mtile:hover, .mlinha:hover, .mcartao:hover, .botao-x:hover,
+.menu-abas button:not(.sel):hover, .ap-seg button:not(.sel):hover, .ap-fontes button:not(.sel):hover {
+  box-shadow: inset 0 0 0 999px var(--hover);
+}
+.mtile:active, .mlinha:active, .mcartao:active { transform: scale(.98); }
+.mtile.alerta, .mlinha.alerta, .mcartao.alerta { box-shadow: inset 0 0 0 2px var(--acento); }
+:where(.menu, .aparencia, .balao, .cg, .pp) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
-/* ───────── SELETOR DE TELA ───────── */
-.tela {
-  position: absolute; z-index: 61; width: 300px;
-  background: rgba(9, 26, 24, .97); border: 2px solid #14a08a;
-  border-radius: 14px; padding: 10px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.55);
+/* ───────── APARÊNCIA (menu › Sistema › Aparência) ───────── */
+.aparencia {
+  position: absolute; z-index: 65; width: 340px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 18px; padding: 20px;
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte);
+  border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
 }
-.tela.oculto { display: none; }
-.tela-tit { font-size: 12px; font-weight: 700; color: #9fe9d8; margin-bottom: 7px; }
-.tela-linha { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 7px; }
-.tela-linha .b {
-  flex: 1; min-width: 62px; padding: 7px 6px; text-align: center; cursor: pointer;
-  background: rgba(20,160,138,.14); border: 1px solid rgba(20,160,138,.4);
-  border-radius: 9px; color: #dffbf4; font-size: 11px; line-height: 1.25;
+.aparencia.oculto { display: none; }
+.ap-topo { display: flex; align-items: center; gap: 10px; color: var(--icone); }
+.ap-topo b { flex: 1; font-size: 17px; font-weight: 650; color: var(--texto); }
+.ap-dica { margin: -10px 0 0; font-size: 12.5px; color: var(--sub); }
+.ap-sec { display: flex; flex-direction: column; gap: 8px; }
+.ap-sec > span { font-size: 12px; font-weight: 600; color: var(--sub); }
+.ap-seg {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px;
+  background: var(--sup); border-radius: var(--raio-botao);
 }
-.tela-linha .b:hover { background: rgba(20,160,138,.3); }
-.tela-linha .b.sel { background: #14a08a; color: #041412; font-weight: 700; }
-.tela-dica { font-size: 10px; opacity: .7; line-height: 1.3; }
+.ap-seg button { height: 32px; border-radius: var(--raio-interno); font-size: 13px; font-weight: 600; color: var(--sub); }
+.ap-seg button.sel { background: var(--elev); color: var(--texto); box-shadow: var(--sombra-aba); }
+.ap-cores { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ap-cores .ap-cor { width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.ap-cores .ap-cor.sel { box-shadow: 0 0 0 2px var(--fundo), 0 0 0 4px var(--texto); }
+.ap-livre { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sub); cursor: pointer; }
+.ap-livre input {
+  width: 32px; height: 28px; padding: 2px; cursor: pointer;
+  border: 1px solid var(--borda); border-radius: var(--raio-interno); background: var(--sup);
+}
+.ap-livre.sel input { border-color: var(--texto); }
+.ap-fontes { display: flex; flex-direction: column; gap: 4px; }
+.ap-fontes button {
+  height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 12px; text-align: left;
+  font-size: 13.5px; border-radius: var(--raio-interno); border: 1px solid var(--borda);
+}
+.ap-fontes button i { font-style: normal; font-size: 17px; width: 26px; }
+.ap-fontes button.sel { background: var(--acento-suave); border-color: var(--acento); }
+/* ───────── PAINEL DO PET (opção C, 22/10/2026): anéis + cuidado rápido; rotina e pausas ao lado ───────── */
+.bicho.pp {
+  width: 336px; gap: 16px; padding: 16px; font-size: 13px; font-family: var(--fonte);
+  overflow-y: auto; box-shadow: var(--sombra);
+}
+.bicho.pp.pp-lado { width: 320px; gap: 14px; }
+.pp-topo { display: flex; align-items: center; gap: 8px; }
+.pp-topo .botao-x.sel { background: var(--sup2); color: var(--texto); }
+.pp-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pp-quem b { font-size: 15px; font-weight: 650; color: var(--texto); }
+.pp-lado .pp-quem b { font-size: 13.5px; font-weight: 600; }
+.pp-quem span { font-size: 12px; color: var(--sub); }
+.pp-titulo { flex: 1; font-size: 15px; font-weight: 650; }
+.pp-salvo { font-size: 12px; font-weight: 600; color: #35D07F; }
+.pp-aneis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pp-anel { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pp-anel b { font-size: 12px; font-weight: 600; }
+.pp-anel > span { font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.pp-anel-svg { position: relative; width: 64px; height: 64px; }
+.pp-anel-svg > svg { transform: rotate(-90deg); }
+.pp-anel-svg > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.pp-anel-svg .ic { fill: none; }
+.pp-trilho { fill: none; stroke: var(--sup2); stroke-width: 6; }
+.pp-valor { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray .4s ease; }
+.pp-acoes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pp-acoes.dois { grid-template-columns: 1fr auto; }
+.pp .pp-bt {
+  height: 34px; padding: 0 12px; border-radius: var(--raio-interno); font-size: 12.5px; font-weight: 600;
+  background: var(--acento); color: var(--acento-txt);
+}
+.pp .pp-bt.sec { background: var(--sup); color: var(--texto); }
+.pp .pp-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.pp-proximo {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 12.5px;
+  border-radius: var(--raio-interno); background: var(--acento-suave); color: var(--texto);
+}
+.pp-proximo .ic { color: var(--icone); fill: none; }
+.pp-rodape { font-size: 11.5px; color: var(--sub); }
+.pp-sono {
+  display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--raio-botao);
+  background: var(--acento-suave);
+}
+.pp-sono > .ic { color: var(--icone); fill: none; }
+.pp-sono > span { display: flex; flex-direction: column; gap: 2px; }
+.pp-sono > span span { font-size: 12px; color: var(--sub); }
+/* .pp na frente: o `.bicho label` antigo (centraliza tudo) não pode vencer */
+.pp .pp-campo-l { display: flex; flex-direction: column; align-items: stretch; gap: 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+.pp .pp-campo {
+  height: 36px; padding: 0 10px; font: inherit; font-size: 13px; font-weight: 400;
+  background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); outline: none; min-width: 0; flex: none;
+}
+.pp .pp-campo:focus { border-color: var(--acento); }
+.pp .pp-campo.curto { height: 32px; }
+:root[data-tema="escuro"] .pp .pp-campo { color-scheme: dark; }
+.pp-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--sub); }
+.pp-linha > span:first-child:not(.pp-quem) { color: var(--texto); font-size: 13px; }
+.pp .pp-campo-l .pp-linha .pp-campo { flex: 1; }
+.pp-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
+.pp-sep { height: 1px; background: var(--borda); }
+.pp .pp-switch { position: relative; width: 42px; height: 24px; flex: none; border-radius: 12px; background: var(--sup2); }
+.pp .pp-switch i {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: left .15s ease;
+}
+.pp .pp-switch[aria-checked="true"] { background: var(--acento); }
+.pp .pp-switch[aria-checked="true"] i { left: 21px; }
+
+/* dormindo: fica NA TELA, apagadinho, com zZ — um clique acorda */
+body.pet-dormindo .pet { opacity: .6; }
+body.pet-dormindo .pet .zzz {
+  display: block; color: #C9D2FF; font-weight: 700; letter-spacing: 2px; animation: sobe 2.4s linear infinite;
+}
+
+/* ───────── INTELIGÊNCIA (menu › Sistema › Inteligência) — mesmo visual da Aparência ───────── */
+.aparencia.ia { width: 360px; }
+.ap-seg.ia-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ia-nota { margin: 0; font-size: 12px; color: var(--sub); line-height: 1.4; }
+.ia-boas {
+  margin: -6px 0 0; padding: 10px 12px; font-size: 13px; line-height: 1.45;
+  background: var(--acento-suave); border-radius: var(--raio-interno);
+}
+.ap-dica b { color: var(--texto); font-weight: 600; }
+.ia-campo {
+  width: 100%; height: 38px; padding: 0 12px; font: inherit; font-size: 13.5px;
+  background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); outline: none;
+}
+.ia-campo:focus { border-color: var(--acento); }
+.ia-campo::placeholder { color: var(--sub); }
+select.ia-campo { cursor: pointer; }
+.ia-linha { display: flex; align-items: center; gap: 8px; }
+.ia-mascara {
+  flex: 1; height: 38px; display: flex; align-items: center; padding: 0 12px;
+  background: var(--sup); border-radius: var(--raio-interno); font-size: 13px;
+}
+.ia-link { align-self: flex-start; font-size: 12px; color: var(--icone); text-decoration: none; }
+.ia-link:hover { text-decoration: underline; }
+.ia-acoes { display: flex; gap: 8px; justify-content: flex-end; }
+.aparencia .ia-bt {
+  height: 36px; padding: 0 16px; font-size: 13px; font-weight: 600;
+  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno);
+}
+.aparencia .ia-bt.sec { background: transparent; color: var(--texto); border: 1px solid var(--borda); }
+.aparencia .ia-bt:hover { filter: brightness(1.08); }
+.aparencia .ia-bt.sec:hover { filter: none; box-shadow: inset 0 0 0 999px var(--hover); }
+.aparencia .ia-bt:disabled { opacity: .55; cursor: default; }
+.ia-status { font-size: 13px; padding: 8px 12px; border-radius: var(--raio-interno); background: var(--sup); }
+.ia-status.ok { color: #1f9d55; background: rgba(53,208,127,.12); }
+.ia-status.erro { color: var(--perigo); background: rgba(255,82,82,.10); }
+:root[data-tema="escuro"] .ia-status.ok { color: #5fe39a; }
+.ap-amostra {
+  display: flex; justify-content: space-between; padding: 10px 14px;
+  background: var(--sup); border-radius: var(--raio-botao); color: var(--icone);
+}
+
+/* ───────── PAINÉIS (22/10/2026): base comum de Trocar boneco, E-mail e Tela e borda ─────────
+   Mesmo visual do menu e do painel do pet: cabeçalho com título + linha de apoio + fechar,
+   botões .pn-bt, abas .pn-abas, números .pn-num. Encostados no boneco (posicionaPertoDoPet). */
+.painel-n {
+  position: absolute; z-index: 63; display: flex; flex-direction: column; gap: 14px; padding: 16px;
+  overflow-y: auto; font-family: var(--fonte); font-size: 13px; color: var(--texto);
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: var(--raio-painel);
+  box-shadow: var(--sombra);
+}
+.painel-n.oculto { display: none; }
+.pn-topo { display: flex; align-items: center; gap: 10px; }
+.pn-ico {
+  width: 40px; height: 40px; flex: none; border-radius: var(--raio-botao);
+  background: var(--acento-suave); color: var(--icone); display: flex; align-items: center; justify-content: center;
+}
+.pn-ico .ic { fill: none; }
+.pn-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pn-quem b { font-size: 15px; font-weight: 650; }
+.pn-quem span { font-size: 12.5px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-sec { display: flex; align-items: baseline; gap: 8px; margin-bottom: -6px; }
+.pn-sec b { flex: 1; font-size: 13px; font-weight: 600; }
+.pn-sec span { font-size: 12px; color: var(--sub); }
+.pn-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
+.pn-aviso { padding: 10px 12px; border-radius: var(--raio-interno); background: rgba(242,179,61,.14); font-size: 12.5px; }
+.pn-rodape { display: flex; align-items: center; gap: 8px; }
+.pn-rodape .pn-nota { flex: 1; }
+:where(.painel-n, .toast, .col, .premio) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+:where(.painel-n, .toast, .col) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.pn-bt, .painel-n .pn-bt, .toast .pn-bt {
+  height: 34px; padding: 0 12px; flex: none; display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--raio-interno); font-size: 12.5px; font-weight: 600;
+  background: var(--acento); color: var(--acento-txt);
+}
+.pn-bt.sec, .painel-n .pn-bt.sec, .toast .pn-bt.sec { background: var(--sup); color: var(--texto); }
+.pn-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.pn-bt .ic { width: 15px; height: 15px; fill: none; }
+.pn-abas {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px;
+  background: var(--sup); border-radius: var(--raio-botao);
+}
+.painel-n .pn-abas button { height: 32px; border-radius: var(--raio-interno); font-size: 12.5px; font-weight: 600; color: var(--sub); }
+.painel-n .pn-abas button.sel { background: var(--elev); color: var(--texto); box-shadow: var(--sombra-aba); }
+.painel-n .pn-abas button:not(.sel):hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.pn-busca { position: relative; display: block; }
+.pn-busca > span { position: absolute; left: 12px; top: 11px; color: var(--sub); line-height: 0; }
+.pn-busca > span .ic { width: 16px; height: 16px; fill: none; }
+.pn-busca input {
+  width: 100%; height: 38px; padding: 0 12px 0 36px; font: inherit; font-size: 13px;
+  background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); outline: none;
+}
+.pn-busca input:focus { border-color: var(--acento); }
+.pn-busca input::placeholder { color: var(--sub); }
+.pn-numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pn-num { padding: 10px; border-radius: var(--raio-interno); background: var(--sup); display: flex; flex-direction: column; gap: 2px; }
+.pn-num b { font-size: 18px; font-weight: 700; }
+.pn-num span { font-size: 11.5px; color: var(--sub); }
+.pn-num.ok b { color: #35D07F; }
+.pn-num.erro b { color: var(--perigo); }
+.pn-num.acento b { color: var(--icone); }
+
+/* ───────── TELA E BORDA: as telas em escala + onde ele fica ───────── */
+.tela { width: 360px; }
+.tela-mon { position: relative; margin: 0 auto; min-height: 40px; }
+.painel-n .tela-un {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: 6px; background: var(--sup); box-shadow: inset 0 0 0 2px var(--borda); overflow: hidden;
+}
+.tela-un b { font-size: 13px; }
+.tela-un span { font-size: 10.5px; color: var(--sub); white-space: nowrap; }
+.painel-n .tela-un.sel { background: var(--acento-suave); box-shadow: inset 0 0 0 2px var(--acento); }
+.painel-n .tela-un:hover { filter: brightness(1.1); }
+.tela-mapa { position: relative; height: 150px; border-radius: var(--raio-botao); background: var(--sup); }
+.tela-moldura {
+  position: absolute; left: 14%; right: 14%; top: 8%; bottom: 22%;
+  border-radius: 6px; box-shadow: inset 0 0 0 2px var(--sup2);
+}
+.tela-moldura::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: var(--sup2); border-radius: 0 0 6px 6px; }
+.painel-n .tela-alvo {
+  position: absolute; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--fundo); box-shadow: inset 0 0 0 2px var(--sup2);
+  display: flex; align-items: center; justify-content: center;
+}
+.tela-alvo::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--sub); }
+.painel-n .tela-alvo.sel { background: var(--acento); box-shadow: none; }
+.tela-alvo.sel::after { background: var(--acento-txt); }
+.painel-n .tela-alvo:hover:not(.sel) { box-shadow: inset 0 0 0 2px var(--acento); }
 
 /* ───────── ANIMAÇÕES DE GESTO ───────── */
 @keyframes carinho {
@@ -181,105 +516,115 @@ body.parado .pet.idle svg { animation: none; }
   100% { opacity: 0; transform: translateY(-95px) scale(1.15); }
 }
 
-/* ───────── BALÃOZINHO (toast) ───────── */
+/* ───────── AVISOS (balãozinho) — 22/10/2026: ícone de traço, ações e encostado no boneco ───────── */
 .toast {
-  position: absolute; z-index: 62; display: flex; gap: 8px; align-items: flex-start;
-  max-width: 330px; padding: 9px 11px; cursor: pointer;
-  background: rgba(9, 26, 24, .97); border: 2px solid #14a08a; border-radius: 13px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.55);
+  position: absolute; z-index: 62; width: max-content; max-width: 360px; box-sizing: border-box;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 14px;
+  cursor: pointer; font-family: var(--fonte); color: var(--texto);
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: var(--raio-painel);
+  box-shadow: var(--sombra);
 }
 .toast.oculto { display: none; }
-.toast.mini { border-color: #7fd7c4; background: rgba(11,34,31,.95); }
-.toast-ico { font-size: 20px; line-height: 1; }
-.toast-txt { font-size: 12px; line-height: 1.35; color: #dffbf4; }
-.toast-txt b { color: #9fe9d8; }
-.toast-txt span { display: block; opacity: .82; font-size: 11px; }
+.toast-ico {
+  width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  background: var(--acento-suave); color: var(--icone);
+}
+.toast-ico .ic { fill: none; }
+.toast-ico.ok { background: rgba(53,208,127,.14); color: #35D07F; }
+.toast-ico.aviso { background: rgba(242,179,61,.16); color: #E0A52E; }
+.toast-txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-self: center; }
+.toast-txt b { font-size: 13.5px; font-weight: 650; }
+.toast-txt span { font-size: 12.5px; line-height: 1.4; color: var(--sub); }
+.toast-txt span:empty { display: none; }
+.toast .toast-x { width: 26px; height: 26px; border-radius: 6px; color: var(--sub); }
+.toast .toast-x .ic { width: 14px; height: 14px; }
+.toast-acoes { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.toast .toast-acoes .pn-bt { height: 30px; }
+/* confirmação rápida: uma linha só, sem fechar */
+.toast.mini { padding: 8px 14px 8px 8px; gap: 10px; }
+.toast.mini .toast-ico { width: 28px; height: 28px; border-radius: 8px; }
+.toast.mini .toast-x { display: none; }
+.toast.mini .toast-txt b { font-size: 13px; }
+.toast.mini .toast-txt span { font-size: 12px; }
 
 /* ───────── CHAT ESTENDIDO ─────────
    Não é janela do Windows: é um painel do overlay (que cobre a tela). Como o
    fundo é transparente, ele se comporta como janela: centraliza, arrasta e
-   redimensiona. O título mantém a identidade do produto. */
-/* o balão do boneco cresce para CIMA e para no máximo 30% da altura da tela
-   (a posição é ancorada pelo rodapé no JS — ver ancoraBalao) */
-.balao { max-height: 30vh; }
+   redimensiona — e lembra onde ficou (cfg.chatGrande). O cabeçalho é o mesmo do
+   balão (.cg-topo divide as regras com .chat-topo). */
 .cg {
   position: absolute; z-index: 70; display: flex; flex-direction: column;
-  background: rgba(9, 26, 24, .98); color: #eafff9; /* mesma cor do balão */
-  border: 2px solid #14a08a; border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0,0,0,.6); overflow: hidden; min-width: 380px; min-height: 280px;
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte); /* mesma cor do balão */
+  border: 1px solid var(--borda); border-radius: var(--raio-painel);
+  box-shadow: var(--sombra); overflow: hidden; min-width: 380px; min-height: 280px;
 }
 .cg.oculto { display: none; }
-.cg-topo {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: move;
-  /* mesmo padrão de cores do balão pequeno (pedido do dono, 02/10/2026) */
-  background: rgba(20,160,138,.18);
-  border-bottom: 1px solid rgba(20,160,138,.4); user-select: none;
-}
-.cg-tit { font-size: 12.5px; font-weight: 700; color: #dffbf4; }
-.cg-marca { font-size: 10px; letter-spacing: .5px; color: #9fe9d8; opacity: .95;
-  border: 1px solid rgba(159,233,216,.5); border-radius: 6px; padding: 1px 6px; }
-.cg-sub { font-size: 10px; opacity: .6; margin-left: auto; }
-.cg-x { cursor: pointer; font-size: 13px; padding: 0 4px; opacity: .8; }
-.cg-x:hover { opacity: 1; }
-.cg-msgs { flex: 1; max-height: none; overflow-y: auto; }
-.cg-rodape { display: flex; gap: 6px; padding: 8px; border-top: 1px solid rgba(20,160,138,.3); }
+.cg-topo { cursor: move; user-select: none; }
+.cg-msgs { flex: 1; overflow-y: auto; }
+.cg-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
 .cg-rodape input {
-  flex: 1; background: #061a18; color: #eafff9; border: 1px solid #14a08a;
-  border-radius: 10px; font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;
+  flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); font-family: inherit; font-size: 13.5px; padding: 9px 12px; outline: none;
 }
+.cg-rodape input:focus { border-color: var(--acento); }
+.cg-rodape input::placeholder { color: var(--sub); }
+.cg-bt {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno);
+  font-size: 13px; font-weight: 600; padding: 8px 14px;
+}
+.cg-bt:hover { filter: brightness(1.08); }
 /* botão secundário (voltar ao chat pequeno) na paleta do chat */
 .cg-bt.sec {
-  background: rgba(20,160,138,.16); color: #dffbf4;
-  border: 1px solid rgba(20,160,138,.45); font-weight: 600; padding: 5px 10px; font-size: 11px;
+  background: transparent; color: var(--sub); border: 1px solid var(--borda);
+  font-size: 12px; padding: 6px 10px;
 }
-.cg-bt.sec:hover { background: rgba(20,160,138,.3); }
-.cg-rodape input::placeholder { color: #9fe9d8; opacity: .55; }
-/* copiar mensagem: aparece discreto e nunca atrapalha a leitura */
+.cg-bt.sec:hover { filter: none; box-shadow: inset 0 0 0 999px var(--hover); color: var(--texto); }
+.cg-bt .ic { width: 15px; height: 15px; }
+/* copiar mensagem: aparece só no hover e nunca atrapalha a leitura */
 .msgs .m { position: relative; }
 .msgs .m .copiar {
-  position: absolute; top: 2px; right: 4px; font-size: 11px; line-height: 1;
-  padding: 3px 5px; border-radius: 6px; cursor: pointer; opacity: .35;
-  background: rgba(0,0,0,.35); color: #9fe9d8; user-select: none;
+  position: absolute; top: 4px; right: 4px; display: flex; padding: 4px; line-height: 0;
+  border-radius: var(--raio-interno); cursor: pointer; opacity: 0;
+  background: var(--fundo); color: var(--sub); border: 1px solid var(--borda); user-select: none;
+  transition: opacity .12s ease;
 }
-.msgs .m:hover .copiar { opacity: .95; }
-.msgs .m .copiar.copiado { color: #041412; background: #35d07f; opacity: 1; }
-.msgs .eu .copiar { background: rgba(0,0,0,.3); }
-.cg-bt {
-  background: #14a08a; color: #041412; border: 0; border-radius: 8px; cursor: pointer;
-  font-family: inherit; font-size: 12px; font-weight: 700; padding: 8px 14px;
-}
-.cg-bt:hover { background: #17bfa5; }
+.msgs .m:hover .copiar { opacity: 1; }
+.msgs .m .copiar:hover { color: var(--texto); }
+.msgs .m .copiar.copiado { color: var(--acento); opacity: 1; }
+.msgs .m .copiar .ic { fill: none; }
 .cg-puxa {
-  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 45%, rgba(20,160,138,.85) 50%, rgba(20,160,138,.85) 60%, transparent 65%);
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; opacity: .45;
+  background: linear-gradient(135deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
 }
+.cg-puxa:hover { opacity: 1; }
 
 /* ───────── BICHO (tamagotchi): painel, barras e movimento ───────── */
 .bicho {
   position: absolute; z-index: 66; width: 300px; display: flex; flex-direction: column;
-  gap: 7px; padding: 11px; font-size: 11.5px; color: #eafff9;
-  background: rgba(9, 26, 24, .97); border: 2px solid #14a08a; border-radius: 14px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.55);
+  gap: 7px; padding: 11px; font-size: 11.5px; color: var(--texto);
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: var(--raio-painel);
+  box-shadow: var(--sombra);
 }
 .bicho.oculto { display: none; }
 .bicho-topo { display: flex; align-items: center; gap: 8px; padding-bottom: 6px;
-  border-bottom: 1px solid rgba(20,160,138,.35); }
-.bicho-topo b { font-size: 12.5px; color: #dffbf4; }
+  border-bottom: 1px solid var(--borda); }
+.bicho-topo b { font-size: 12.5px; color: var(--texto); }
 .bicho-x { margin-left: auto; cursor: pointer; font-size: 13px; opacity: .8; padding: 0 3px; }
 .bicho-x:hover { opacity: 1; }
 .bicho label { display: flex; align-items: center; gap: 6px; }
-.bicho input { flex: 1; background: #061a18; color: #eafff9; border: 1px solid #14a08a;
-  border-radius: 8px; padding: 5px 7px; font: inherit; outline: none; }
+.bicho input { flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--acento);
+  border-radius: var(--raio-interno); padding: 5px 7px; font: inherit; outline: none; }
 .bicho-dupla { display: flex; gap: 8px; }
 .bicho-dupla label { flex: 1; }
 .bicho-linha-bt { display: flex; gap: 6px; }
-.bicho-bt { flex: 1; background: rgba(20,160,138,.16); color: #dffbf4; cursor: pointer;
-  border: 1px solid rgba(20,160,138,.45); border-radius: 9px; padding: 6px 4px;
+.bicho-bt { flex: 1; background: var(--sup); color: var(--texto); cursor: pointer;
+  border: 1px solid var(--borda); border-radius: var(--raio-interno); padding: 6px 4px;
   font: inherit; font-size: 11px; }
-.bicho-bt:hover { background: rgba(20,160,138,.32); }
+.bicho-bt:hover { background: var(--sup2); }
 .bicho-lin { display: flex; align-items: center; gap: 7px; }
 .bicho-lin span { width: 76px; opacity: .85; }
-.bicho-lin i { flex: 1; height: 7px; background: rgba(0,0,0,.4); border-radius: 5px; overflow: hidden; }
+.bicho-lin i { flex: 1; height: 7px; background: var(--sup2); border-radius: 5px; overflow: hidden; }
 .bicho-lin i b { display: block; height: 100%; }
 .bicho-lin em { width: 26px; text-align: right; font-style: normal; opacity: .75; }
 .bicho-est { opacity: .6; font-size: 10.5px; padding-top: 4px; }
@@ -312,151 +657,131 @@ body.parado .pet.idle svg { animation: none; }
    veste mais nada por enquanto; quem vai vestir são os bonecos próprios do
    PetAgent, que ainda não existem) */
 .bicho-cole { display: flex; flex-wrap: wrap; gap: 6px; font-size: 22px; }
-.bicho-cole span { background: rgba(20,160,138,.14); border: 1px solid rgba(20,160,138,.35);
-  border-radius: 9px; padding: 3px 6px; }
+.bicho-cole span { background: var(--sup); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); padding: 3px 6px; }
 
-/* ── painel de bonecos (galeria) ─────────────────────────────────── */
-.pets {
-  position: absolute; z-index: 64; width: 430px; max-height: 480px; display: flex;
-  flex-direction: column; gap: 8px; padding: 11px; overflow: hidden;
-  background: rgba(9, 26, 24, .97); border: 2px solid #14a08a; border-radius: 14px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.55);
-}
-.pets.oculto { display: none; }
-.pets-tit { font-size: 12px; font-weight: 700; color: #9fe9d8; display: flex; align-items: baseline; gap: 6px; }
-.pets-x { margin-left: auto; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 3px; opacity: .75; }
-.pets-x:hover { opacity: 1; }
-.pets-sub { font-weight: 400; opacity: .85; font-size: 11px; }
-.pets-linha { display: flex; gap: 6px; flex-wrap: wrap; }
-.pets-inp {
-  flex: 1; min-width: 180px; background: rgba(20,160,138,.12);
-  border: 1px solid rgba(20,160,138,.35); border-radius: 8px; color: #dffbf4;
-  font-family: inherit; font-size: 11.5px; padding: 6px 8px; outline: none;
-}
-/* o grid ocupa o espaço que sobra: assim a última linha de botões (Fechar)
-   NUNCA fica fora da moldura — era o que acontecia com max-height fixo */
+/* ── TROCAR BONECO (22/10/2026): busca, abas, cartões com botão ──────────────── */
+.pets { width: 460px; }
+/* o grid ocupa o espaço que sobra: assim o rodapé NUNCA fica fora da moldura */
 .pets-grade {
-  flex: 1 1 auto; min-height: 110px; display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 7px; overflow-y: auto; align-content: start;
+  flex: 1 1 auto; min-height: 120px; max-height: 340px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px; overflow-y: auto; align-content: start;
 }
-.pets-grade::-webkit-scrollbar { width: 7px; }
-.pets-grade::-webkit-scrollbar-thumb { background: rgba(20,160,138,.5); border-radius: 4px; }
-.pets-grade .aviso { grid-column: 1 / -1; font-size: 11px; opacity: .8; padding: 8px 2px; }
+.pets-grade .aviso { grid-column: 1 / -1; font-size: 12.5px; color: var(--sub); padding: 10px 2px; }
 .card {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px;
-  border-radius: 10px; cursor: pointer;
-  background: rgba(20,160,138,.08); border: 1px solid rgba(20,160,138,.22);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px;
+  border-radius: var(--raio-botao); cursor: pointer; background: var(--sup);
 }
-.card:hover { background: rgba(20,160,138,.28); }
-.card.sel { border-color: #9fe9d8; background: rgba(20,160,138,.4); }
+.card:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.card.sel { box-shadow: inset 0 0 0 2px var(--acento); }
 /* a folha é 8x9: 800%/900% + posição 0,0 = mostra UM frame (o primeiro) */
 .card .thumb {
-  width: 66px; height: 72px; border-radius: 7px; background-color: rgba(0,0,0,.22);
+  width: 100%; aspect-ratio: 66 / 72; border-radius: var(--raio-interno); background-color: var(--sup2);
   background-repeat: no-repeat; background-size: 800% 900%; background-position: 0 0;
 }
-.card .nome { font-size: 9.5px; color: #dffbf4; text-align: center; max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card .tipo { font-size: 8.5px; opacity: .6; }
-.pets-dica { font-size: 10px; opacity: .75; line-height: 1.3; }
-/* os botões do painel precisam do próprio estilo: a regra .b só existia dentro
-   de .tela-linha, então aqui eles apareciam sem fundo nenhum (bug 02/10/2026) */
-.pets .b {
-  padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 11px;
-  background: rgba(20,160,138,.18); border: 1px solid rgba(20,160,138,.45);
-  color: #dffbf4;
+.card .nome { width: 100%; font-size: 12px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.painel-n .card .usar {
+  width: 100%; height: 26px; border-radius: 6px; font-size: 11.5px; font-weight: 600;
+  background: var(--sup2); color: var(--texto);
 }
-.pets .b:hover { background: rgba(20,160,138,.34); }
-.card .usar {
-  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
-  background: #14a08a; color: #041412; margin-top: 1px;
-}
+.painel-n .card .usar.prim { background: var(--acento); color: var(--acento-txt); }
+.painel-n .card .usar.em-uso { background: var(--acento-suave); color: var(--texto); }
 
-.email {
-  position: absolute; z-index: 63; width: 400px; max-height: 460px; display: flex;
-  flex-direction: column; gap: 7px; padding: 10px;
-  background: rgba(9, 26, 24, .97); border: 2px solid #14a08a; border-radius: 14px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.55);
-}
-.email.oculto { display: none; }
-.email-resumo { font-size: 11px; color: #9fe9d8; line-height: 1.35; }
-.email-lista { overflow-y: auto; max-height: 300px; display: flex; flex-direction: column; gap: 5px; }
-.email-lista::-webkit-scrollbar { width: 7px; }
-.email-lista::-webkit-scrollbar-thumb { background: rgba(20,160,138,.5); border-radius: 4px; }
+/* ── E-MAIL (22/10/2026): números + "remetentes novos, me ensine" ─────────────── */
+.email { width: 432px; }
+.email-lista { overflow-y: auto; max-height: 300px; display: flex; flex-direction: column; gap: 6px; }
 .email-item {
-  display: flex; gap: 6px; align-items: center; padding: 5px 7px; border-radius: 9px;
-  background: rgba(20,160,138,.09); border: 1px solid rgba(20,160,138,.25);
+  display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--raio-interno);
+  background: var(--sup);
 }
-.email-item .txt { flex: 1; min-width: 0; font-size: 11px; color: #dffbf4; overflow: hidden; }
-.email-item .txt b { display: block; color: #9fe9d8; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.email-item .txt span { display: block; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.email-item .bt {
-  flex: 0 0 auto; cursor: pointer; font-size: 14px; padding: 3px 6px; border-radius: 7px;
-  background: rgba(20,160,138,.18); border: 1px solid rgba(20,160,138,.4);
-}
-.email-item .bt:hover { background: rgba(20,160,138,.35); }
-.email-vazio { font-size: 11px; opacity: .7; padding: 6px; }
+.email-item .ponto { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.email-item .ponto.on { background: var(--acento); }
+.email-item .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.email-item .txt b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.email-item .txt b i { font-style: normal; font-weight: 400; color: var(--sub); }
+.email-item .txt span { font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.painel-n .email-item .bt { height: 28px; padding: 0 10px; flex: none; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.painel-n .email-item .bt.imp { background: rgba(53,208,127,.14); color: #1f9d55; }
+.painel-n .email-item .bt.lixo { background: rgba(255,82,82,.10); color: var(--perigo); }
+:root[data-tema="escuro"] .painel-n .email-item .bt.imp { color: #5FE39A; }
+.painel-n .email-item .bt:hover { filter: brightness(1.15); }
+.email-vazio { padding: 18px; border-radius: var(--raio-interno); background: var(--sup); text-align: center; font-size: 13px; color: var(--sub); }
 
-/* ── PRÊMIOS: cartão de revelação do presente (a "entrega") ──────────────────
-   Nasce no centro da tela, com a cor e o brilho da raridade; sai sozinho.
-   Raro pra cima ganha anel pulsante — é o "destaque" pedido pelo dono. */
+/* ── PRESENTE ACHADO (22/10/2026): nasce em cima do boneco; clicar abre a Coleção ── */
 .premio {
-  position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%);
-  z-index: 60; width: 210px; padding: 12px 12px 10px; border-radius: 16px;
-  text-align: center; color: #eef6ff;
-  background: radial-gradient(120% 120% at 50% 0%, #202a3a 0%, #141a24 70%);
-  border: 1px solid rgba(255,255,255,.18);
-  box-shadow: 0 16px 44px rgba(0,0,0,.55);
-  font-family: inherit;
+  position: absolute; z-index: 60; width: 236px; box-sizing: border-box; padding: 18px 18px 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; cursor: pointer;
+  font-family: var(--fonte); color: var(--texto);
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: calc(var(--raio-painel) + 2px);
+  box-shadow: var(--sombra);
 }
 .premio.oculto { display: none; }
 .premio.entrando { animation: pcEntra .34s cubic-bezier(.2,1.4,.4,1) both; }
 @keyframes pcEntra {
-  0%   { transform: translate(-50%, -50%) scale(.55) rotate(-7deg); opacity: 0; }
-  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  0%   { transform: scale(.6) rotate(-6deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 .pc-fita {
-  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em;
-  color: #0d1117; padding: 2px 9px; border-radius: 999px; margin-bottom: 6px;
+  height: 24px; padding: 0 12px; border-radius: 12px; display: flex; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  background: var(--cor); color: #111215;
 }
-.pc-ico { font-size: 54px; line-height: 1.05; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
-.pc-nome { font-size: 12.5px; font-weight: 600; margin: 4px 2px 6px; }
-.pc-novo { display: block; font-size: 11px; color: #7dffbe; font-weight: 700; }
-.pc-rep  { display: block; font-size: 11px; color: #ffd76e; font-weight: 700; }
-.pc-rodape { margin-top: 7px; font-size: 10.5px; opacity: .72; }
-/* raro pra cima: anel pulsante na cor da raridade (o destaque) */
-.premio.raro, .premio.epico, .premio.lendario, .premio.mitico, .premio.ultra {
-  border-color: var(--cor, #38bdf8);
-  animation: pcEntra .34s cubic-bezier(.2,1.4,.4,1) both, pcBrilho 1.5s ease-in-out infinite .34s;
+.pc-ico {
+  width: 96px; height: 96px; border-radius: 24px; display: flex; align-items: center; justify-content: center;
+  font-size: 56px; line-height: 1; background: var(--sup); box-shadow: inset 0 0 0 2px var(--borda);
 }
+.premio.brilha { border-color: var(--cor); }
+.premio.brilha .pc-ico { box-shadow: inset 0 0 0 2px var(--cor); }
+.premio.brilha.entrando { animation: pcEntra .34s cubic-bezier(.2,1.4,.4,1) both, pcBrilho 1.6s ease-in-out infinite .34s; }
 @keyframes pcBrilho {
-  0%, 100% { box-shadow: 0 16px 44px rgba(0,0,0,.55), 0 0 0 0 rgba(255,255,255,0); }
-  50%      { box-shadow: 0 16px 44px rgba(0,0,0,.55), 0 0 26px 4px var(--cor, #38bdf8); }
+  0%, 100% { box-shadow: var(--sombra), 0 0 0 0 rgba(0,0,0,0); }
+  50%      { box-shadow: var(--sombra), 0 0 30px 2px var(--cor); }
 }
-.premio.ultra { width: 232px; background: radial-gradient(120% 120% at 50% 0%, #3b1220 0%, #1a0c13 70%); }
+.pc-nome { font-size: 16px; font-weight: 650; }
+.pc-selo { height: 26px; padding: 0 12px; border-radius: 13px; display: flex; align-items: center; font-size: 12.5px; font-weight: 600; }
+.pc-selo.novo { background: rgba(53,208,127,.14); color: #1f9d55; }
+.pc-selo.rep { background: rgba(242,179,61,.16); color: #B7811A; }
+:root[data-tema="escuro"] .pc-selo.novo { color: #5FE39A; }
+:root[data-tema="escuro"] .pc-selo.rep { color: #F2C66B; }
+.pc-rodape { font-size: 11.5px; color: var(--sub); }
 
-/* ── PRÊMIOS: galeria (moedeiro, raros em destaque, coleção) ──────────────── */
-.gl-moeda {
-  display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: #ffe08a;
-  padding: 6px 2px 8px; border-bottom: 1px solid rgba(255,255,255,.12); margin-bottom: 8px;
+/* ── COLEÇÃO (22/10/2026): moedas, progresso, filtro por raridade, raros em destaque ── */
+.bicho.col { width: 420px; gap: 14px; padding: 16px; font-size: 13px; font-family: var(--fonte); overflow-y: auto; }
+.col-moedas {
+  height: 30px; padding: 0 12px; border-radius: 15px; display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; background: rgba(242,179,61,.16); color: #B7811A; white-space: nowrap;
 }
-.gl-moeda b { font-size: 16px; }
-.gl-prog { margin-left: auto; font-size: 10.5px; color: #9fb0c4; }
-.gl-tit { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; opacity: .68; margin: 6px 0 4px; }
-.gl-raros { background: rgba(56,189,248,.07); border: 1px solid rgba(56,189,248,.22); border-radius: 11px; padding: 6px 7px; }
-.gl-grade { display: flex; flex-wrap: wrap; gap: 4px; }
-.gl-item {
-  font-size: 19px; line-height: 1; width: 30px; height: 30px; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center; cursor: default;
-  background: rgba(255,255,255,.05); border: 1px solid var(--cor, rgba(255,255,255,.18));
+:root[data-tema="escuro"] .col-moedas { color: #F2C66B; }
+.col-moedas .ic { fill: none; }
+.col-prog { display: flex; flex-direction: column; gap: 6px; }
+.col-prog > span { display: flex; justify-content: space-between; font-size: 12.5px; }
+.col-prog > span > span:first-child { color: var(--sub); }
+.col-prog i { height: 6px; border-radius: 3px; background: var(--sup2); overflow: hidden; display: block; }
+.col-prog i b { display: block; height: 100%; background: var(--acento); border-radius: 3px; }
+.col-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.col .col-chip {
+  height: 28px; padding: 0 10px; border-radius: 14px; display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; border: 1px solid var(--borda);
 }
-.gl-item.incomum { box-shadow: inset 0 0 6px rgba(74,222,128,.25); }
-.gl-item.raro, .gl-item.epico, .gl-item.lendario, .gl-item.mitico, .gl-item.ultra {
-  border-width: 2px; box-shadow: 0 0 8px -1px var(--cor, #38bdf8);
-  background: rgba(255,255,255,.08);
+.col-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--cor); }
+.col-chip span { color: var(--sub); }
+.col .col-chip.sel { background: var(--sup2); border-color: var(--cor); }
+.col-raros { padding: 12px; border-radius: var(--raio-botao); background: var(--sup); display: flex; flex-direction: column; gap: 8px; }
+.col-raros > span { font-size: 12px; font-weight: 600; color: var(--sub); }
+.col-raros > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.col-raros .col-item { width: 52px; height: 52px; font-size: 28px; border-radius: 12px; background: var(--fundo);
+  box-shadow: inset 0 0 0 2px var(--cor), 0 0 14px -4px var(--cor); }
+.col-sec { font-size: 12px; font-weight: 600; color: var(--sub); margin-bottom: -6px; }
+.col-grade { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; max-height: 200px; overflow-y: auto; }
+.col-item {
+  aspect-ratio: 1; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; line-height: 1; background: var(--sup); box-shadow: inset 0 0 0 1px var(--cor);
 }
-.gl-item.ultra { animation: glPulsa 2.2s ease-in-out infinite; }
+.col-item.comum { box-shadow: inset 0 0 0 1px var(--borda); }
+.col-item.ultra { animation: glPulsa 2.2s ease-in-out infinite; }
 @keyframes glPulsa {
-  0%, 100% { box-shadow: 0 0 8px -1px var(--cor, #f43f5e); }
-  50%      { box-shadow: 0 0 16px 2px var(--cor, #f43f5e); }
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--cor), 0 0 8px -1px var(--cor); }
+  50%      { box-shadow: inset 0 0 0 2px var(--cor), 0 0 16px 2px var(--cor); }
 }
-.gl-todos { max-height: 132px; overflow-y: auto; }
-.gl-contadores { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10.5px; font-weight: 700; margin: 2px 0 4px; }
+.col-rodape { display: flex; align-items: center; gap: 10px; }
+.col-rodape > span { flex: 1; font-size: 12px; color: var(--sub); }

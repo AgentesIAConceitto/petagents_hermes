@@ -35,12 +35,17 @@ var (
 	ponteLinhas chan string // stdout da ponte, linha a linha — de UM leitor só (ligaPonte)
 	ponteMu     sync.Mutex  // uma pergunta por vez
 	ponteSeq    int         // id da pergunta em andamento (só muda com ponteMu)
-	ponteUma    sync.Once
+
+	// o processo da ponte: guardado para poder REINICIAR (painel Inteligência trocou a IA).
+	// Antes era um sync.Once e o processo nem era guardado — subia uma vez e pronto.
+	ponteVidaMu sync.Mutex
+	ponteCmd    *exec.Cmd
 
 	// escritos pelo leitor da ponte e lidos a cada pergunta: sempre com a trava
 	ponteEstadoMu sync.Mutex
 	ponteErro     string
 	pontePronta   bool
+	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
 
 	// prazoPonte — quanto o app espera cada linha da ponte (variável só para o teste
 	// encurtar; o porquê dos 330 s está em perguntaPonte).
@@ -92,16 +97,30 @@ func caminhoPythonHermes() string {
 	return ""
 }
 
-// sobePonte — liga a ponte (uma vez só). O agente leva ~10 s para ficar pronto;
-// isso acontece no boot do app, fora do caminho da conversa.
+// sobePonte — liga a ponte (se já não estiver no ar). O agente leva ~10 s para ficar
+// pronto; isso acontece no boot do app, fora do caminho da conversa.
 func (a *App) sobePonte() {
-	ponteUma.Do(func() {
+	ponteVidaMu.Lock()
+	defer ponteVidaMu.Unlock()
+	if ponteCmd != nil {
+		return
+	}
+	func() {
+		// provedor que exige complemento do Hermes (inteligencia.go, garanteComplemento): quem
+		// trocou para a Anthropic direto no Hermes, sem o painel, também fica coberto. ~1 s
+		// quando já está instalado; falhando, a ponte sobe igual e o chat mostra o erro.
+		if p, ok := provedorPorID(iaAgora().Provedor); ok {
+			_, _ = garanteComplemento(p)
+		}
 		script, py := caminhoPonte(), caminhoPythonHermes()
 		if script == "" || py == "" {
 			marcaPonte(false, "ponte indisponível (script ou python não encontrados)")
 			return
 		}
 		cmd := exec.Command(py, script)
+		// IA só do boneco (inteligencia.go): modelo e chave vão para a ponte pelo AMBIENTE,
+		// nunca pela linha de comando; ela monta o espelho com eles
+		cmd.Env = append(os.Environ(), envPonte()...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			HideWindow:    true,
 			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
@@ -128,8 +147,39 @@ func (a *App) sobePonte() {
 			return
 		}
 		logMsg("ponte: chat quente ligado (hermes acp via chat_bridge.py)")
+		ponteCmd = cmd
 		ligaPonte(in, out)
-	})
+	}()
+}
+
+// reiniciaPonte — derruba e sobe de novo (a IA mudou). Fechar o stdin faz a ponte
+// derrubar o backend dela (a árvore inteira, ver _derruba_arvore) e sair; se não sair em
+// 15 s, morre na marra. Espera a pergunta em andamento terminar (ponteMu).
+func (a *App) reiniciaPonte() {
+	ponteMu.Lock()
+	ponteVidaMu.Lock()
+	marcaPonte(false, "reiniciando o agente")
+	ponteEstadoMu.Lock()
+	ponteModelo = "" // o handshake novo traz o modelo novo
+	ponteEstadoMu.Unlock()
+	if ponteIn != nil {
+		_ = ponteIn.Close()
+	}
+	if ponteCmd != nil {
+		fim := make(chan struct{})
+		go func(c *exec.Cmd) { _ = c.Wait(); close(fim) }(ponteCmd)
+		select {
+		case <-fim:
+		case <-time.After(15 * time.Second):
+			_ = ponteCmd.Process.Kill()
+			logMsg("ponte: não saiu sozinha em 15 s — encerrada à força")
+		}
+		ponteCmd = nil
+	}
+	ponteVidaMu.Unlock()
+	ponteMu.Unlock() // ligaPonte (dentro de sobePonte) pega esta trava
+	logMsg("ponte: reiniciando (a IA mudou)")
+	a.sobePonte()
 }
 
 func estadoPonte() (pronta bool, erro string) {
@@ -145,6 +195,23 @@ func marcaPonte(pronta bool, erro string) {
 	if erro != "" {
 		logMsg("ponte: " + erro)
 	}
+}
+
+// guardaModelo — a ponte manda o modelo no handshake e em cada resposta (vazio = não sabe,
+// e não apaga o que já se sabia).
+func guardaModelo(m string) {
+	if m = strings.TrimSpace(m); m == "" {
+		return
+	}
+	ponteEstadoMu.Lock()
+	ponteModelo = m
+	ponteEstadoMu.Unlock()
+}
+
+func modeloPonte() string {
+	ponteEstadoMu.Lock()
+	defer ponteEstadoMu.Unlock()
+	return ponteModelo
 }
 
 // ligaPonte — passa a conversar com a ponte por estes canos.
@@ -172,6 +239,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 		var d struct {
 			Pronto bool   `json:"pronto"`
 			Erro   string `json:"erro"`
+			Modelo string `json:"modelo"`
 		}
 		if json.Unmarshal([]byte(linha), &d) != nil {
 			marcaPonte(false, "handshake ilegível: "+strings.TrimSpace(linha))
@@ -182,6 +250,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 			return
 		}
 		marcaPonte(true, "")
+		guardaModelo(d.Modelo)
 		logMsg("ponte: agente quente confirmado (handshake ok)")
 		for {
 			linha, err := r.ReadString('\n')
@@ -240,6 +309,7 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				Texto     string  `json:"texto"`
 				Erro      string  `json:"erro"`
 				Segundos  float64 `json:"segundos"`
+				Modelo    string  `json:"modelo"`
 			}
 			if err := json.Unmarshal([]byte(linha), &d); err != nil {
 				txt := strings.TrimSpace(linha)
@@ -286,6 +356,7 @@ func (a *App) perguntaPonte(texto string) (string, bool) {
 				}
 				return "", false
 			}
+			guardaModelo(d.Modelo)
 			logMsg(fmt.Sprintf("ponte: resposta quente em %.1fs", time.Since(t0).Seconds()))
 			return d.Resposta, true
 		case <-time.After(prazoPonte):

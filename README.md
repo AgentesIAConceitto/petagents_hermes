@@ -142,11 +142,38 @@ go build ./... && go vet ./...      # tem de passar limpo
 wails build -s                      # gera build/bin/petagent.exe
 ```
 
-### Configuração (painel 🐾)
+### O painel do pet (menu › Pet › Como está / Cuidar dele)
 
-Nome do bicho, horário de trabalho (início/fim), **água a cada (h)**, **caminhar a
-cada (min)**, modo foco, dormir (1–4 h), perfil de animação, escolha de boneco na
-galeria, gráfico do bicho e a coleção 💎. Tudo pelo painel — sem editar arquivo.
+Um painel só, encostado no boneco: **4 anéis** (Água, Comida, Movimento, Carinho — cheio
+é bem), botões de cuidado rápido e o **próximo lembrete**. A engrenagem abre ao lado a
+**rotina** (nome, expediente com minutos, água e caminhada a cada X) e as **pausas**:
+
+- **Modo foco** — o pet fica quieto e só lembra da água (nem baú aparece). Não mexe nas
+  notificações do Windows nem de outros apps.
+- **Dormir** (30 min, 1 h, 2 h, 4 h) — ele cochila no canto, apagadinho e com zZ: sem
+  lembretes e sem as barras caírem. Um clique nele acorda; o painel tem "Acordar agora"
+  e "+1 h".
+
+Mudou a rotina? Grava na hora e mostra "✓ salvo". Perfil de animação, boneco da galeria
+e a coleção 💎 ficam no menu.
+
+### Configurar a IA (menu › Sistema › Inteligência)
+
+Provedor (OpenRouter, OpenAI, Anthropic, Google Gemini, DeepSeek, xAI), **chave**,
+**modelo** (lista vinda do provedor, com busca) e **Testar acesso**, que valida a chave
+sem gastar token e mostra o saldo quando o provedor informa. Sem nenhuma chave
+configurada, o painel abre sozinho na primeira vez.
+
+Você escolhe **onde vale**:
+
+- **Igual ao Hermes** — grava no `config.yaml` e no `.env` do Hermes (com cópia
+  `*.bak-petagent`). Vale para o boneco, o Telegram e o terminal.
+- **Só para o boneco** — o resto do Hermes não muda. A escolha fica em
+  `%LOCALAPPDATA%\petagent\inteligencia.json`, com a chave **cifrada pelo Windows**
+  (DPAPI: só o seu usuário abre). O boneco usa um home espelhado do Hermes com esse
+  modelo e essa chave.
+
+A chave nunca aparece inteira na tela, só mascarada (`sk-or-v1-…a3f9`).
 
 ### Atalho no desktop e início automático
 
@@ -325,11 +352,37 @@ go build ./... && go vet ./...      # must pass clean
 wails build -s                      # produces build/bin/petagent.exe
 ```
 
-### Configuration (panel 🐾)
+### The pet panel (menu › Pet › Como está / Cuidar dele)
 
-Pet name, working hours (start/end), **water every (h)**, **walk every (min)**, focus
-mode, sleep (1–4 h), animation profile, character gallery, pet stats graph and the 💎
-collection. Everything from the panel — no file editing.
+One panel, right next to the pet: **4 rings** (Water, Food, Movement, Affection — full
+means fine), quick-care buttons and the **next reminder**. The gear opens, alongside, the
+**routine** (name, working hours with minutes, water and walk every X) and the **breaks**:
+
+- **Focus mode** — the pet stays quiet and only reminds you of water (no chests either).
+  It does not touch Windows or other apps' notifications.
+- **Sleep** (30 min, 1 h, 2 h, 4 h) — it naps in its corner, dimmed with zZ: no reminders
+  and the bars stop dropping. Click it to wake up; the panel has "Acordar agora" and "+1 h".
+
+Changing the routine saves right away and shows "✓ salvo". Animation profile, character
+gallery and the 💎 collection live in the menu.
+
+### Configuring the AI (menu › Sistema › Inteligência)
+
+Provider (OpenRouter, OpenAI, Anthropic, Google Gemini, DeepSeek, xAI), **key**,
+**model** (list fetched from the provider, searchable) and **Test access**, which checks
+the key without spending tokens and shows the balance when the provider reports it. With
+no key configured at all, the panel opens by itself on first run.
+
+You choose **where it applies**:
+
+- **Same as Hermes** — writes Hermes' `config.yaml` and `.env` (with a `*.bak-petagent`
+  copy). Applies to the pet, Telegram and the terminal.
+- **Pet only** — the rest of Hermes is untouched. The choice lives in
+  `%LOCALAPPDATA%\petagent\inteligencia.json`, with the key **encrypted by Windows**
+  (DPAPI: only your user can open it). The pet runs a mirrored Hermes home with that
+  model and key.
+
+The key is never shown in full, only masked (`sk-or-v1-…a3f9`).
 
 ### Desktop shortcut and auto-start
 

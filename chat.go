@@ -92,6 +92,13 @@ func (a *App) chamarHermesFrio(texto string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, argsReserva(texto)...)
+	// IA só do boneco: a reserva usa o home espelhado (que a ponte monta com o modelo e a
+	// chave do boneco) — senão responderia com a IA do Hermes do dono
+	if iaAgora().Modo == "boneco" {
+		if base := os.Getenv("LOCALAPPDATA"); base != "" {
+			cmd.Env = append(os.Environ(), "HERMES_HOME="+filepath.Join(base, "petagent", "hermes-home"))
+		}
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW (nada de console piscando)
@@ -120,6 +127,28 @@ func (a *App) chamarHermesFrio(texto string) string {
 		return "(o Hermes não devolveu texto)"
 	}
 	return resp
+}
+
+// InfoChat — o que o cabeçalho do chat mostra: o modelo em uso (vem da ponte; vazio
+// enquanto ela não subiu), o saldo já formatado ("US$ 4.82", ou o motivo de não ter) e se
+// o agente quente está de pé (é ele que responde o chat — não o gateway).
+func (a *App) InfoChat() string {
+	a.mu.Lock()
+	saldo := a.balance
+	a.mu.Unlock()
+	pronta, erro := pontePronta, ponteErro
+	ef := iaAgora()
+	nome := ef.Provedor
+	if p, ok := provedorPorID(ef.Provedor); ok {
+		nome = p.Nome
+	}
+	modelo := modeloPonte()
+	if modelo == "" {
+		modelo = ef.Modelo // a ponte ainda não disse: o que está configurado
+	}
+	b, _ := json.Marshal(map[string]any{"modelo": modelo, "saldo": saldo, "pronta": pronta, "erro": erro,
+		"provedor": nome, "modo": ef.Modo})
+	return string(b)
 }
 
 // ChatIntegrado — o chat está ligado ao Hermes? (o frontend mostra isso na tela)

@@ -79,17 +79,19 @@
 
   const estaDormindo = () => cfg.dormirAte > agora();
   const estaEmFoco = () => !!cfg.foco;
+  // em MINUTOS: o painel aceita 08:30 (trabIni = 8.5). Antes só valia hora cheia.
   const emExpediente = () => {
-    const h = hora();
-    return cfg.trabIni <= cfg.trabFim
-      ? (h >= cfg.trabIni && h < cfg.trabFim)
-      : (h >= cfg.trabIni || h < cfg.trabFim); // turno que cruza a meia-noite
+    const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
+    const ini = Math.round(cfg.trabIni * 60), fim = Math.round(cfg.trabFim * 60);
+    return ini <= fim
+      ? (m >= ini && m < fim)
+      : (m >= ini || m < fim); // turno que cruza a meia-noite
   };
 
   // ── recado do bicho: balãozinho (toast), SEM abrir o chat ──────────────────
   // Regra do dono (03/10/2026): só o tile "Conversar" e as respostas do agente
   // abrem a conversa. Pedido/carinho/achado do bicho é RECADO — não sequestra o chat.
-  function fala(texto) {
+  function fala(texto, acoes, ico) {
     try {
       // prova externa: todo recado do bicho fica também no petagent.log (canal G.Log
       // que o front já tem para o Go). Acabou o "será que o balão saiu?".
@@ -99,7 +101,11 @@
         }
       } catch (e) { }
       if (window.petBipe) window.petBipe();      // sininho suave (pedido do dono)
-      if (typeof toast === "function") toast("🐾", cfg.nome || "Bicho", texto, 7000, true);
+      if (typeof toast === "function") {
+        // com ação, o aviso espera mais (45 s) — dá tempo de levantar e voltar
+        const tem = acoes && acoes.length;
+        toast(ico || "🐾", cfg.nome || "Bicho", texto, tem ? 45000 : 7000, !tem, { acoes: acoes || [] });
+      }
       else if (typeof msg === "function") msg(texto, "ele");
     } catch (e) { /* nunca deixa o bicho derrubar o app */ }
   }
@@ -112,18 +118,23 @@
     } catch (e) { /* ignora */ }
   }
 
+  // DORMIR (22/10/2026): ele fica NA TELA cochilando (apagadinho, com zZ) e um clique
+  // acorda. Antes ele SUMIA — e sumido não havia onde clicar: só restava esperar.
+  const marcaSono = (sim) => { try { document.body.classList.toggle("pet-dormindo", sim); } catch (e) { } };
   function dormir(horas) {
     cfg.dormirAte = agora() + Math.round(horas * 60) * MIN;
     salvar();
-    fala(`Boa noite! Vou dormir por ${horas} hora${horas > 1 ? "s" : ""} 😴`);
-    setTimeout(() => sumir(true), 1200);
+    marcaSono(true);
+    fala(horas < 1 ? `Boa noite! Vou cochilar ${Math.round(horas * 60)} minutinhos 😴`
+                   : `Boa noite! Vou dormir por ${horas} hora${horas > 1 ? "s" : ""} 😴`);
     pintaPainel();
   }
 
   function acordar() {
     cfg.dormirAte = 0;
     salvar();
-    sumir(false);
+    marcaSono(false);
+    sumir(false);   // quem dormiu numa versão antiga ficou ESCONDIDO: volta
     fala("Bom dia! Dormi bem. 💤");
     pintaPainel();
   }
@@ -142,6 +153,24 @@
     if (window.petBipe) window.petBipe();
     if (quanto >= 25) fala("Aaaah, carinho! 🥰");
   }
+  // LEMBRETE COM AÇÃO (22/10/2026, prancha "Avisos"): o aviso traz o botão que resolve
+  // — "Já bebi" conta como dar água, igual ao menu — e o "Daqui a 15 min", que repete o
+  // mesmo lembrete depois (o tique cuida, ver est.adiado).
+  const ACAO_LEMBRETE = {
+    agua: ["Já bebi", "agua", () => window.bichoAgua && window.bichoAgua()],
+    caminhada: ["Fui!", "exercicio", () => window.bichoExercicio && window.bichoExercicio()],
+    refeicao: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
+    lanche: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
+    atencao: ["Carinho", "cuidar", () => carinho(30)],
+  };
+  function lembra(tipo, frases) {
+    const a = ACAO_LEMBRETE[tipo];
+    const acoes = [];
+    if (a) acoes.push({ r: a[0], prim: true, fn: a[2] });
+    acoes.push({ r: "Daqui a 15 min", fn: () => { est.adiado = { tipo: tipo, frases: frases, ate: agora() + 15 * MIN }; salvar(); } });
+    fala(escolhe(frases), acoes, a ? a[1] : "");
+  }
+
   function alternarFoco() {
     cfg.foco = !cfg.foco; salvar(); pintaPainel();
     fala(cfg.foco
@@ -333,6 +362,9 @@
       for (const k of Object.keys(DECAIMENTO)) {
         est[k] = Math.max(0, est[k] - DECAIMENTO[k] * minutos);
       }
+      // humor: cai ~2 por hora e para em 30 (antes só subia — ficava sempre em 100).
+      // Sobe com cada cuidado e com cada tarefa feita no chat (bloco 2, feliz()).
+      if (typeof est.humor === "number") est.humor = Math.max(30, est.humor - minutos / 30);
 
       // ── AGENDA DO DIA (04/10/2026): avisa no horário, um aviso por vez ──────
       if (est.dia !== hoje()) {
@@ -350,7 +382,7 @@
         : minFake;
       const ev = decide(est, agoraMin, cfg, { ini: cfg.trabIni, fim: cfg.trabFim });
       if (ev && (!estaEmFoco() || ev.tipo === "agua")) {   // no foco, só água
-        fala(escolhe(ev.frases));
+        lembra(ev.tipo, ev.frases);
         est.feitos[chaveEv(ev)] = 1;
         est.ultimoAviso = agoraMin;
         est.avisosHoje = (est.avisosHoje || 0) + 1;
@@ -361,6 +393,12 @@
         if (ev.tipo === "lanche") { est.fome = Math.min(est.fome, 35); pend("fome", agoraMin); }
         if (ev.tipo === "caminhada") { est.exercicio = Math.min(est.exercicio, 25); pend("exercicio", agoraMin); }
         if (ev.tipo === "atencao") { est.carinho = Math.min(est.carinho, 25); pend("carinho", agoraMin); }
+      }
+      // lembrete adiado ("Daqui a 15 min"): chegou a hora, avisa de novo (no foco, só água)
+      if (est.adiado && t >= est.adiado.ate) {
+        const ad = est.adiado;
+        delete est.adiado;
+        if (!estaEmFoco() || ad.tipo === "agua") lembra(ad.tipo, ad.frases && ad.frases.length ? ad.frases : [""]);
       }
       // pedido antigo sem resposta: o bicho se cuida sozinho e a barra se recupera
       // até 55 — ele NUNCA morre, e não fica sofrendo por causa do dono
@@ -398,84 +436,168 @@
     }
   }
 
-  // ── painel 🐾 Bicho ────────────────────────────────────────────────────────
-  let painel = null;
-  const barra = (rotulo, valor) => {
-    const p = Math.round(valor);
-    const cor = p < 30 ? "#ff8a65" : p < 60 ? "#ffc94a" : "#35d07f";
-    return `<div class="bicho-lin"><span>${rotulo}</span>
-      <i><b style="width:${p}%;background:${cor}"></b></i><em>${p}</em></div>`;
+  // ── painel do pet (22/10/2026, opção C da prancha "Painel do pet") ────────────
+  // "Como ele está" e "Cuidar dele" viraram UM painel encostado no boneco: 4 anéis no
+  // mesmo sentido (cheio = bem) + cuidado rápido + o próximo lembrete. A engrenagem
+  // abre, AO LADO, a rotina (nome, expediente com minutos, água, caminhada) e as pausas
+  // (foco e dormir). Antes eram dois painéis com rótulos diferentes, "cansaço" invertido
+  // pintado de vermelho quando estava ÓTIMO e "sede 63" querendo dizer hidratação 63.
+  let painel = null, lado = null, ladoAberto = false, salvoTimer = null;
+  const corDe = (v) => v >= 60 ? "#35D07F" : v >= 30 ? "#F2B33D" : "#FF7A6B";
+  const ic = (n, t) => (typeof icone === "function" ? icone(n, t) : "");
+  const hhmm = (h) => {             // 8.5 → "08:30"
+    const m = Math.round((Number(h) || 0) * 60);
+    return String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
   };
+  const deHHMM = (s) => {           // "08:30" → 8.5
+    const [h, m] = String(s || "").split(":").map(Number);
+    return (h || 0) + (m || 0) / 60;
+  };
+  const conta = (n, palavra) => `${n || 0} ${palavra}${(n || 0) === 1 ? "" : "s"}`;
+  const NOME_EV = { agua: "água", caminhada: "caminhada", refeicao: "refeição", lanche: "lanche", atencao: "carinho" };
+
+  // a linha de baixo dos anéis: o próximo lembrete (ou por que não há)
+  function proximoLembrete() {
+    const d = new Date(), agoraMin = d.getHours() * 60 + d.getMinutes();
+    if (!emExpediente()) return `Fora do expediente · os lembretes voltam às <b>${hhmm(cfg.trabIni)}</b>`;
+    const feitos = est.feitos || {};
+    const prox = eventosDoDia(cfg, { ini: cfg.trabIni, fim: cfg.trabFim })
+      .filter((e) => e.min > agoraMin && !feitos[chaveEv(e)] && (!estaEmFoco() || e.tipo === "agua"))[0];
+    if (!prox) return "Sem mais lembretes hoje";
+    return `Próximo lembrete: <b>${NOME_EV[prox.tipo] || prox.tipo} às ${minHora(prox.min)}</b>` +
+      (estaEmFoco() ? " · foco ligado" : "");
+  }
+
+  function anel(nome, icoNome, v) {
+    const p = Math.max(0, Math.min(100, Math.round(v))), cor = corDe(p);
+    return `<div class="pp-anel" title="${nome}: ${p}%">
+      <div class="pp-anel-svg">
+        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="26" class="pp-trilho"></circle>
+          <circle cx="32" cy="32" r="26" class="pp-valor" style="stroke:${cor};stroke-dasharray:${(163.4 * p / 100).toFixed(1)} 164"></circle>
+        </svg>
+        <span style="color:${cor}">${ic(icoNome, 20)}</span>
+      </div>
+      <b>${nome}</b><span>${p}%</span></div>`;
+  }
+
   function pintaPainel() {
     if (!painel || painel.classList.contains("oculto")) return;
-    const alvo = painel.querySelector("#bicho-status");
-    if (!alvo) return;
-    const estado = estaDormindo()
-      ? `dormindo até ${new Date(cfg.dormirAte).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
-      : (estaEmFoco() ? "em modo foco 🎯" : (emExpediente() ? "em expediente" : "fora do expediente"));
-    alvo.innerHTML =
-      barra("💧 hidratação", est.sede) + barra("🍖 alimentação", est.fome) +
-      barra("🥰 atenção", est.carinho) + barra("🏃 movimento", est.exercicio) +
-      `<div class="bicho-est">${estado} · avisos hoje: ${est.avisosHoje || 0} · voltas: ${est.voltaHoje}/${cfg.maxVoltasDia}</div>`;
+    const e = est, r = window.bichoResumo ? window.bichoResumo() : { nome: cfg.nome, linha: "" };
+    const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    let corpo;
+    if (estaDormindo()) {
+      const ate = new Date(cfg.dormirAte), falta = Math.max(0, Math.round((cfg.dormirAte - agora()) / MIN));
+      const faltaTxt = falta >= 60 ? `${Math.floor(falta / 60)}h${String(falta % 60).padStart(2, "0")}` : `${falta} min`;
+      corpo = `<div class="pp-sono">${ic("dormir", 20)}<span><b>Dormindo até ${ate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</b>
+          <span>faltam ${faltaTxt} · sem lembretes, as barras não caem</span></span></div>
+        <div class="pp-acoes dois"><button class="pp-bt" data-acordar>Acordar agora</button><button class="pp-bt sec" data-mais1h>+1 h</button></div>`;
+    } else {
+      corpo = `<div class="pp-aneis">${anel("Água", "agua", e.sede)}${anel("Comida", "alimentar", e.fome)}${anel("Movimento", "exercicio", e.exercicio)}${anel("Carinho", "cuidar", e.carinho)}</div>
+        <div class="pp-acoes">
+          <button class="pp-bt sec" data-cuida="agua">Água</button><button class="pp-bt sec" data-cuida="comer">Comer</button>
+          <button class="pp-bt sec" data-cuida="mexer">Mexer</button><button class="pp-bt sec" data-cuida="carinho">Carinho</button></div>
+        <div class="pp-proximo">${ic("relogio", 16)}<span>${proximoLembrete()}</span></div>`;
+    }
+    painel.innerHTML = `
+      <div class="pp-topo"><span class="pp-quem"><b>${esc(r.nome || cfg.nome)}</b><span>${esc(r.linha || "")}</span></span>
+        <button class="botao-x ${ladoAberto ? "sel" : ""}" data-ajustes aria-expanded="${ladoAberto}" aria-label="Rotina e pausas" title="Rotina e pausas">${ic("ajustes", 18)}</button>
+        <button class="botao-x" data-fechar aria-label="Fechar">${ic("fechar", 18)}</button></div>
+      ${corpo}
+      <div class="pp-rodape">${conta(e.tarefas, "tarefa")} no chat hoje · ${conta(e.avisosHoje, "lembrete")} · ${conta((e.achados || []).length, "achado")}</div>`;
+    const q = (s) => painel.querySelector(s);
+    q("[data-fechar]").onclick = fecharPainel;
+    q("[data-ajustes]").onclick = () => { ladoAberto = !ladoAberto; pintaPainel(); pintaLado(); };
+    painel.querySelectorAll("[data-cuida]").forEach((b) => b.onclick = () => {
+      const f = { agua: window.bichoAgua, comer: window.bichoAlimentar, mexer: window.bichoExercicio,
+                  carinho: () => carinho(30) }[b.dataset.cuida];
+      if (f) f();
+      pintaPainel();
+    });
+    if (q("[data-acordar]")) q("[data-acordar]").onclick = () => acordar();
+    if (q("[data-mais1h]")) q("[data-mais1h]").onclick = () => { cfg.dormirAte += 60 * MIN; salvar(); pintaPainel(); };
+    posicionaPainel();
   }
-  function abrirPainel() {
+
+  // a rotina e as pausas: só redesenha ao abrir ou ao mudar algo AQUI (o tique a cada
+  // 20 s redesenharia por cima de quem está digitando)
+  function pintaLado() {
+    if (!ladoAberto) { if (lado) lado.classList.add("oculto"); posicionaPainel(); return; }
+    if (!lado) {
+      lado = document.createElement("div");
+      lado.className = "bicho pp pp-lado oculto";
+      document.body.appendChild(lado);
+    }
+    const opc = (sel, lista) => lista.map(([v, r]) => `<option value="${v}" ${Number(sel) === v ? "selected" : ""}>${r}</option>`).join("");
+    const intervalos = [[60, "1 h"], [90, "1h30"], [120, "2 h"], [180, "3 h"]];
+    lado.innerHTML = `
+      <div class="pp-topo"><b class="pp-titulo">Rotina e pausas</b><span class="pp-salvo" aria-live="polite"></span></div>
+      <label class="pp-campo-l">Nome<input class="pp-campo" data-nome maxlength="18" value="${String(cfg.nome).replace(/"/g, "&quot;")}"></label>
+      <label class="pp-campo-l">Seu expediente
+        <span class="pp-linha"><input class="pp-campo" type="time" data-ini value="${hhmm(cfg.trabIni)}">até
+        <input class="pp-campo" type="time" data-fim value="${hhmm(cfg.trabFim)}"></span></label>
+      <div class="pp-linha"><span>Água a cada</span><select class="pp-campo curto" data-agua>${opc(cfg.aguaCadaMin, intervalos)}</select></div>
+      <div class="pp-linha"><span>Caminhar a cada</span><select class="pp-campo curto" data-caminha>${opc(cfg.caminhadaCadaMin, intervalos)}</select></div>
+      <p class="pp-nota">Fora do expediente ela não lembra de nada. As refeições saem dele: café, lanche, almoço, lanche e a última, 45 min antes do fim.</p>
+      <div class="pp-sep"></div>
+      <div class="pp-linha"><span class="pp-quem"><b>Modo foco</b><span>só lembra da água · não mexe no Windows</span></span>
+        <button class="pp-switch" role="switch" aria-checked="${estaEmFoco()}" aria-label="Modo foco" data-foco><i></i></button></div>
+      <div class="pp-quem"><b>Dormir</b><span>cochila no canto, sem lembretes; clique nela para acordar</span></div>
+      <div class="pp-acoes">${[[0.5, "30 min"], [1, "1 h"], [2, "2 h"], [4, "4 h"]].map(([h, r]) =>
+        `<button class="pp-bt sec" data-dormir="${h}">${r}</button>`).join("")}</div>`;
+    lado.classList.remove("oculto");
+    const q = (s) => lado.querySelector(s);
+    const salvo = () => {
+      salvar(); pintaPainel();
+      const s = q(".pp-salvo");
+      if (s) { s.textContent = "✓ salvo"; clearTimeout(salvoTimer); salvoTimer = setTimeout(() => { s.textContent = ""; }, 1800); }
+    };
+    q("[data-nome]").onchange = (ev) => { cfg.nome = ev.target.value.trim() || "Xodó"; salvo(); };
+    q("[data-ini]").onchange = (ev) => { if (ev.target.value) { cfg.trabIni = deHHMM(ev.target.value); salvo(); } };
+    q("[data-fim]").onchange = (ev) => { if (ev.target.value) { cfg.trabFim = deHHMM(ev.target.value); salvo(); } };
+    q("[data-agua]").onchange = (ev) => { cfg.aguaCadaMin = +ev.target.value; salvo(); };
+    q("[data-caminha]").onchange = (ev) => { cfg.caminhadaCadaMin = +ev.target.value; salvo(); };
+    q("[data-foco]").onclick = () => { alternarFoco(); pintaLado(); };
+    lado.querySelectorAll("[data-dormir]").forEach((b) => b.onclick = () => { dormir(+b.dataset.dormir); pintaLado(); });
+    posicionaPainel();
+  }
+
+  // encostado no boneco (posicionaPertoDoPet, main.js); a rotina vai AO LADO, do lado
+  // de dentro da tela, com a base alinhada à do painel
+  function posicionaPainel() {
+    if (!painel || painel.classList.contains("oculto")) return;
+    if (typeof posicionaPertoDoPet === "function") posicionaPertoDoPet(painel);
+    if (lado && ladoAberto && !lado.classList.contains("oculto")) {
+      const r = painel.getBoundingClientRect(), w = lado.offsetWidth || 320;
+      const esquerda = r.left - 12 - w >= 8 ? r.left - 12 - w : Math.min(innerWidth - w - 8, r.right + 12);
+      lado.style.left = Math.round(esquerda) + "px";
+      lado.style.top = painel.style.top;
+      lado.style.bottom = painel.style.bottom;
+      lado.style.maxHeight = painel.style.maxHeight;
+    }
+    if (typeof reportarHit === "function") reportarHit();
+  }
+
+  // abrirPainel(comAjustes) — "Como está" abre só o painel; "Cuidar dele" e "Dormir"
+  // abrem já com a rotina e as pausas ao lado
+  function abrirPainel(comAjustes) {
     if (!painel) {
       painel = document.createElement("div");
-      painel.className = "bicho oculto";
-      painel.innerHTML = `
-        <div class="bicho-topo"><b>🐾 ${cfg.nome}</b>
-          <span class="bicho-x" id="bicho-x">✕</span></div>
-        <label>nome<input id="bicho-nome" maxlength="18" /></label>
-        <div class="bicho-dupla">
-          <label>trabalho das<input id="bicho-ini" type="number" min="0" max="23" /></label>
-          <label>às<input id="bicho-fim" type="number" min="0" max="23" /></label>
-        </div>
-        <div class="bicho-dupla">
-          <label>água a cada (h)<input id="bicho-agua" type="number" min="1" max="6" /></label>
-          <label>caminhar a cada (min)<input id="bicho-caminha" type="number" min="30" max="240" /></label>
-        </div>
-        <div class="bicho-linha-bt">
-          <button class="bicho-bt" id="bicho-foco">🎯 modo foco</button>
-          <button class="bicho-bt" id="bicho-sono">😴 dormir</button>
-        </div>
-        <div class="bicho-linha-bt">
-          <button class="bicho-bt" data-sono="1">1 h</button>
-          <button class="bicho-bt" data-sono="2">2 h</button>
-          <button class="bicho-bt" data-sono="3">3 h</button>
-          <button class="bicho-bt" data-sono="4">4 h</button>
-        </div>
-        <div id="bicho-status"></div>`;
+      painel.className = "bicho pp oculto";
       document.body.appendChild(painel);
-
-      const q = (s) => painel.querySelector(s);
-      q("#bicho-x").onclick = () => { painel.classList.add("oculto"); reportarHit(); };
-      q("#bicho-nome").onchange = (e) => { cfg.nome = e.target.value.trim() || "Xodó"; salvar(); };
-      q("#bicho-ini").onchange = (e) => { cfg.trabIni = +e.target.value; salvar(); };
-      q("#bicho-fim").onchange = (e) => { cfg.trabFim = +e.target.value; salvar(); };
-      q("#bicho-agua").onchange = (e) => { cfg.aguaCadaMin = Math.max(30, (+e.target.value || 2) * 60); salvar(); };
-      q("#bicho-caminha").onchange = (e) => { cfg.caminhadaCadaMin = Math.max(30, +e.target.value || 90); salvar(); };
-      q("#bicho-foco").onclick = alternarFoco;
-      q("#bicho-sono").onclick = () => { dormir(2); painel.classList.add("oculto"); };
-      painel.querySelectorAll("[data-sono]").forEach((b) => {
-        b.onclick = () => { dormir(+b.dataset.sono); painel.classList.add("oculto"); };
-      });
     }
-    const q = (s) => painel.querySelector(s);
-    q("#bicho-nome").value = cfg.nome;
-    q("#bicho-ini").value = cfg.trabIni;
-    q("#bicho-fim").value = cfg.trabFim;
-    q("#bicho-agua").value = Math.round(cfg.aguaCadaMin / 60);
-    q("#bicho-caminha").value = cfg.caminhadaCadaMin;
-    painel.querySelector(".bicho-topo b").textContent = "🐾 " + cfg.nome;
+    if (comAjustes !== undefined) ladoAberto = !!comAjustes;
     painel.classList.remove("oculto");
-    const r = pet ? pet.getBoundingClientRect() : { top: innerHeight - 140, left: 40 };
-    painel.style.left = Math.max(8, Math.min(innerWidth - 320, r.left - 60)) + "px";
-    painel.style.top = Math.max(8, r.top - 330) + "px";
     pintaPainel();
-    reportarHit();
+    pintaLado();
+  }
+  function fecharPainel() {
+    if (painel) painel.classList.add("oculto");
+    if (lado) lado.classList.add("oculto");
+    if (typeof reportarHit === "function") reportarHit();
   }
 
-  // O MENU tem UM dono: montarMenu() (main.js) + repintaMenu() (bloco 2 abaixo).
+  // O MENU tem UM dono: montarMenu() (main.js) + repintaMenu() (bloco 2 abaixo, aba Pet).
   // Existia aqui um enfeitaMenu() que ANEXAVA uma 7ª linha em #menu com
   // alimentar/água/exercício: duplicava os tiles (e escapava por baixo da
   // moldura) e os tiles dele só abriam o balão. Removido em 03/10/2026.
@@ -483,7 +605,7 @@
 
   // ── ligação ────────────────────────────────────────────────────────────────
   try {
-    if (pet) pet.addEventListener("dblclick", () => { if (interagindo()) carinho(0); });
+    if (pet) pet.addEventListener("dblclick", () => { if (interagindo() && !estaDormindo()) carinho(0); });
     // primeira vez: ele se apresenta. Os avisos seguem a agenda biológica do dia
     // (água de 2 em 2 h, refeições nos horários, caminhada no expediente)
     try {
@@ -501,11 +623,11 @@
       if (a) a.textContent = "";
       if (est.equipado) { est.equipado = ""; if (salvar) salvar(); }
     } catch (e) { /* sem DOM ainda */ }
-    if (estaDormindo()) sumir(true);
+    if (estaDormindo()) marcaSono(true);
     setInterval(tique, 20000);
     setTimeout(tique, 3000);
     window.bicho = { cfg, est, carinho, dormir, acordar, alternarFoco, passeio, pararAndar,
-                     voltaCompleta, abrirPainel,
+                     voltaCompleta, abrirPainel, fecharPainel, estaDormindo, estaEmFoco,
                      // compat: apontam para a ÚNICA implementação (bloco 2)
                      get alimentar() { return window.bichoAlimentar; },
                      get darAgua() { return window.bichoAgua; },
@@ -649,44 +771,15 @@
     setTimeout(() => pet.classList.remove("brincando"), VOLTA_MS);
   };
 
-  /* ── 😴 dormir: escolhe o tempo (o balão pergunta e o painel tem as opções) ─ */
+  /* ── 😴 dormir / 📊 como ele está: os dois abrem o PAINEL DO PET (bloco 1) ─────
+     22/10/2026: "Como ele está" e "Cuidar dele" viraram um painel só. "Dormir" abre
+     com as pausas ao lado (30 min · 1 h · 2 h · 4 h) — antes ele só mandava "escolhe
+     no painel" e parecia não fazer nada. */
   window.bichoDormirMenu = () => {
-    fala("Quanto tempo de soneca? Escolhe no painel 🐾: 1 h, 2 h, 3 h ou 4 h. 😴");
-    if (window.bicho && window.bicho.abrirPainel) window.bicho.abrirPainel();
+    if (window.bicho && window.bicho.abrirPainel) window.bicho.abrirPainel(true);
   };
-
-  /* ── 📊 como ele está: gráfico do PET ────────────────────────────────────── */
   window.bichoGrafico = () => {
-    const e = garante();
-    const b = (rotulo, valor, ico) => {
-      const p = Math.max(0, Math.min(100, Math.round(valor)));
-      const cor = p < 30 ? "#ff8a65" : p < 60 ? "#ffc94a" : "#35d07f";
-      return `<div class="bicho-lin"><span>${ico} ${rotulo}</span>
-        <i><b style="width:${p}%;background:${cor}"></b></i><em>${p}</em></div>`;
-    };
-    let p = document.getElementById("bichoGraf");
-    if (!p) {
-      p = document.createElement("div");
-      p.className = "bicho";
-      p.id = "bichoGraf";
-      document.body.appendChild(p);
-    }
-    p.innerHTML = `<div class="bicho-topo"><b>📊 ${cfgB().nome || "Xodó"} — como estou</b>
-        <span class="bicho-x" id="graf-x">✕</span></div>
-      ${b("alimentado", e.fome, "🍖")}
-      ${b("tarefa", Math.min(100, (e.tarefas || 0) * 12), "📋")}
-      ${b("cansaço", 100 - e.exercicio, "🥵")}
-      ${b("felicidade", e.humor || 80, "😊")}
-      ${b("sede", e.sede, "💧")}
-      ${b("carinho", e.carinho, "🥰")}
-      <div class="bicho-est">tarefas no chat hoje: ${e.tarefas || 0} · achados: ${(e.achados || []).length}
-      </div>`;
-    p.classList.remove("oculto");
-    p.querySelector("#graf-x").onclick = () => { p.classList.add("oculto"); reportarHit(); };
-    const r = pet ? pet.getBoundingClientRect() : { top: innerHeight - 160, left: 40 };
-    p.style.left = Math.max(8, Math.min(innerWidth - 320, r.left - 40)) + "px";
-    p.style.top = Math.max(8, r.top - 360) + "px";
-    reportarHit();
+    if (window.bicho && window.bicho.abrirPainel) window.bicho.abrirPainel(false);
   };
 
   /* ── 💎 achados: baú com presentes (catálogo e sorteio moram em premios.js) ──
@@ -726,35 +819,50 @@
     fala("Minha galeria não carregou… 🥺");
   };
 
-  /* ── menu: o bicho dirige o menu — UMA ação, UM botão ───────────────────── */
+  /* ── menu: o bicho dirige a aba Pet — UMA ação, UM botão ─────────────────────
+     22/10/2026: o menu virou dock com abas (main.js, MENU). Conversar e E-mail
+     foram para a aba Recursos; aqui ficam só os cuidados e o estado DELE. */
   function repintaMenu() {
     try {
-      if (typeof TILES === "undefined") return;
-      // linha 1 — os cuidados que ele pede, todos com reação visível no boneco
-      TILES.linha1 = [
-        ["🍖", "Alimentar", () => window.bichoAlimentar()],
-        ["💧", "Água", () => window.bichoAgua()],
-        ["🏃", "Exercício", () => window.bichoExercicio()],
-        ["🎾", "Brincar", () => window.bichoBrincar()],
+      if (typeof MENU === "undefined") return;
+      MENU.pet = [
+        ["alimentar", "Alimentar", () => window.bichoAlimentar()],
+        ["agua", "Água", () => window.bichoAgua()],
+        ["exercicio", "Exercício", () => window.bichoExercicio()],
+        ["brincar", "Brincar", () => window.bichoBrincar()],
+        ["dormir", "Dormir", () => window.bichoDormirMenu()],
+        ["status", "Como está", () => window.bichoGrafico()],
+        ["colecao", "Coleção", () => window.bichoColecao()],
+        ["cuidar", "Cuidar dele", () => window.bicho.abrirPainel(true)],
       ];
-      // linha 2 (destaque, botão grande) — as duas portas de entrada
-      TILES.linha2 = [
-        ["🐾", "Cuidar dele", () => window.bicho.abrirPainel()],
-        ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
-      ];
-      // linha 3 — estado e sistema. Água saiu daqui: agora mora na linha 1.
-      TILES.linha3 = [
-        ["📊", "Como ele está", () => window.bichoGrafico()],
-        ["💎", "Coleção", () => window.bichoColecao()],
-        ["😴", "Dormir", () => window.bichoDormirMenu()],
-        ["📧", "E-mail", () => abrirEmail()],
-      ];
-      // linha 6 — ZERADA: era depósito de resto ("Testar balãozinho" = debug)
-      TILES.linha6 = [];
     } catch (e) { /* menu ainda não existe */ }
   }
 
+  /* ── cabeçalho do menu: nome, humor e o que ele está pedindo ─────────────────
+     `pendente` é o ícone do botão que ganha o pontinho de "pedindo agora". */
+  window.bichoResumo = () => {
+    const e = garante(), c = cfgB(), nome = c.nome || "Xodó";
+    if (c.dormirAte > Date.now()) {
+      const ate = new Date(c.dormirAte).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      return { nome, linha: "Dormindo até " + ate, pendente: "" };
+    }
+    const h = e.humor || 80;
+    const humor = h >= 70 ? "Feliz" : h >= 40 ? "Tranquilo" : "Meio pra baixo";
+    const nec = [
+      ["agua", e.sede, "com sede", "com um pouco de sede"],
+      ["alimentar", e.fome, "com fome", "com um pouco de fome"],
+      ["", e.carinho, "querendo carinho", "com saudade de você"],
+      ["exercicio", e.exercicio, "precisando se mexer", "meio parado"],
+    ].sort((a, b) => a[1] - b[1]);
+    const [ico, valor, forte, leve] = nec[0];
+    if (valor < 40) return { nome, linha: humor + " · " + forte, pendente: ico };
+    if (valor < 60) return { nome, linha: humor + " · " + leve, pendente: "" };
+    return { nome, linha: humor + " · tudo em dia", pendente: "" };
+  };
+
   /* ── tarefa concluída: balão quando o chat está fechado ──────────────────── */
+  // (a linha "✅ tarefa concluída" no chat saiu em 22/10/2026, pedido da dona: poluía a
+  // conversa. A contagem de tarefas e o baú com o chat fechado continuam.)
   try {
     const msgOriginal = window.msg;
     if (typeof msgOriginal === "function") {
@@ -766,7 +874,6 @@
             const e = garante();
             e.tarefas = (e.tarefas || 0) + 1; feliz(4); salvaEst();
             const fechado = balao && balao.classList.contains("oculto");
-            msgOriginal.call(null, "✅ tarefa concluída", "meta");
             if (fechado) window.bichoAchar();   // chat fechado? ele aparece com o aviso
           }
         } catch (e) { /* nunca quebra o chat */ }
@@ -782,7 +889,7 @@
       try {
         repintaMenu();
         const e = garante();
-        if (cfgB().dormirAte > Date.now()) return;
+        if (cfgB().dormirAte > Date.now() || cfgB().foco) return;   // dormindo ou em foco: sem baú
         const h = new Date().toISOString().slice(0, 10);
         if (e.achadoDia.dia !== h) e.achadoDia = { dia: h, n: 0 };
         if (e.achadoDia.n < 4 && Math.random() < 0.06) window.bichoAchar();

@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -109,6 +110,112 @@ BLOCO_CLARIFY = '\n\n# PetAgent: o boneco NAO tem tela de escolhas e o `clarify`
 # texto normal. ⚠️ NÃO usar 0, -1 ou "none": no Hermes isso é ILIMITADO. O app Go repete
 # este número na reserva lenta (`maxIteracoesIA` em chat.go) — os dois andam juntos.
 MAX_ITERACOES_IA = 20
+
+
+# IA SÓ DO BONECO (22/10/2026, painel Inteligência do app): quando a dona escolhe um modelo e
+# uma chave só para o boneco, o app manda pela VARIÁVEL DE AMBIENTE desta ponte:
+#   PETAGENT_IA        = {"provedor", "modelo", "base_url", "var"}  (JSON)
+#   PETAGENT_IA_CHAVE  = a chave
+# e o espelho passa a dizer esse modelo (config.yaml) e a ter essa chave (.env PRÓPRIO, no
+# lugar do hardlink). Variável de ambiente sozinha não serve: o Hermes carrega o .env com
+# override=True e a chave do dono venceria. O Hermes do dono NÃO é tocado.
+# Variáveis de chave de IA que saem do .env do espelho quando o boneco tem IA própria (para
+# não sobrar a chave do dono de outro provedor):
+VARS_CHAVE_IA = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN",
+                 "GOOGLE_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY")
+
+
+def _ia_do_boneco() -> dict:
+    """A IA só do boneco (vazio = usa a do Hermes, como sempre)."""
+    try:
+        d = json.loads(os.environ.get("PETAGENT_IA") or "{}")
+    except json.JSONDecodeError:
+        return {}
+    chave = os.environ.get("PETAGENT_IA_CHAVE") or ""
+    if not isinstance(d, dict) or not chave or not all(d.get(k) for k in ("provedor", "modelo", "var")):
+        return {}
+    d["chave"] = chave
+    return d
+
+
+def _troca_modelo(texto: str, ia: dict) -> str:
+    """No bloco `model:`, põe default/provider/base_url do boneco e tira o que prende ao
+    provedor antigo (api_mode, api_key/api fixos). O app faz o MESMO no Hermes do dono quando
+    a escolha é "igual ao Hermes" (inteligencia.go, trocaModeloNoConfig) — os dois andam juntos."""
+    novos = [("default", ia["modelo"]), ("provider", ia["provedor"]), ("base_url", ia.get("base_url") or "")]
+    # mesmo provedor do dono = só o modelo troca (api_mode etc. do provedor ficam)
+    prov_antes = ""
+    no_bloco = False
+    for l in texto.splitlines():
+        if l and l[0] not in " \t" and not l.startswith("#"):
+            no_bloco = l.partition(":")[0].strip() == "model"
+        elif no_bloco and l.strip().startswith("provider:") and len(l) - len(l.lstrip()) <= 2:
+            prov_antes = l.split(":", 1)[1].strip().strip("'\"")
+    trocou_provedor = prov_antes != ia["provedor"]
+    saida, vistos = [], set()
+    dentro = achou = False
+
+    def falta():
+        for k, v in novos:
+            if k not in vistos and v:
+                saida.append(f'  {k}: "{v}"')
+
+    for l in texto.splitlines():
+        if l and l[0] not in " \t" and not l.startswith("#"):
+            if dentro:
+                falta()
+            nome, _, resto = l.partition(":")
+            dentro = nome.strip() == "model"
+            if dentro:
+                achou = True
+                if resto.strip():          # forma curta `model: "x"` vira bloco
+                    saida.append("model:")
+                    continue
+            saida.append(l)
+            continue
+        if dentro:
+            s = l.strip()
+            recuo = l[:len(l) - len(l.lstrip())]
+            k = s.split(":", 1)[0].strip() if ":" in s and not s.startswith("#") else ""
+            if k and len(recuo) <= 2 and k in ("default", "model", "provider", "base_url",
+                                               "api_mode", "api_key", "api"):
+                k = "default" if k == "model" else k
+                if k in ("api_mode", "api_key", "api"):
+                    if not trocou_provedor:
+                        saida.append(l)
+                    continue
+                if k in vistos:
+                    continue
+                vistos.add(k)
+                v = dict(novos)[k]
+                if v:
+                    saida.append(f'{recuo}{k}: "{v}"')
+                continue
+        saida.append(l)
+    if dentro:
+        falta()
+    if not achou:
+        saida += ["", "model:"]
+        falta()
+    return "\n".join(saida) + "\n"
+
+
+def _env_do_espelho(real: str, ia: dict) -> str:
+    """O .env do espelho com a chave do boneco: o do dono SEM as chaves de IA + a do boneco."""
+    linhas = []
+    try:
+        with open(os.path.join(real, ".env"), "r", encoding="utf-8") as fh:
+            for l in fh.read().splitlines():
+                nome = l.strip().removeprefix("export ").split("=", 1)[0].strip()
+                if nome not in VARS_CHAVE_IA:
+                    linhas.append(l)
+    except OSError:
+        pass
+    while linhas and not linhas[-1].strip():
+        linhas.pop()
+    linhas += ["", "# PetAgent: IA só do boneco (painel Inteligência). Refeito a cada subida.",
+               f'{ia["var"]}={ia["chave"]}']
+    return "\n".join(linhas) + "\n"
 
 
 def _home_real() -> str:
@@ -237,6 +344,18 @@ def _home_do_backend() -> str:
             log("config do backend: clarify.timeout=8 (o boneco nao tem tela de escolhas)")
         else:
             log("AVISO: o config do dono ja tem bloco clarify: — nao mexi nele")
+        # IA SÓ DO BONECO (ver _ia_do_boneco): modelo no config e chave num .env PRÓPRIO
+        # do espelho (no lugar do hardlink do .env do dono, que o passo 1 acabou de refazer).
+        # ⚠️ Texto puro, como o .env do próprio Hermes — e só na pasta do PetAgent.
+        ia = _ia_do_boneco()
+        if ia:
+            limpo = _troca_modelo(limpo, ia)
+            env_espelho = os.path.join(HOME_ESPELHO, ".env")
+            if os.path.lexists(env_espelho):
+                os.remove(env_espelho)   # é o hardlink do .env do dono: SÓ o nome sai daqui
+            with open(env_espelho, "w", encoding="utf-8") as fh:
+                fh.write(_env_do_espelho(real, ia))
+            log(f"config do backend: IA só do boneco = {ia['provedor']} / {ia['modelo']}")
         with open(os.path.join(HOME_ESPELHO, "config.yaml"), "w", encoding="utf-8") as fh:
             fh.write(limpo)
         removidos = len(bruto) - len(limpo)
@@ -267,6 +386,7 @@ def _env_do_backend(token: str) -> dict:
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    env.pop("PETAGENT_IA_CHAVE", None)   # a chave já está no .env do espelho; o backend não precisa dela solta
     env["HERMES_TUI_MAX_TURNS"] = str(MAX_ITERACOES_IA)
     espelho = _home_do_backend()
     if espelho:
@@ -307,6 +427,7 @@ _EV_CONHECIDOS = {
     # ponte.log — 3.802 linhas num único turno de 224 s (e o disco pagando por isso).
     # "reasoning.delta" é o pensamento token a token; não serve para diagnosticar nada.
     "reasoning.delta", "tool.generating", "message.interim",
+    "error",  # tem log próprio e completo em _perguntar_uma (o genérico cortava em 200)
 }
 
 
@@ -363,6 +484,36 @@ def porta_aberta(porta: int) -> bool:
             return True
     except OSError:
         return False
+
+
+def _derruba_arvore(proc) -> None:
+    """Derruba o backend E toda a árvore de processos dele (conserto de 13/10/2026).
+
+    No Hermes 0.21 o `hermes serve` é uma CADEIA — `bin\\hermes.exe` (lançador) → python
+    — e quem escuta a porta é o python. `proc.terminate()` no Windows só mata o processo
+    do topo; quase sempre o lançador leva o filho junto, mas às vezes o serve se
+    re-executa (`python -I -I -c ...runpy`) e esse NETO escapa. Medido em 13/10/2026: o
+    app fechou e o neto seguiu vivo, escutando a porta antiga. Pior que memória: o 0.21
+    RECUSA subir outro serve no mesmo home enquanto o órfão vive ("this host is already
+    served by PID ...", código 78) — a reconexão e a próxima subida do app falhavam e o
+    chat caía na reserva lenta. O `taskkill /T` leva a árvore inteira, qualquer que seja
+    o formato (CREATE_NO_WINDOW: nada de console piscando).
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, timeout=15,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            proc.terminate()
+        proc.wait(timeout=10)
+    except Exception:  # noqa: BLE001
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class Backend:
@@ -483,15 +634,7 @@ class Backend:
         """
         log(f"canal caiu ({motivo or 'sem detalhe'}) — reconectando")
         await self._fechar_canal()
-        if self.proc is not None and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-                try:
-                    self.proc.wait(timeout=10)
-                except Exception:  # noqa: BLE001
-                    self.proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+        _derruba_arvore(self.proc)  # a árvore toda: o serve de verdade é neto do lançador
         # espera a porta soltar; se algum processo alheio/travado a segurar, pega outra
         t0 = time.time()
         while porta_aberta(self.porta) and time.time() - t0 < 20:
@@ -698,6 +841,7 @@ Deste chat (sempre funcionam):
                                        "params": {"session_id": self.sessao, "text": texto}}))
         self.seq += 1
         pedacos: list[str] = []
+        erro_hermes = ""  # evento `error` do turno (ver _erro_legivel)
         while time.time() - t0 < timeout:
             try:
                 raw = await asyncio.wait_for(self.ws.recv(),
@@ -732,12 +876,19 @@ Deste chat (sempre funcionam):
                 carga = p.get("payload") if isinstance(p.get("payload"), dict) else p
                 nome = str(carga.get("name") or carga.get("tool") or "ferramenta")
                 _progresso("passo", nome)
+            elif tipo == "error":
+                carga = p.get("payload") if isinstance(p.get("payload"), dict) else p
+                erro_hermes = str(carga.get("message") or carga.get("error") or carga)
+                log(f"erro do Hermes no turno: {erro_hermes[:1500]}")
             elif tipo == "message.complete":
                 break
             # thinking.delta / reasoning.available são PENSAMENTO: não entram na resposta
             if "error" in d and not pedacos:
                 return "erro: " + json.dumps(d.get("error"))[:300], time.time() - t0
-        return "".join(pedacos).strip() or "(sem texto)", time.time() - t0
+        resp = "".join(pedacos).strip()
+        if not resp and erro_hermes:
+            return _erro_legivel(erro_hermes), time.time() - t0
+        return resp or "(sem texto)", time.time() - t0
 
 
 def porta_livre() -> int:
@@ -778,12 +929,12 @@ async def servico(bk: "Backend", args) -> int:
         resp, seg = await bk.perguntar(args.teste)
         print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
                          ensure_ascii=False), flush=True)
-        if bk.proc and bk.proc.poll() is None:
-            bk.proc.terminate()
+        _derruba_arvore(bk.proc)
         return 0
 
     # handshake: o app só pergunta depois disto
-    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao}), flush=True)
+    # o modelo vai junto: o app mostra no cabeçalho do chat qual IA está respondendo
+    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao, "modelo": bk.modelo}), flush=True)
     global _pedido_atual
     while True:
         linha = await asyncio.to_thread(sys.stdin.readline)
@@ -802,22 +953,42 @@ async def servico(bk: "Backend", args) -> int:
         try:
             resp, seg = await bk.perguntar(p)
             print(json.dumps({"ok": True, "id": _pedido_atual, "resposta": resp,
-                              "segundos": round(seg, 1)}, ensure_ascii=False), flush=True)
+                              "segundos": round(seg, 1), "modelo": bk.modelo},
+                             ensure_ascii=False), flush=True)
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"ok": False, "id": _pedido_atual,
                               "erro": f"{type(e).__name__}: {e}"}), flush=True)
-    # o app fechou: leva o backend junto (sem órfãos)
-    if bk.proc and bk.proc.poll() is None:
-        try:
-            bk.proc.terminate()
-        except Exception:  # noqa: BLE001
-            pass
+    # o app fechou: leva o backend junto (sem órfãos — a árvore inteira, ver _derruba_arvore)
+    _derruba_arvore(bk.proc)
     return 0
 
 
 # ---------------------------------------------------------------------------
 # Helpers dos comandos de barra (10/10/2026)
 # ---------------------------------------------------------------------------
+
+def _erro_legivel(msg: str) -> str:
+    """O que o chat mostra quando o Hermes falha ANTES de responder (22/10/2026).
+
+    O Hermes avisa por um EVENTO `error` (payload.message) — e a ponte só olhava o campo
+    `error` do topo, então o chat dizia "(sem texto)" em 0,1 s e ninguém sabia por quê. Caso
+    medido: Anthropic escolhida e o Hermes sem o extra `anthropic` ("The 'anthropic' package
+    is required for the Anthropic provider: ..."). O app instala esse extra ao salvar a IA e
+    ao subir a ponte (inteligencia.go, garanteComplemento); se mesmo assim faltar, a pessoa lê
+    o que fazer.
+    """
+    m = re.search(r"The '([\w.-]+)' package is required", msg)
+    if m:
+        return (f"Não consegui responder: o Hermes desta máquina não tem o complemento "
+                f"`{m.group(1)}`, que esta IA exige, e a instalação automática falhou.\n\n"
+                "Abra **Sistema › Inteligência** e clique em **Salvar**: eu tento instalar de novo e "
+                "reinicio o agente. Se continuar, rode no terminal:\n"
+                f"`hermes pm install --extra {m.group(1)}`")
+    msg = re.sub(r"^Hermes could not start the assistant for this session\.\s*(Details:\s*)?", "", msg.strip())
+    if len(msg) > 400:
+        msg = msg[:400] + "…"
+    return f"Não consegui responder — o Hermes avisou um erro:\n\n{msg}\n\n(Detalhe no ponte.log.)"
+
 
 def _dados_do_rpc(r) -> dict:
     """Extrai o dicionario util de uma resposta JSON-RPC do gateway.

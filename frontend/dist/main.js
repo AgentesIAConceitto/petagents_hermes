@@ -11,8 +11,6 @@ const msgs = document.getElementById("msgs");
 const txt = document.getElementById("txt");
 const menu = document.getElementById("menu");
 const telaPanel = document.getElementById("tela");
-const dot = document.getElementById("dot");
-const dotSub = document.getElementById("balao-sub");
 
 let estado = { state: "idle", detail: "", heartbeat: -1, balance: "", agent: "hermes" };
 let hideTimer = null, balaoTimer = null, arrastando = false, ultimoMenu = 0;
@@ -28,7 +26,7 @@ function log(m) { try { G && G.LogMsg(m); } catch (e) {} }
    então o X não fechava nada — só funcionava quando outro painel registrado (o
    balão, que abre por cima) caía sobre o X (relatado pelo dono, 03/10/2026).
    Agora varre o DOM pelas classes de superfície: painel novo entra sozinho. */
-const SUPERFICIES = ".balao, .menu, .bicho, .pets, .email, .tela, .cg, .toast, .premio";
+const SUPERFICIES = ".balao, .menu, .bicho, .pets, .email, .tela, .cg, .toast, .premio, .aparencia";
 function reportarHit() {
   if (!G) return;
   const d = DPR(), rs = [];
@@ -358,8 +356,10 @@ async function carregarPet() {
       cfg.offset = Math.max(6, d.left);
     }
   } catch (e) {}
+  aplicaAparencia(cfg.aparencia); // tema.js: cores, fonte, ícones e cantos salvos
   aplicaPerfil(); aplicaInteracao(); aplicaParado(); aplicaTamanho(); aplicaPosicao();
   carregarPetDex(); // boneco da galeria (Petdex), se houver um instalado
+  if (typeof pintaBotoesVoz === "function") pintaBotoesVoz(); // 🔊 salvo em cfg.vozFala (voz.js)
 }
 
 /* ───────── PERFIL e INTERAÇÃO ───────── */
@@ -621,19 +621,14 @@ function alternaBoneco() {
 const petPanelEl = document.getElementById("petPanel");
 let petsBase = "", petPanelTermo = "", petPanelOffset = 0;
 
-function posicionaJunto(el, largura) {
-  const r = pet.getBoundingClientRect();
-  const larg = el.offsetWidth || largura, alt = el.offsetHeight || 420;
-  let x = r.left + 14, y = r.top - alt - 14;
-  if (y < 10) y = r.bottom + 14;
-  if (x + larg > innerWidth - 10) x = Math.max(10, innerWidth - larg - 10);
-  if (y + alt > innerHeight - 10) y = Math.max(10, innerHeight - alt - 10);
-  el.style.left = x + "px"; el.style.top = y + "px";
-}
+// 22/10/2026: todos os painéis abrem ENCOSTADOS no boneco, pelo mesmo cálculo do menu
+// (posicionaPertoDoPet: ancorado pela base, então a lista que carrega depois cresce
+// para cima sem desgrudar). Antes cada um tinha a sua conta, com "380 px acima" fixo.
+function posicionaJunto(el) { posicionaPertoDoPet(el); }
 
 async function abrirPainelBonecos(termo) {
   petPanelEl.classList.remove("oculto");
-  posicionaJunto(petPanelEl, 430);
+  posicionaJunto(petPanelEl);
   await listaBonecos(termo === undefined ? "" : termo); // abre mostrando os meus
   reportarHit();
 }
@@ -642,22 +637,27 @@ function fecharPainelBonecos() { petPanelEl.classList.add("oculto"); reportarHit
 async function listaBonecos(termo, offset) {
   if (termo !== undefined) { petPanelTermo = termo || ""; petPanelOffset = 0; }
   if (offset !== undefined) petPanelOffset = offset;
-  document.getElementById("pets-termo").value = petPanelTermo === "*" ? "" : petPanelTermo;
+  const abaDe = { "": "pets-instalados", "*": "pets-galeria", creature: "pets-bichinhos", character: "pets-personagens" };
+  for (const id of Object.values(abaDe)) {
+    const b = document.getElementById(id), sel = abaDe[petPanelTermo] === id;
+    b.classList.toggle("sel", sel); b.setAttribute("aria-selected", sel);
+  }
+  document.getElementById("pets-termo").value = abaDe[petPanelTermo] ? "" : petPanelTermo;
   const alvo = document.getElementById("pets-lista");
   alvo.innerHTML = '<div class="aviso">carregando… (na primeira busca o catálogo da galeria pode levar alguns segundos)</div>';
   let d = null;
   try { d = JSON.parse(await G.PetGaleria(petPanelTermo, petPanelOffset)); } catch (e) {}
   if (!d || !d.ok) {
-    alvo.innerHTML = '<div class="aviso">' + ((d && d.erro) || "sem resposta do app") + '</div>';
+    alvo.innerHTML = '<div class="aviso">' + escHtml((d && d.erro) || "sem resposta do app") + '</div>';
     document.getElementById("pets-conta").textContent = "";
     return;
   }
   petsBase = d.base || petsBase;
   document.getElementById("pets-atual").textContent =
-    "· usando: " + ((dex && cfg.dexOn) ? dex.slug : "vetor (nosso)");
+    "agora: " + ((dex && cfg.dexOn) ? dex.slug : "boneco padrão");
   const n = (d.itens || []).length;
   document.getElementById("pets-conta").textContent =
-    petPanelTermo === "" ? (d.total + " bonecos na sua máquina · a galeria tem 4.873")
+    petPanelTermo === "" ? (d.total + " bonecos nesta máquina")
     : petPanelTermo === "*" ? ("galeria completa · " + d.total + " bonecos · mostrando de " + (petPanelOffset + 1) + " a " + (petPanelOffset + n))
     : (d.total + " encontrados · " + (n ? "mostrando " + n : "nenhum"));
   document.getElementById("pets-mais").style.display = d.tem_mais ? "" : "none";
@@ -671,20 +671,14 @@ async function listaBonecos(termo, offset) {
     if (url) t.style.backgroundImage = "url(" + url + ")";
     const nn = document.createElement("div");
     nn.className = "nome"; nn.textContent = nome;
-    const u = document.createElement("div");
-    u.className = "usar";
-    u.textContent = local ? (sel ? "em uso" : "usar") : "baixar e usar";
-    c.appendChild(t); c.appendChild(nn);
-    if (tipo) {
-      const ty = document.createElement("div");
-      ty.className = "tipo"; ty.textContent = tipo;
-      c.appendChild(ty);
-    }
-    c.appendChild(u);
+    const u = document.createElement("button");
+    u.className = "usar" + (sel ? " em-uso" : local ? " prim" : "");
+    u.textContent = sel ? "Em uso" : local ? "Usar" : "Baixar e usar";
+    c.appendChild(t); c.appendChild(nn); c.appendChild(u);
     c.onclick = () => usarBoneco(slug, local);
     alvo.appendChild(c);
   };
-  if (!petPanelTermo) cartao("__vetor__", "vetor (nosso)", "sem download", "", !cfg.dexOn, true);
+  if (!petPanelTermo) cartao("__vetor__", "boneco padrão", "sem download", "", !cfg.dexOn, true);
   for (const it of (d.itens || [])) {
     const local = !!it.local && !!petsBase;
     const url = local ? (petsBase + "/sheet/" + it.slug) : (it.sprite || "");
@@ -700,7 +694,7 @@ async function usarBoneco(slug, local) {
     cfg.dexOn = false; clearInterval(dexTimer);
     pet.classList.remove("dex"); aplicaTamanho();
     salvarPet(); aplicaPosicao();
-    toast("🐾", "Boneco vetor (nosso)", "", 2400, true);
+    toast("🐾", "Boneco padrão", "", 2400, true);
     fecharPainelBonecos(); // volta a mostrar o boneco, como o usuário espera
     return;
   }
@@ -717,7 +711,6 @@ async function usarBoneco(slug, local) {
   fecharPainelBonecos(); // escolheu → fecha e mostra o boneco novo
 }
 
-document.getElementById("pets-buscar").onclick = () => listaBonecos(document.getElementById("pets-termo").value);
 document.getElementById("pets-termo").addEventListener("keydown", (e) => {
   if (e.key === "Enter") listaBonecos(e.target.value);
 });
@@ -727,16 +720,13 @@ document.getElementById("pets-bichinhos").onclick = () => listaBonecos("creature
 document.getElementById("pets-personagens").onclick = () => listaBonecos("character");
 document.getElementById("pets-mais").onclick = () => listaBonecos(undefined, petPanelOffset + 24);
 document.getElementById("pets-vetor").onclick = () => usarBoneco("__vetor__", true);
-document.getElementById("pets-fechar").onclick = () => fecharPainelBonecos();
 document.getElementById("pets-x").onclick = () => fecharPainelBonecos();
 
 /* ───────── estado do boneco ───────── */
 function aplicarEstado(s) {
   estado = Object.assign(estado, s || {});
   classePet(estado.state || "idle");
-  const mapa = { idle: "", pensando: "pensando", dormindo: "dormindo", erro: "erro", falando: "pensando" };
-  dot.className = "dot " + (mapa[estado.state] || "");
-  dotSub.textContent = [estado.detail, estado.balance].filter(Boolean).join(" · ");
+  atualizaInfoChat(); // cabeçalho do chat: nome, modelo, saldo e o ponto de status
   destacarPendencia();
   reportarHit();
 }
@@ -744,7 +734,7 @@ function aplicarEstado(s) {
 /* ───────── balão (conversa) ─────────
    A conversa é UMA só: o balão e o chat estendido desenham a mesma lista. */
 const conversa = [];
-let ocupado = false; // true enquanto o Hermes está pensando
+let ocupado = false; // true enquanto o agente está pensando
 
 // escHtml — texto de FORA (e-mail, rede) entra no innerHTML só por aqui.
 // Sem isto, um remetente "<img onerror=...>" roda JS no overlay, que alcança
@@ -763,12 +753,74 @@ function formata(t) {
   return s;
 }
 
-function msg(texto, quem = "ele") {
-  conversa.push({ quem: quem, texto: texto });
-  // a conversa sobrevive ao reiniciar o app (o Hermes pode responder depois de ele
+// `extra` vai junto na mensagem guardada (ex.: { hora, seg } no rodapé da resposta)
+function msg(texto, quem = "ele", extra) {
+  conversa.push(Object.assign({ quem: quem, texto: texto }, extra || {}));
+  // a conversa sobrevive ao reiniciar o app (o agente pode responder depois de ele
   // já ter sido fechado/reaberto — foi o que aconteceu em 02/10/2026)
   try { localStorage.setItem("conversa", JSON.stringify(conversa.slice(-60))); } catch (e) {}
   pintaConversa();
+}
+
+/* ───────── cabeçalho do chat: nome do pet · modelo · saldo · gasto de hoje ─────────
+   Pedido da dona (22/10/2026): sai "Hermes · gateway ativo (4s) · saldo indisponível
+   (chave não encontrada)". O ponto de status agora fala do AGENTE QUE RESPONDE O CHAT
+   (a ponte), não do heartbeat do gateway — esse detalhe técnico vai para o tooltip. */
+let infoChat = { modelo: "", saldo: "", pronta: false, erro: "" };
+
+const numeroSaldo = (t) => { const m = /US\$\s*([\d.]+)/.exec(t || ""); return m ? parseFloat(m[1]) : null; };
+const moeda = (v) => "US$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// gasto de hoje = quanto o saldo caiu desde a primeira leitura do dia. Recarga (o saldo
+// SOBE) recomeça a conta. É a conta inteira da chave: inclui o que se gastou fora do boneco.
+function gastoHoje(saldo) {
+  const d = new Date(), dia = d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  let g = {};
+  try { g = JSON.parse(localStorage.getItem("saldo.dia") || "{}"); } catch (e) { }
+  if (g.dia !== dia || !(saldo <= g.inicial)) {
+    g = { dia: dia, inicial: saldo };
+    try { localStorage.setItem("saldo.dia", JSON.stringify(g)); } catch (e) { }
+  }
+  return g.inicial - saldo;
+}
+
+function nomeDoPet() {
+  try { if (window.bichoResumo) return window.bichoResumo().nome || "Seu pet"; } catch (e) { }
+  return "Seu pet";
+}
+
+function pintaCabecalhoChat() {
+  const nome = nomeDoPet();
+  const saldoTxt = infoChat.saldo || estado.balance || "";
+  const saldo = numeroSaldo(saldoTxt);
+  const partes = [];
+  if (infoChat.modelo) partes.push(infoChat.modelo);
+  if (saldo !== null) {
+    partes.push(moeda(saldo));
+    const g = gastoHoje(saldo);
+    if (g >= 0.005) partes.push("hoje −" + moeda(g));
+  } else if (/chave/.test(saldoTxt)) {
+    partes.push("saldo: configure a chave");
+  }
+  // o ponto: pensando (esperando resposta) › fora do ar › saldo baixo › ok
+  let cls = "", linha = partes.join(" · ");
+  if (ocupado) { cls = "pensando"; linha = nome + " está pensando…"; }
+  else if (!infoChat.pronta && infoChat.erro) { cls = "erro"; linha = "agente fora do ar — respondo pelo modo lento"; }
+  else if (!infoChat.pronta) { cls = "aviso"; linha = "conectando ao agente…"; }
+  else if (saldo !== null && saldo < 3) { cls = "aviso"; linha = "saldo baixo · " + linha; }
+  // o detalhe técnico (gateway, motivo do saldo) continua acessível: passar o mouse
+  const dica = [estado.detail, saldoTxt, infoChat.erro].filter(Boolean).join(" · ");
+  for (const [d, t, s] of [["dot", "balao-titulo", "balao-sub"], ["cg-dot", "cg-tit", "cg-sub"]]) {
+    const elD = document.getElementById(d), elT = document.getElementById(t), elS = document.getElementById(s);
+    if (elD) { elD.className = "dot " + cls; elD.title = dica; }
+    if (elT) elT.textContent = nome;
+    if (elS) { elS.textContent = linha; elS.title = dica; }
+  }
+}
+
+async function atualizaInfoChat() {
+  try { if (G && G.InfoChat) infoChat = Object.assign(infoChat, JSON.parse(await G.InfoChat())); } catch (e) { }
+  pintaCabecalhoChat();
 }
 
 /* Levar a conversa SEMPRE para a última mensagem — no balão E no chat estendido.
@@ -784,63 +836,62 @@ function rolarAoFim() {
   setTimeout(fazer, 60);
 }
 
-/* PAINEL AO VIVO — mostra o que o agente está fazendo ENQUANTO faz (10/10/2026).
+/* BOLHA AO VIVO — o pet "digitando" enquanto o agente trabalha (10/10/2026; virou
+   bolha com três pontinhos em 22/10/2026, no lugar de "⏳ consultando o Hermes…").
    O dono: "eu não fico nunca no vácuo aqui no chat".
 
    MEDIDO: o modelo passa o tempo PENSANDO e o texto só sai em rajada no fim — transmitir
    só o texto deixaria o balão parado de novo. Por isso há DOIS movimentos: os passos que a
-   ponte manda (ferramentas) e um RELÓGIO que mantém a linha viva a cada segundo.
+   ponte manda (ferramentas) e um RELÓGIO que mantém a bolha viva a cada segundo.
 
    ⚠️ Não abre o balão: a regra do dono é que nada abre o chat sozinho.
    ⚠️ Não usa `conversa` (é const — reatribuir quebra a função): mexe só no DOM. */
 let _vivoRotulo = "";
+let _vivoTexto = "";
 let _vivoInicio = 0;
 let _vivoTimer = null;
 
 function _pintaVivo() {
-  if (!_vivoRotulo) return;
-  const seg = _vivoInicio ? Math.round((Date.now() - _vivoInicio) / 1000) : 0;
-  const texto = '<span class="passo">⚙️ ' + formata(_vivoRotulo) + (seg > 2 ? " · " + seg + "s" : "") + "…</span>";
+  if (!_vivoInicio) return;
+  const seg = Math.round((Date.now() - _vivoInicio) / 1000);
+  let html;
+  if (_vivoTexto) {
+    html = formata(_vivoTexto);   // o texto já está chegando: mostra o que veio
+  } else {
+    const rotulo = [_vivoRotulo ? formata(_vivoRotulo) : "", seg > 2 ? seg + " s" : ""].filter(Boolean).join(" · ");
+    html = '<span class="digitando"><i></i><i></i><i></i></span>' + (rotulo ? '<span class="passo">' + rotulo + "</span>" : "");
+  }
   for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
     if (!alvo) continue;
     let el = alvo.querySelector(".ao-vivo");
     if (!el) {
       el = document.createElement("div");
-      el.className = "m meta ao-vivo";
+      el.className = "m ele ao-vivo";
       alvo.appendChild(el);
     }
-    el.innerHTML = texto;
+    el.innerHTML = html;
   }
   rolarAoFim();
 }
 
+function iniciaAoVivo() {
+  _vivoRotulo = ""; _vivoTexto = ""; _vivoInicio = Date.now();
+  _pintaVivo();
+  if (!_vivoTimer) _vivoTimer = setInterval(_pintaVivo, 1000);
+}
+
 function progressoAoVivo(p) {
   if (!p || !p.tipo) return;
-  if (p.tipo === "passo") {
-    _vivoRotulo = String(p.texto || "trabalhando");
-    if (!_vivoInicio) _vivoInicio = Date.now();
-    _pintaVivo();
-  } else {
-    // texto chegando: mostra o que já veio (e mantém o relógio se ele ainda pensa)
-    const alvo = msgs || document.getElementById("cg-msgs");
-    if (alvo) {
-      let el = alvo.querySelector(".ao-vivo");
-      if (!el) {
-        el = document.createElement("div");
-        el.className = "m meta ao-vivo";
-        alvo.appendChild(el);
-      }
-      el.innerHTML = formata(String(p.texto || ""));
-      rolarAoFim();
-    }
-  }
+  if (p.tipo === "passo") _vivoRotulo = String(p.texto || "trabalhando");
+  else _vivoTexto = String(p.texto || "");
+  if (!_vivoInicio) _vivoInicio = Date.now();
+  _pintaVivo();
   if (!_vivoTimer) _vivoTimer = setInterval(_pintaVivo, 1000);
 }
 
 function encerraAoVivo() {
   if (_vivoTimer) { clearInterval(_vivoTimer); _vivoTimer = null; }
-  _vivoRotulo = "";
-  _vivoInicio = 0;
+  _vivoRotulo = ""; _vivoTexto = ""; _vivoInicio = 0;
   for (const alvo of [msgs, document.getElementById("cg-msgs")]) {
     if (!alvo) continue;
     const vivo = alvo.querySelector(".ao-vivo");
@@ -857,10 +908,17 @@ function pintaConversa() {
       const el = document.createElement("div");
       el.className = "m " + m.quem;
       el.innerHTML = formata(m.texto);
+      // rodapé discreto da resposta: hora e quanto levou (era a linha "via Hermes · 13.9 s")
+      if (m.hora || m.seg) {
+        const rp = document.createElement("span");
+        rp.className = "rodape-msg";
+        rp.textContent = [m.hora, m.seg ? String(m.seg).replace(".", ",") + " s" : ""].filter(Boolean).join(" · ");
+        el.appendChild(rp);
+      }
       if (m.quem !== "meta") { // linhas de status não ganham botão de copiar
         const cp = document.createElement("span");
         cp.className = "copiar";
-        cp.textContent = "⧉";
+        cp.innerHTML = icone("copiar", 14);
         cp.title = "copiar esta mensagem";
         cp.onclick = (ev) => { ev.stopPropagation(); copiarTexto(m.texto, cp); };
         el.appendChild(cp);
@@ -868,6 +926,7 @@ function pintaConversa() {
       alvo.appendChild(el);
     }
   }
+  if (_vivoInicio) _pintaVivo(); // repintar a conversa não pode sumir com a bolha "digitando"
   rolarAoFim();   // antes era `alvo.scrollTop` por alvo: não pegava com o balão oculto
   ancoraBalao();
 }
@@ -876,10 +935,9 @@ function pintaConversa() {
    sempre está disponível, então há reserva com textarea + execCommand. */
 function copiarTexto(t, el) {
   const ok = () => {
-    const antes = el.textContent;
-    el.textContent = "✓";
+    el.innerHTML = icone("ok", 14);
     el.classList.add("copiado");
-    setTimeout(() => { el.textContent = antes; el.classList.remove("copiado"); }, 1200);
+    setTimeout(() => { el.innerHTML = icone("copiar", 14); el.classList.remove("copiado"); }, 1200);
   };
   const reserva = () => {
     const ta = document.createElement("textarea");
@@ -898,24 +956,69 @@ function copiarTexto(t, el) {
   }
 }
 
-// o balão é ancorado pelo RODAPÉ: cresce para cima, nunca por cima do pet
+/* o balão é ancorado pelo RODAPÉ: cresce para cima, nunca por cima do pet.
+   Tamanho (22/10/2026): 460 × até 55% da tela por padrão, e a dona redimensiona pela
+   alça (fica salvo em cfg.chat). Aqui só se garante que ele CABE acima do boneco. */
+const BALAO_MIN = { w: 320, h: 260 };
+function tamanhoBalao() {
+  const c = cfg.chat || {};
+  return { w: c.w || 460, h: c.h || Math.round(Math.min(innerHeight * 0.55, 560)) };
+}
 function ancoraBalao() {
   if (!balao || balao.classList.contains("oculto")) return;
   const r = pet.getBoundingClientRect();
-  const larg = balao.offsetWidth || 420;
-  balao.style.top = "";
-  balao.style.bottom = Math.max(10, innerHeight - r.top + 18) + "px";
-  let x = r.left + 20;
-  if (x + larg > innerWidth - 10) {
-    x = Math.max(10, innerWidth - larg - 10);
-    balao.classList.add("flip");
+  const t = tamanhoBalao();
+  const larg = Math.max(BALAO_MIN.w, Math.min(t.w, innerWidth - 20));
+  // boneco encostado em CIMA: não cabe o balão acima dele — abre embaixo (ancorado no topo)
+  const embaixo = r.top - 28 < BALAO_MIN.h;
+  balao.classList.toggle("embaixo", embaixo);
+  balao.style.width = larg + "px";
+  if (embaixo) {
+    const topo = Math.round(r.bottom + 18);
+    balao.style.height = Math.max(BALAO_MIN.h, Math.min(t.h, innerHeight - topo - 10)) + "px";
+    balao.style.bottom = "";
+    balao.style.top = topo + "px";
+  } else {
+    const base = Math.max(10, innerHeight - r.top + 18);
+    balao.style.height = Math.max(BALAO_MIN.h, Math.min(t.h, innerHeight - base - 10)) + "px";
+    balao.style.top = "";
+    balao.style.bottom = base + "px";
   }
+  let x = r.left + 20;
+  const flip = x + larg > innerWidth - 10;
+  if (flip) x = Math.max(10, innerWidth - larg - 10);
+  balao.classList.toggle("flip", flip); // antes só ADICIONAVA: virado uma vez, ficava virado
   balao.style.left = x + "px";
 }
+
+(function redimensionarBalao() { // pela alça do canto de cima (oposto ao rabinho)
+  const puxa = document.getElementById("balao-puxa");
+  if (!puxa || !balao) return;
+  let p = null;
+  puxa.addEventListener("mousedown", (e) => {
+    p = { x: e.clientX, y: e.clientY, w: balao.offsetWidth, h: balao.offsetHeight, flip: balao.classList.contains("flip"), embaixo: balao.classList.contains("embaixo") };
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!p) return;
+    const dx = (e.clientX - p.x) * (p.flip ? -1 : 1);  // virado: a alça fica à esquerda
+    cfg.chat = {
+      w: Math.round(Math.max(BALAO_MIN.w, p.w + dx)),
+      // ancorado embaixo: subir = crescer (aberto embaixo do boneco, a alça desce)
+      h: Math.round(Math.max(BALAO_MIN.h, p.h + (e.clientY - p.y) * (p.embaixo ? 1 : -1))),
+    };
+    ancoraBalao();
+    reportarHit();
+    reiniciarAuto();
+  });
+  window.addEventListener("mouseup", () => { if (p) { p = null; salvarPet(); } });
+})();
 
 function abrirBalao(posicionar = true) {
   balao.classList.remove("oculto");
   if (posicionar) ancoraBalao();
+  pintaCabecalhoChat();
   rolarAoFim();   // abrir = cair na ÚLTIMA mensagem, sem arrastar até o fim
   txt.focus();
   reiniciarAuto();
@@ -924,7 +1027,7 @@ function abrirBalao(posicionar = true) {
 function fecharBalao() { balao.classList.add("oculto"); reportarHit(); }
 function reiniciarAuto() {
   clearTimeout(balaoTimer);
-  if (ocupado) return; // esperando o Hermes: NÃO esconde (a resposta chega depois)
+  if (ocupado) return; // esperando o agente: NÃO esconde (a resposta chega depois)
   balaoTimer = setTimeout(() => fecharBalao(), 20000); // auto-esconde: 20 s sem interação
 }
 
@@ -932,41 +1035,52 @@ async function enviarTexto(texto, input) {
   texto = (texto || "").trim();
   if (!texto || ocupado) return;
   input.value = "";
+  if (typeof pararFala === "function") pararFala(); // pergunta nova: a resposta antiga se cala
   msg(texto, "eu");
   classePet("pensando");
-  msg("⏳ consultando o Hermes…", "meta");
   ocupado = true;                       // esperando resposta: o balão NÃO se esconde
+  iniciaAoVivo();                       // a bolha "digitando" (era a linha "⏳ consultando…")
   input.disabled = true;
-  input.placeholder = "o Hermes está pensando…";
+  input.placeholder = nomeDoPet() + " está pensando…";
+  pintaCabecalhoChat();
   reiniciarAuto();
   let resp = "(sem resposta)";
   const t0 = Date.now();
   try { resp = G ? await G.SendChat(texto) : "(fora do Wails)"; } catch (e) { resp = "erro: " + e; }
-  const levou = ((Date.now() - t0) / 1000).toFixed(1);
-  if (conversa.length && conversa[conversa.length - 1].quem === "meta") conversa.pop();
+  const levou = Math.round((Date.now() - t0) / 100) / 10;
   ocupado = false;
   input.disabled = false;
-  input.placeholder = "Escreva e dê Enter…";
+  input.placeholder = "Escreva ou fale pelo microfone…";
   // COMANDOS QUE LIMPAM A TELA (pedido do dono, 10/10/2026): /clear, /new e /reset apagam a
   // conversa VISÍVEL — senão o chat fica poluído e o dono rola por mãos antigas. A ponte cuida
   // do CONTEXTO (cria sessão nova); a tela é daqui. Apago ANTES de mostrar a resposta, para o
   // recado do comando ser a primeira linha do chat limpo.
   const _cmd = texto.toLowerCase().split(/\s+/)[0];
   if (["/clear", "/limpar", "/new", "/nova", "/reset"].includes(_cmd)) {
-    // ⚠️ `conversa` é CONST (linha 568): reatribuir (`conversa = []`) lança TypeError e QUEBRA
+    // ⚠️ `conversa` é CONST: reatribuir (`conversa = []`) lança TypeError e QUEBRA
     // a função aqui — a resposta nunca aparecia e o chat não limpava. Defeito medido em
     // 10/10/2026: o /clear zerava o contexto no motor (log: 0,6 s) e na tela "não funcionava".
     // Limpar o MESMO array (length = 0) mantém a referência e o resto do código intacto.
     conversa.length = 0;
     try { localStorage.setItem("conversa", JSON.stringify([])); } catch (e) {}
   }
-  // a linha "ao vivo" (progresso + relógio) sai de cena: entra a mensagem de verdade
+  // a bolha ao vivo sai de cena: entra a mensagem de verdade, com hora e tempo no rodapé
   encerraAoVivo();
-  msg(resp, "ele");
-  // marcador honesto: mostra quanto tempo levou (quente = segundos / reserva = ~1 min)
-  msg("via Hermes · " + levou + " s", "meta");
+  const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  // a pessoa fechou o chat enquanto esperava? então não reabre na cara dela: avisa
+  // ("Aurora respondeu" + Ver resposta). Com o chat aberto, segue como sempre.
+  const chatFechado = balao.classList.contains("oculto") && (!cg || cg.classList.contains("oculto"));
+  msg(resp, "ele", { hora: hora, seg: levou });
   classePet(estado.state || "idle");
-  abrirBalao(false);                    // garante o balão aberto para mostrar a resposta
+  if (typeof falarResposta === "function") falarResposta(resp); // 🔊 ligado: lê em voz alta (voz.js)
+  if (chatFechado) {
+    const ver = () => abrirBalao();
+    toast("conversar", nomeDoPet() + " respondeu", String(resp).replace(/\s+/g, " ").slice(0, 110), 30000, false,
+      { acoes: [{ r: "Ver resposta", prim: true, fn: ver }], clique: ver });
+  } else {
+    abrirBalao(false);                  // garante o balão aberto para mostrar a resposta
+  }
+  atualizaInfoChat();                   // o modelo pode ter chegado agora, com a resposta
   reiniciarAuto();
   reportarHit();
 }
@@ -975,21 +1089,26 @@ function enviar() { return enviarTexto(txt.value, txt); }
 
 /* ───────── chat estendido (janela arrastável e redimensionável) ─────────
    Abre no centro da tela atual, arrasta pela barra de título e redimensiona pelo
-   canto. É a MESMA conversa do balão — só maior. */
+   canto. É a MESMA conversa do balão — só maior. Posição e tamanho ficam salvos
+   em cfg.chatGrande (22/10/2026): reabrir volta onde a dona deixou. */
 const cg = document.getElementById("chatGrande");
 
 function abrirChatGrande() {
   if (!cg) return;
   fecharBalao(); // pedido do dono (02/10/2026): o balão pequeno SAI de cena
   cg.classList.remove("oculto");
+  pintaCabecalhoChat();
   rolarAoFim();   // idem: o chat estendido abre no fim da conversa
   if (!cg.dataset.pos) {
-    const larg = Math.max(420, Math.round(innerWidth * 0.62));
-    const alt = Math.max(300, Math.round(innerHeight * 0.6));
+    const s = cfg.chatGrande || {};
+    const larg = Math.min(innerWidth - 20, s.w || Math.max(420, Math.round(innerWidth * 0.62)));
+    const alt = Math.min(innerHeight - 20, s.h || Math.max(300, Math.round(innerHeight * 0.6)));
+    const x = s.x !== undefined ? s.x : Math.round((innerWidth - larg) / 2);
+    const y = s.y !== undefined ? s.y : Math.round((innerHeight - alt) / 2);
     cg.style.width = larg + "px";
     cg.style.height = alt + "px";
-    cg.style.left = Math.round((innerWidth - larg) / 2) + "px";
-    cg.style.top = Math.round((innerHeight - alt) / 2) + "px";
+    cg.style.left = Math.max(-40, Math.min(innerWidth - 120, x)) + "px";
+    cg.style.top = Math.max(0, Math.min(innerHeight - 40, y)) + "px";
     cg.dataset.pos = "1";
   }
   document.getElementById("cg-txt").focus();
@@ -998,13 +1117,17 @@ function abrirChatGrande() {
 function fecharChatGrande() {
   if (cg) { cg.classList.add("oculto"); reportarHit(); }
 }
+function guardaChatGrande() {
+  cfg.chatGrande = { x: cg.offsetLeft, y: cg.offsetTop, w: cg.offsetWidth, h: cg.offsetHeight };
+  salvarPet();
+}
 
 (function arrastarChat() { // arrastar pela barra de título
   const topo = document.getElementById("cg-topo");
   if (!topo || !cg) return;
   let d = null;
   topo.addEventListener("mousedown", (e) => {
-    if (e.target.id === "cg-x" || e.target.id === "cg-min") return; // botões não arrastam
+    if (e.target.closest("button")) return; // botões não arrastam (o alvo pode ser o ícone)
     d = { x: e.clientX - cg.offsetLeft, y: e.clientY - cg.offsetTop };
     e.preventDefault();
   });
@@ -1014,7 +1137,7 @@ function fecharChatGrande() {
     cg.style.top = Math.max(0, Math.min(innerHeight - 40, e.clientY - d.y)) + "px";
     reportarHit();
   });
-  window.addEventListener("mouseup", () => { d = null; });
+  window.addEventListener("mouseup", () => { if (d) { d = null; guardaChatGrande(); } });
 })();
 
 (function redimensionarChat() { // redimensionar pelo canto
@@ -1032,7 +1155,7 @@ function fecharChatGrande() {
     cg.style.height = Math.max(280, p.h + (e.clientY - p.y)) + "px";
     reportarHit();
   });
-  window.addEventListener("mouseup", () => { p = null; });
+  window.addEventListener("mouseup", () => { if (p) { p = null; guardaChatGrande(); } });
 })();
 
 document.getElementById("balao-estender").onclick = () => abrirChatGrande();
@@ -1045,115 +1168,158 @@ document.getElementById("cg-enviar").onclick = () =>
 document.getElementById("cg-txt").addEventListener("keydown", (e) => {
   if (e.key === "Enter") enviarTexto(e.target.value, e.target);
 });
-(async () => { // deixa escrito na tela se o chat está mesmo ligado no Hermes
-  try {
-    const i = JSON.parse(await G.ChatIntegrado());
-    document.getElementById("cg-sub").textContent =
-      i.ok ? "ligado ao Hermes · sessão " + i.sessao : "Hermes não encontrado";
-  } catch (e) {}
-})();
 try { // recupera a conversa anterior (inclusive resposta que chegou com o balão fechado)
   const c = JSON.parse(localStorage.getItem("conversa") || "[]");
   if (Array.isArray(c) && c.length) {
-    for (const m of c) conversa.push(m);
+    for (const m of c) {
+      // conversa guardada antes de 22/10/2026: "via Hermes · 13.9 s" vira o rodapé da
+      // resposta anterior; "⏳ consultando…" e "✅ tarefa concluída" não aparecem mais
+      if (m.quem === "meta") {
+        const via = /^via \S+ · ([\d.]+) s$/.exec(m.texto || "");
+        const ant = conversa[conversa.length - 1];
+        if (via && ant && ant.quem === "ele" && !ant.seg) { ant.seg = parseFloat(via[1]); continue; }
+        if (via || /^⏳|tarefa concluída/.test(m.texto || "")) continue;
+      }
+      conversa.push(m);
+    }
     pintaConversa();
   }
 } catch (e) {}
+pintaCabecalhoChat();
 
-/* ───────── menu (tiles, dirigido por estado) ─────────
-   Padrão ANTES do bicho.js entrar: ele sobrescreve as linhas 1/2/3/6 em
-   repintaMenu(). Regra: cada ação aparece em UM botão só. */
-const TILES = {
-  linha1: [
-    ["🍖", "Alimentar", () => subAlimentar()],
-    ["🎾", "Brincar", () => reagir("Uhu! Vou procurar um tesouro…", "pensando")],
-    ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
-    ["😴", "Dormir", () => dormir(30)],
+/* ───────── menu (dock com abas: Pet · Recursos · Sistema) ─────────
+   Escolha da dona em 22/10/2026 (prancha "PetAgent — Menu novo", opção A): o
+   que é DO PET fica separado do que é recurso DELA e do que é controle da janela.
+   Cada item: [ícone, nome, ação, valor?, fica?] — nome/valor podem ser função
+   (mostram o estado ATUAL a cada abertura); `fica` mantém o menu aberto (ajuste
+   que só alterna um valor). O bicho.js troca MENU.pet pelas ações dele em
+   repintaMenu(). Regra que continua: uma ação, um botão. */
+const MENU = {
+  pet: [
+    ["alimentar", "Alimentar", () => subAlimentar()],
+    ["brincar", "Brincar", () => reagir("Uhu! Vou procurar um tesouro…", "pensando")],
+    ["dormir", "Dormir", () => dormir(30)],
+    ["status", "Como está", () => status()],
+    ["colecao", "Coleção", () => { if (window.premiosGaleria) window.premiosGaleria(); }],
+    ["cuidar", "Cuidar dele", () => { if (window.bicho) window.bicho.abrirPainel(); }],
   ],
-  linha2: [
-    ["🐾", "Cuidar dele", () => { if (window.bicho) window.bicho.abrirPainel(); }],
-    ["💬", "Conversar", () => { abrirBalao(); txt.focus(); }],
+  boneco: [
+    ["boneco", "Trocar boneco", () => abrirPainelBonecos()],
+    ["tamanho", "Tamanho", () => cicloTamanho(), () => Math.round(escala() * 100) + "%", true],
+    ["passear", "Passear sozinho", () => alternaParado(), () => cfg.parado ? "Parado" : "Ligado", true],
+    ["perfil", "Perfil", () => cicloPerfil(), () => ({ calmo: "Calmo", agitado: "Agitado", brincalhao: "Brincalhão" })[cfg.perfil] || "", true],
+    ["interacao", "Interação", () => alternaInteracao(), () => cfg.interagir ? "Ligada" : "Desligada", true],
   ],
-  linha3: [
-    ["📊", "Como ele está", () => status()],
-    ["💎", "Coleção", () => { if (window.premiosGaleria) window.premiosGaleria(); else msg("A coleção do bicho mora aqui.", "ele"); }],
-    ["🖐", "Gestos", () => reagir("Olha eu me mexendo! 🎩", "pensando")],
-    ["📧", "E-mail", () => abrirEmail()],
+  recursos: [
+    ["conversar", "Conversar", () => { abrirBalao(); txt.focus(); }, "No balão, junto do boneco"],
+    ["janela", "Chat estendido", () => abrirChatGrande(), "Janela grande, com histórico"],
+    ["email", "E-mail", () => abrirEmail(), "O que chegou de importante"],
   ],
-  // ícone/rótulo podem ser função: o tile mostra o estado ATUAL a cada abertura
-  linha4: [
-    ["🐾", "Boneco", () => abrirPainelBonecos()],
-    ["📏", () => "Tamanho " + Math.round(escala() * 100) + "%", () => cicloTamanho()],
-    [() => cfg.parado ? "🚶" : "📌", () => cfg.parado ? "Deixar passear" : "Ficar parado", () => alternaParado()],
-    ["🎭", "Perfil", () => cicloPerfil()],
-    ["🖱", "Interação", () => alternaInteracao()],
-    ["🖥", "Tela e borda", () => abrirSeletorTela()],
-    ["👁", "Esconder 1h", () => esconder(60)],
+  sistema: [
+    ["tela", "Tela e borda", () => abrirSeletorTela()],
+    ["inteligencia", "Inteligência", () => abrirInteligencia()],
+    ["ajustes", "Aparência", () => abrirAparencia()],
+    ["esconder", "Esconder por 15 min", () => esconder(15)],
+    ["relogio", "Esconder por 1 h", () => esconder(60)],
+    ["recolher", "Recolher janela", () => esconderJanela()],
+    ["balao", "Recolher balão", () => fecharBalao()],
   ],
-  // Linha obrigatória de controle: DESLIGAR sempre visível, sempre no mesmo lugar.
-  linha5: [
-    ["⏻", "DESLIGAR", () => desligar()],
-    ["👁", "Esconder 15min", () => esconder(15)],
-    ["⌄", "Recolher janela", () => esconderJanela()],
-    ["↺", "Recolher balão", () => fecharBalao()],
-  ],
-  // linha6 ficou vazia de propósito: era depósito de resto (incl. o botão de
-  // debug "Testar balãozinho"). Linha vazia não é renderizada.
-  linha6: [],
 };
+const ABAS_MENU = [["pet", "Pet"], ["recursos", "Recursos"], ["sistema", "Sistema"]];
+let abaMenu = "pet";
+
+const valorDe = (v) => (typeof v === "function" ? v() : v) || "";
+// texto no innerHTML do menu sempre escapado (o nome do pet é digitado pela dona)
+const escMenu = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 function montarMenu() {
-  for (const id of ["linha1", "linha3", "linha4", "linha5", "linha6"]) {
-    const box = document.getElementById(id);
-    if (!box) continue;
-    box.innerHTML = "";
-    const lista = TILES[id] || [];
-    // linha vazia não ocupa espaço (era o buraco onde sobrava menu velho)
-    box.style.display = lista.length ? "" : "none";
-    for (const [icoT, rotuloT, acao] of lista) {
-      const ico = typeof icoT === "function" ? icoT() : icoT;
-      const rotulo = typeof rotuloT === "function" ? rotuloT() : rotuloT;
-      const b = document.createElement("div");
-      b.className = "tile"; b.dataset.acao = rotulo;
-      b.innerHTML = `<span class="ico">${ico}</span>${rotulo}`;
-      b.onclick = () => { fecharMenu(); acao(); };
-      box.appendChild(b);
-    }
+  // nome, humor e o que ele está pedindo vêm do bicho.js (se carregou)
+  let r = { nome: "Hermes", linha: "", pendente: "" };
+  try { if (window.bichoResumo) r = Object.assign(r, window.bichoResumo()); } catch (e) { }
+  const linha = (it, cls) => {
+    const [ico, nome, , valor] = it;
+    return `<button class="mlinha ${cls || ""}" data-acao="${escMenu(valorDe(nome))}">${icone(ico, 18)}` +
+      `<span class="nome">${escMenu(valorDe(nome))}</span><span class="valor">${escMenu(valorDe(valor))}</span></button>`;
+  };
+  let corpo = "";
+  if (abaMenu === "pet") {
+    corpo = `<div class="menu-grade">${MENU.pet.map(([ico, nome]) =>
+      `<button class="mtile" data-acao="${escMenu(nome)}"><span class="mtile-ico">${icone(ico)}</span>` +
+      `<span>${escMenu(nome)}</span>${r.pendente === ico ? '<i class="pendente" title="pedindo agora"></i>' : ""}</button>`).join("")}</div>
+      <div class="mlista"><div class="menu-secao">Boneco</div>${MENU.boneco.map((it) => linha(it)).join("")}</div>`;
+  } else if (abaMenu === "recursos") {
+    corpo = `<div class="mlista largo">${MENU.recursos.map(([ico, nome, , desc]) =>
+      `<button class="mcartao" data-acao="${escMenu(nome)}"><span class="mcartao-ico">${icone(ico)}</span>` +
+      `<span class="txt"><b>${escMenu(nome)}</b><span>${escMenu(desc || "")}</span></span>${icone("seta", 16)}</button>`).join("")}</div>`;
+  } else {
+    corpo = `<div class="mlista">${MENU.sistema.map((it) => linha(it)).join("")}
+      <div class="menu-sep"></div>${linha(["desligar", "Desligar"], "perigo")}</div>`;
   }
-  montarDestaque();
-}
+  menu.innerHTML = `
+    <div class="menu-topo">
+      <span class="menu-avatar">${icone("boneco")}</span>
+      <span class="menu-quem"><b>${escMenu(r.nome)}</b><span>${escMenu(r.linha)}</span></span>
+      <button class="botao-x" data-fechar aria-label="Fechar menu">${icone("fechar", 18)}</button>
+    </div>
+    <div class="menu-abas" role="tablist">${ABAS_MENU.map(([k, rot]) =>
+      `<button role="tab" data-aba="${k}" class="${abaMenu === k ? "sel" : ""}" aria-selected="${abaMenu === k}">${rot}</button>`).join("")}</div>
+    ${corpo}`;
 
-function montarDestaque() {
-  const botoes = document.querySelector(".menu-linha.destaque");
-  if (!botoes) return;
-  botoes.innerHTML = "";
-  const lista = TILES.linha2 || [];
-  botoes.style.display = lista.length ? "" : "none";
-  for (const [ico, rot, fn] of lista) {
-    const b = document.createElement("div");
-    b.className = "tile grande"; b.dataset.acao = rot;
-    b.innerHTML = `<span class="ico">${ico}</span>${rot}`;
-    b.onclick = () => { fecharMenu(); fn(); };
-    botoes.appendChild(b);
-  }
+  menu.querySelector("[data-fechar]").onclick = fecharMenu;
+  menu.querySelectorAll("[data-aba]").forEach((b) => {
+    b.onclick = () => { abaMenu = b.dataset.aba; montarMenu(); posicionaPertoDoPet(menu); reportarHit(); };
+  });
+  const itens = abaMenu === "pet" ? [...MENU.pet, ...MENU.boneco]
+    : abaMenu === "recursos" ? MENU.recursos
+    : [...MENU.sistema, ["desligar", "Desligar", () => desligar()]];
+  menu.querySelectorAll("[data-acao]").forEach((b, i) => {
+    const it = itens[i];
+    if (!it) return;
+    const fica = abaMenu !== "recursos" && it[4];
+    b.onclick = () => {
+      if (fica) { it[2](); if (!menu.classList.contains("oculto")) { montarMenu(); reportarHit(); } return; }
+      fecharMenu(); it[2]();
+    };
+  });
+  destacarPendencia();
 }
 
 function destacarPendencia() {
-  document.querySelectorAll(".tile").forEach(t => t.classList.remove("alerta"));
-  // aponta só para tiles que EXISTEM (antes mandava para "Missões", que saiu do
-  // menu — o destaque amarelo de estado nunca acendia) — 03/10/2026
-  const alvo = { erro: "Como ele está", pensando: "Conversar", dormindo: "Dormir" }[estado.state];
+  document.querySelectorAll("#menu [data-acao]").forEach(t => t.classList.remove("alerta"));
+  // aponta só para itens que EXISTEM (antes mandava para "Missões", que saiu do
+  // menu — o destaque de estado nunca acendia) — 03/10/2026
+  const alvo = { erro: "Como está", pensando: "Conversar", dormindo: "Dormir" }[estado.state];
   if (!alvo) return;
-  const t = [...document.querySelectorAll(".tile")].find(e => (e.dataset.acao || "").startsWith(alvo));
+  const t = [...document.querySelectorAll("#menu [data-acao]")].find(e => (e.dataset.acao || "").startsWith(alvo));
   if (t) t.classList.add("alerta");
 }
 
-function abrirMenu(x, y) {
+/* Painel encostado no boneco: em cima dele se o boneco está na metade de baixo da
+   tela (o caso comum: canto inferior), embaixo se está em cima; alinhado pelo lado
+   de dentro da tela. Ancora pela BASE quando fica em cima: assim trocar de aba
+   (que muda a altura) cresce para cima sem desgrudar do boneco. */
+function posicionaPertoDoPet(el) {
+  const r = retPet(), m = 8, gap = 10;
+  const w = el.offsetWidth;
+  const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+  const left = cx > innerWidth / 2 ? r.right - w : r.left;
+  el.style.left = Math.round(Math.max(m, Math.min(left, innerWidth - w - m))) + "px";
+  if (cy > innerHeight / 2) {
+    el.style.top = "auto";
+    el.style.bottom = Math.round(Math.max(m, innerHeight - r.top + gap)) + "px";
+    el.style.maxHeight = Math.round(Math.max(200, r.top - gap - m)) + "px";
+  } else {
+    el.style.bottom = "auto";
+    el.style.top = Math.round(Math.min(r.bottom + gap, innerHeight - 200)) + "px";
+    el.style.maxHeight = Math.round(Math.max(200, innerHeight - r.bottom - gap - m)) + "px";
+  }
+}
+
+function abrirMenu() {
+  abaMenu = "pet";
   montarMenu();
   menu.classList.remove("oculto");
-  const w = menu.offsetWidth, h = menu.offsetHeight;
-  menu.style.left = Math.min(x, innerWidth - w - 8) + "px";
-  menu.style.top = Math.max(8, Math.min(y - h - 10, innerHeight - h - 8)) + "px";
+  posicionaPertoDoPet(menu);
   ultimoMenu = Date.now();
   reportarHit();
 }
@@ -1215,47 +1381,86 @@ function rotuloCanto(c) {
 async function abrirSeletorTela() {
   fecharMenu();
   telaPanel.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  telaPanel.style.left = Math.max(10, Math.min(r.left + 20, innerWidth - 320)) + "px";
-  telaPanel.style.top = Math.max(10, r.top - 210) + "px";
 
+  // 1) as telas, desenhadas em ESCALA e na posição real (prancha "Tela e borda")
   const boxM = document.getElementById("tela-mon");
   boxM.innerHTML = "";
   let ms = [];
   try { ms = JSON.parse((G ? await G.ListarMonitores() : "[]") || "[]"); } catch (e) {}
-  if (!ms.length) {
-    boxM.innerHTML = '<div class="b">nao consegui listar as telas</div>';
-  }
   const d = DPR();
-  ms.forEach((m) => {
-    const b = document.createElement("div");
-    b.className = "b" + (m.indice === telaSel.monitor ? " sel" : "");
-    b.innerHTML = `Tela ${m.indice}${m.primario ? " ★" : ""}<br><span style="opacity:.6">${Math.round(m.w / d)}x${Math.round(m.h / d)}</span>`;
-    b.onclick = async () => {
-      telaSel.monitor = m.indice; cfg.monitor = m.indice;
-      try { G && await G.ConfigurarTela(m.indice, cfg.borda); } catch (e) {}
-      abrirSeletorTela();
-    };
-    boxM.appendChild(b);
-  });
+  if (!ms.length) {
+    boxM.innerHTML = '<span class="pn-nota">não consegui listar as telas</span>';
+  } else {
+    const x0 = Math.min(...ms.map((m) => m.x)), y0 = Math.min(...ms.map((m) => m.y));
+    const x1 = Math.max(...ms.map((m) => m.x + m.w)), y1 = Math.max(...ms.map((m) => m.y + m.h));
+    const esc = Math.min(296 / (x1 - x0), 92 / (y1 - y0));
+    boxM.style.height = Math.round((y1 - y0) * esc) + "px";
+    boxM.style.width = Math.round((x1 - x0) * esc) + "px";
+    ms.forEach((m) => {
+      const b = document.createElement("button");
+      const sel = m.indice === telaSel.monitor;
+      b.className = "tela-un" + (sel ? " sel" : "");
+      b.setAttribute("aria-pressed", sel);
+      b.style.left = Math.round((m.x - x0) * esc + 2) + "px";
+      b.style.top = Math.round((m.y - y0) * esc + 2) + "px";
+      b.style.width = Math.round(m.w * esc - 4) + "px";
+      b.style.height = Math.round(m.h * esc - 4) + "px";
+      b.innerHTML = `<b>Tela ${m.indice}</b><span>${Math.round(m.w / d)} × ${Math.round(m.h / d)}${m.primario ? " · principal" : ""}</span>`;
+      b.onclick = async () => {
+        telaSel.monitor = m.indice; cfg.monitor = m.indice;
+        try { G && await G.ConfigurarTela(m.indice, cfg.borda); } catch (e) {}
+        abrirSeletorTela();
+      };
+      boxM.appendChild(b);
+    });
+  }
+  pintaMapaTela();
+  posicionaJunto(telaPanel);
+  reportarHit();
+}
 
-  const boxC = document.getElementById("tela-canto");
-  boxC.innerHTML = "";
-  [["baixo", "▼ baixo"], ["cima", "▲ cima"], ["esquerda", "◀ esq"], ["direita", "▶ dir"]].forEach(([k, rot]) => {
-    const b = document.createElement("div");
-    b.className = "b" + (k === cfg.borda ? " sel" : "");
-    b.textContent = rot;
+// 2) onde ele fica: os 4 cantos e o meio de cada borda, num desenho de tela
+const ALVOS_TELA = [
+  ["cima", "ini", "canto superior esquerdo", 0, 0], ["cima", "", "meio da borda de cima", 0.5, 0],
+  ["cima", "fim", "canto superior direito", 1, 0], ["esquerda", "", "meio da borda esquerda", 0, 0.5],
+  ["direita", "", "meio da borda direita", 1, 0.5], ["baixo", "ini", "canto inferior esquerdo", 0, 1],
+  ["baixo", "", "meio da borda de baixo", 0.5, 1], ["baixo", "fim", "canto inferior direito", 1, 1],
+];
+// (borda, canto) → ponto na tela: na borda de cima/baixo "ini" é a esquerda; nas laterais, o alto
+function pontoDaPosicao(borda, canto) {
+  const horiz = borda === "cima" || borda === "baixo";
+  const ao = canto === "ini" ? 0 : canto === "fim" ? 1 : 0.5;
+  return horiz ? [ao, borda === "cima" ? 0 : 1] : [borda === "esquerda" ? 0 : 1, ao];
+}
+function pintaMapaTela() {
+  const mapa = document.getElementById("tela-canto");
+  mapa.innerHTML = '<span class="tela-moldura"></span>';
+  const [ax, ay] = pontoDaPosicao(cfg.borda, cfg.canto || "");
+  let rotuloAtual = "";
+  for (const [borda, canto, rotulo, fx, fy] of ALVOS_TELA) {
+    const sel = fx === ax && fy === ay;
+    if (sel) rotuloAtual = rotulo;
+    const b = document.createElement("button");
+    b.className = "tela-alvo" + (sel ? " sel" : "");
+    b.setAttribute("aria-pressed", sel);
+    b.setAttribute("aria-label", rotulo);
+    b.title = rotulo;
+    b.style.left = `calc(${fx * 100}% * 0.72 + 14% - 18px)`;
+    b.style.top = `calc(${fy * 100}% * 0.7 + 8% - 18px)`;
     b.onclick = async () => {
-      cfg.borda = k; cfg.offset = 120; cfg.canto = ""; aplicaPosicao(); salvarPet();
-      try { G && await G.ConfigurarTela(telaSel.monitor, k); } catch (e) {}
-      fecharSeletorTela();
+      cfg.borda = borda; cfg.canto = canto;
+      const horiz = borda === "cima" || borda === "baixo";
+      const r = pet.getBoundingClientRect();
+      cfg.offset = canto ? 0 : Math.round(((horiz ? innerWidth : innerHeight) - (horiz ? r.width : r.height)) / 2);
+      aplicaPosicao(); salvarPet();
+      try { G && await G.ConfigurarTela(telaSel.monitor, borda); } catch (e) {}
+      pintaMapaTela();
+      posicionaJunto(telaPanel);
     };
-    boxC.appendChild(b);
-  });
-
+    mapa.appendChild(b);
+  }
   document.getElementById("tela-atual").textContent =
-    "Tela " + telaSel.monitor + " · borda " + cfg.borda + " · " + cfg.offset + "px — " +
-    "ou arraste o boneco para onde quiser: ele gruda na borda (ou no canto) mais próximo.";
+    "agora: Tela " + telaSel.monitor + (rotuloAtual ? " · " + rotuloAtual : " · borda " + cfg.borda);
   reportarHit();
 }
 
@@ -1264,6 +1469,7 @@ async function aplicarTela() {
   fecharSeletorTela();
 }
 function fecharSeletorTela() { telaPanel.classList.add("oculto"); reportarHit(); }
+document.getElementById("tela-x").onclick = () => fecharSeletorTela();
 
 /* ───────── painel de E-MAIL (triagem que aprende) ───────── */
 const emailPanel = document.getElementById("email");
@@ -1276,9 +1482,7 @@ function dominioDe(e) {
 async function abrirEmail() {
   fecharMenu(); fecharSeletorTela();
   emailPanel.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  emailPanel.style.left = Math.max(8, Math.min(r.left + 20, innerWidth - 410)) + "px";
-  emailPanel.style.top = Math.max(8, Math.min(r.top - 380, innerHeight - 470)) + "px";
+  posicionaJunto(emailPanel);
   await renderEmail();
   reportarHit();
 }
@@ -1286,38 +1490,45 @@ async function abrirEmail() {
 async function renderEmail() {
   const box = document.getElementById("email-lista");
   const res = document.getElementById("email-resumo");
+  // opcionais (o teste-painel-email.js só monta a lista e o resumo)
+  const contaEl = document.getElementById("email-conta"), faltamEl = document.getElementById("email-faltam");
   box.innerHTML = "";
+  res.innerHTML = "";
+  if (faltamEl) faltamEl.textContent = "";
   let d = {};
   try { d = JSON.parse((G ? await G.EmailResumo() : "{}") || "{}"); } catch (e) {}
   if (d.erro) {
-    res.innerHTML = "⚠ " + escHtml(d.erro);
-    box.innerHTML = '<div class="email-vazio">Clique em "↻ Verificar agora" para ler o Outlook.</div>';
+    res.innerHTML = '<div class="pn-aviso">' + escHtml(d.erro) + "</div>";
+    box.innerHTML = '<div class="email-vazio">Clique em "Verificar agora" para ler o Outlook.</div>';
     return;
   }
   const imp = d.importantes || [], des = d.desconhecidos || [];
-  res.innerHTML =
-    "Conta <b>" + escHtml(d.conta || "?") + "</b> · lida em " + escHtml(String(d.verificado_em || "?").replace("T", " ")) +
-    "<br>caixa: " + (d.total_pasta || 0) + " mensagens · " + (d.nao_lidas || 0) + " não lidas · amostra: " + (d.lidas_agora || 0) +
-    "<br><b>" + imp.length + " importantes</b> · " + des.length + " desconhecidos · " + (d.spam_n || 0) + " spam";
-  if (!des.length) {
-    box.innerHTML = '<div class="email-vazio">Nenhum remetente desconhecido na última leitura. 🎉</div>';
-    return;
-  }
-  // agrupa por domínio: 1 cartão por domínio, com contagem
+  // agrupa por domínio: 1 linha por domínio, com contagem
   const porDom = {};
   des.forEach((m) => { const k = dominioDe(m.de_email); (porDom[k] = porDom[k] || []).push(m); });
-  Object.keys(porDom).slice(0, 14).forEach((k) => {
+  const doms = Object.keys(porDom);
+  if (contaEl) contaEl.textContent = (d.conta || "?") + " · lido às " + String(d.verificado_em || "").slice(11, 16);
+  const num = (n, r, cls) => '<div class="pn-num ' + cls + '"><b>' + Number(n || 0) + "</b><span>" + r + "</span></div>";
+  res.innerHTML = num(imp.length, "importantes", "ok") + num(doms.length, "para decidir", "acento") +
+    num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "");
+  if (faltamEl && doms.length) faltamEl.textContent = doms.length + " para decidir";
+  if (!doms.length) {
+    box.innerHTML = '<div class="email-vazio">Tudo ensinado. Na próxima leitura eu já sei separar sozinha.</div>';
+    return;
+  }
+  doms.slice(0, 14).forEach((k) => {
     const ms = porDom[k], m = ms[0];
     const el = document.createElement("div");
     el.className = "email-item";
     // remetente, endereço e assunto são escritos por QUEM MANDA o e-mail: só texto escapado
-    el.innerHTML = '<div class="txt"><b>' + (m.nao_lida ? "🔵 " : "") + escHtml(k) + "</b><span>" + ms.length + "x · " +
-      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 60)) + "</span></div>";
-    const bi = document.createElement("div");
-    bi.className = "bt"; bi.textContent = "✅"; bi.title = "sempre importante: " + k;
+    el.innerHTML = '<span class="ponto' + (m.nao_lida ? " on" : "") + '" title="' + (m.nao_lida ? "não lido" : "lido") + '"></span>' +
+      '<div class="txt"><b>' + escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i></b><span>" +
+      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)) + "</span></div>";
+    const bi = document.createElement("button");
+    bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "sempre importante: " + k;
     bi.onclick = () => marcarEmail(k, "importante");
-    const bs = document.createElement("div");
-    bs.className = "bt"; bs.textContent = "🚫"; bs.title = "sempre lixo: " + k;
+    const bs = document.createElement("button");
+    bs.className = "bt lixo"; bs.textContent = "Lixo"; bs.title = "sempre lixo: " + k;
     bs.onclick = () => marcarEmail(k, "spam");
     el.appendChild(bi); el.appendChild(bs);
     box.appendChild(el);
@@ -1371,25 +1582,63 @@ function carinho() {
   setTimeout(() => aplicarEstado({ state: anterior === "carinho" ? "idle" : anterior }), 1700);
 }
 
-// toast — balãozinho na tela; posiciona acima do boneco (ou abaixo, se não couber)
-function toast(ico, titulo, texto, ms, mini) {
+/* toast — o balãozinho de aviso, encostado no boneco.
+   22/10/2026 (prancha "Avisos"): ícone de TRAÇO no lugar do emoji (cada chamada ainda
+   manda um emoji; esta tabela traduz), texto sem emoji e, quando faz sentido, AÇÕES
+   ("Já bebi", "Daqui a 15 min", "Ver resposta"). opts = { acoes: [{ r, fn, prim }],
+   clique: fn } — clicar no corpo do aviso roda `clique` (se houver) e fecha. */
+const ICONE_DO_EMOJI = {
+  "💧": "agua", "🍖": "alimentar", "🍲": "alimentar", "🍽": "alimentar", "🍎": "alimentar", "🥪": "alimentar",
+  "☕": "alimentar", "🚶": "exercicio", "🏃": "exercicio", "🥰": "cuidar", "💚": "cuidar", "🐾": "boneco",
+  "👋": "boneco", "📏": "tamanho", "🎭": "perfil", "🖱": "interacao", "📧": "email", "✅": "ok", "⚠": "alerta",
+  "🔌": "alerta", "🌟": "colecao", "🎁": "colecao", "💎": "colecao", "⬇": "baixar", "🔔": "sino", "🪙": "moeda",
+  "😴": "dormir", "🎯": "foco", "📌": "passear",
+};
+const TOM_DO_ICONE = { ok: "ok", alerta: "aviso" };
+const semEmoji = (t) => String(t || "")
+  .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}‍️⃣]/gu, "")
+  .replace(/\s{2,}/g, " ").replace(/^[\s·—-]+/, "").trim();
+function iconeDoAviso(ico, texto) {
+  if (typeof ICONES !== "undefined" && ICONES[ico]) return ico;   // já veio o nome do ícone
+  const daChamada = ICONE_DO_EMOJI[String(ico || "").replace(/️/g, "")];
+  // o bicho manda 🐾 em tudo: o emoji do COMEÇO do texto ("💧 Hora da água!") diz mais
+  const primeiro = ((String(texto || "").trim().match(/^\p{Extended_Pictographic}/u) || [""])[0]);
+  if (daChamada && daChamada !== "boneco") return daChamada;
+  return ICONE_DO_EMOJI[primeiro] || daChamada || "sino";
+}
+let toastClique = null;
+function toast(ico, titulo, texto, ms, mini, opts) {
   if (!cfg.interagir) return; // modo "não me interaja": nenhum balãozinho
-  document.getElementById("toast-ico").textContent = ico;
-  document.getElementById("toast-tit").textContent = titulo;
-  document.getElementById("toast-sub").textContent = texto || "";
-  toastEl.classList.toggle("mini", !!mini);
+  opts = opts || {};
+  const acoes = opts.acoes || [];
+  const nome = iconeDoAviso(ico, texto);
+  const icoEl = document.getElementById("toast-ico");
+  icoEl.innerHTML = icone(nome, 18);
+  icoEl.className = "toast-ico " + (TOM_DO_ICONE[nome] || "");
+  document.getElementById("toast-tit").textContent = semEmoji(titulo);
+  document.getElementById("toast-sub").textContent = semEmoji(texto);
+  const box = document.getElementById("toast-acoes");
+  box.innerHTML = "";
+  for (const a of acoes) {
+    const b = document.createElement("button");
+    b.className = "pn-bt" + (a.prim ? "" : " sec");
+    b.textContent = a.r;
+    b.onclick = (ev) => { ev.stopPropagation(); fechaToast(); try { a.fn(); } catch (e) { } };
+    box.appendChild(b);
+  }
+  box.style.display = acoes.length ? "" : "none";
+  toastClique = opts.clique || null;
+  toastEl.classList.toggle("mini", !!mini && !acoes.length);
+  toastEl.classList.toggle("com-acoes", acoes.length > 0);
   toastEl.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  const w = toastEl.offsetWidth || 300, h = toastEl.offsetHeight || 60;
-  let top = r.top - h - 12;
-  if (top < 8) top = r.bottom + 12;
-  toastEl.style.left = Math.max(8, Math.min(r.left - 10, innerWidth - w - 8)) + "px";
-  toastEl.style.top = Math.max(8, Math.min(top, innerHeight - h - 8)) + "px";
+  posicionaPertoDoPet(toastEl);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.classList.add("oculto"); reportarHit(); }, ms || 7000);
+  toastTimer = setTimeout(fechaToast, ms || 7000);
   reportarHit();
 }
-toastEl.onclick = () => { toastEl.classList.add("oculto"); reportarHit(); };
+function fechaToast() { toastEl.classList.add("oculto"); reportarHit(); }
+toastEl.onclick = () => { const f = toastClique; fechaToast(); if (f) { try { f(); } catch (e) { } } };
+document.getElementById("toast-x").onclick = (ev) => { ev.stopPropagation(); fechaToast(); };
 
 // tarefa concluída — é o momento "ele termina e avisa na tela"
 function tarefaConcluida(titulo, texto) {
@@ -1451,6 +1700,9 @@ pet.addEventListener("mousedown", (e) => {
   window.addEventListener("mouseup", up);
 });
 
+// o bicho está dormindo? (ele fica na tela cochilando; um clique acorda — bicho.js)
+const petDormindo = () => { try { return !!(window.bicho && window.bicho.estaDormindo && window.bicho.estaDormindo()); } catch (e) { return false; } };
+
 /* CLIQUE = AGRADO (carinho), nunca chat. A conversa é no DUPLO CLIQUE ou no
    tile "Conversar" — regra do dono: "clicar nele não quer dizer que eu
    quero um chat com ele, é só um agrado". */
@@ -1459,12 +1711,14 @@ pet.addEventListener("click", () => {
   try { if (G && G.Log) G.Log("clique: click no boneco | interagir=" + cfg.interagir + " | arrastouAgora=" + arrastouAgora); } catch (e2) { }
   if (!cfg.interagir) return;                           // interação desligada: nem carinho
   if (arrastouAgora) { arrastouAgora = false; return; } // foi arrasto, não clique
+  if (petDormindo()) { window.bicho.acordar(); return; } // dormindo: o clique acorda
   carinho();
 });
 pet.addEventListener("dblclick", () => {
   fecharMenu();
   try { if (G && G.Log) G.Log("clique: DUPLO clique no boneco | interagir=" + cfg.interagir); } catch (e2) { }
   if (!cfg.interagir) return;                           // interação desligada: sem chat
+  if (petDormindo()) return;                            // o clique simples já acordou
   abrirBalao(); txt.focus();
 });
 // BOTÃO DIREITO SEMPRE: é a porta de volta quando a interação está desligada.
@@ -1482,12 +1736,13 @@ pet.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 document.addEventListener("click", (e) => {
-  if (!menu.contains(e.target) && e.target !== pet && !pet.contains(e.target)) {
+  // composedPath: trocar de aba REFAZ o menu, e o alvo do clique já saiu do DOM
+  if (!e.composedPath().includes(menu) && e.target !== pet && !pet.contains(e.target)) {
     if (Date.now() - ultimoMenu > 300) fecharMenu();
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;
@@ -1509,7 +1764,12 @@ function ligarEventos() {
   R.EventsOn("pet-state", (s) => aplicarEstado(s));
   // avisos do Go (gateway voltou, saldo baixo, tarefa concluída) → balãozinho na tela
   R.EventsOn("aviso", (a) => {
-    toast(a.icone || "🔔", a.titulo || "Aviso", a.texto || "", 9000);
+    if (/saldo/i.test(a.texto || "")) {   // saldo baixo: dá para resolver dali mesmo
+      toast("alerta", "Saldo baixo", (estado.balance || "").replace(".", ",") + " — recarregue para o chat não parar.", 20000, false,
+        { acoes: [{ r: "Abrir Inteligência", fn: () => abrirInteligencia() }] });
+    } else {
+      toast(a.icone || "🔔", a.titulo || "Aviso", a.texto || "", 9000);
+    }
     explosao([a.icone || "🔔"], 3);
   });
   R.EventsOn("status-panel", (texto) => { abrirBalao(); msg(texto, "ele"); });
@@ -1565,6 +1825,7 @@ setInterval(reportarHit, 500);
 (async function boot() {
   montarMenu();
   await esperarBindings(); // ← antes de tudo: sem bindings, nada é clicável
+  atualizaInfoChat();
   // lê a tela/canto salvos e já alinha o boneco
   try {
     const c = JSON.parse((G ? await G.TelaAtual() : "{}") || "{}");
@@ -1579,6 +1840,6 @@ setInterval(reportarHit, 500);
   // Antes isto abria o balão sozinho no boot E deixava um "Pronto." DENTRO da
   // conversa, que parecia resposta do agente e poluía o histórico.
   setTimeout(() => toast("🐾", "PetAgent",
-    "Pronto. Duplo clique em mim para conversar — eu respondo pelo Hermes.", 8000, true), 800);
+    "Pronto. Duplo clique em mim para conversar.", 8000, true), 800);
   log("frontend boot ok");
 })();
