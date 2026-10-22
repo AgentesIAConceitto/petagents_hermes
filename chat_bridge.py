@@ -365,6 +365,36 @@ def porta_aberta(porta: int) -> bool:
         return False
 
 
+def _derruba_arvore(proc) -> None:
+    """Derruba o backend E toda a árvore de processos dele (conserto de 13/10/2026).
+
+    No Hermes 0.21 o `hermes serve` é uma CADEIA — `bin\\hermes.exe` (lançador) → python
+    — e quem escuta a porta é o python. `proc.terminate()` no Windows só mata o processo
+    do topo; quase sempre o lançador leva o filho junto, mas às vezes o serve se
+    re-executa (`python -I -I -c ...runpy`) e esse NETO escapa. Medido em 13/10/2026: o
+    app fechou e o neto seguiu vivo, escutando a porta antiga. Pior que memória: o 0.21
+    RECUSA subir outro serve no mesmo home enquanto o órfão vive ("this host is already
+    served by PID ...", código 78) — a reconexão e a próxima subida do app falhavam e o
+    chat caía na reserva lenta. O `taskkill /T` leva a árvore inteira, qualquer que seja
+    o formato (CREATE_NO_WINDOW: nada de console piscando).
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, timeout=15,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            proc.terminate()
+        proc.wait(timeout=10)
+    except Exception:  # noqa: BLE001
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 class Backend:
     """O Hermes do boneco: processo próprio (`hermes serve`) + canal /api/ws."""
 
@@ -483,15 +513,7 @@ class Backend:
         """
         log(f"canal caiu ({motivo or 'sem detalhe'}) — reconectando")
         await self._fechar_canal()
-        if self.proc is not None and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-                try:
-                    self.proc.wait(timeout=10)
-                except Exception:  # noqa: BLE001
-                    self.proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+        _derruba_arvore(self.proc)  # a árvore toda: o serve de verdade é neto do lançador
         # espera a porta soltar; se algum processo alheio/travado a segurar, pega outra
         t0 = time.time()
         while porta_aberta(self.porta) and time.time() - t0 < 20:
@@ -778,8 +800,7 @@ async def servico(bk: "Backend", args) -> int:
         resp, seg = await bk.perguntar(args.teste)
         print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
                          ensure_ascii=False), flush=True)
-        if bk.proc and bk.proc.poll() is None:
-            bk.proc.terminate()
+        _derruba_arvore(bk.proc)
         return 0
 
     # handshake: o app só pergunta depois disto
@@ -806,12 +827,8 @@ async def servico(bk: "Backend", args) -> int:
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"ok": False, "id": _pedido_atual,
                               "erro": f"{type(e).__name__}: {e}"}), flush=True)
-    # o app fechou: leva o backend junto (sem órfãos)
-    if bk.proc and bk.proc.poll() is None:
-        try:
-            bk.proc.terminate()
-        except Exception:  # noqa: BLE001
-            pass
+    # o app fechou: leva o backend junto (sem órfãos — a árvore inteira, ver _derruba_arvore)
+    _derruba_arvore(bk.proc)
     return 0
 
 
