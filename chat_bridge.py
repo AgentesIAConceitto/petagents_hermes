@@ -70,6 +70,12 @@ def _achar_hermes() -> list[str]:
     for v in venvs:
         if v and os.path.exists(os.path.join(v, "Scripts", "python.exe")):
             return [os.path.join(v, "Scripts", "python.exe"), "-m", "hermes_cli.main"]
+    # Hermes 0.21+ (Windows): não há mais venv fixo. O lançador `bin\hermes.exe` escolhe
+    # o python e o venv da instalação, tira PYTHONPATH/PYTHONHOME e respeita HERMES_HOME
+    # (o home espelhado) — a armadilha 2 acima era do lançador antigo.
+    novo = os.path.join(LOCALAPPDATA, "hermes", "bin", "hermes.exe")
+    if os.path.exists(novo):
+        return [novo]
     # nada encontrado: o log de "não encontrado" aponta onde eu olhei
     return [os.path.join(venvs[-1], "Scripts", "python.exe"), "-m", "hermes_cli.main"]
 
@@ -91,10 +97,18 @@ HERMES_CMD = _achar_hermes()
 # therefore get_config_path()"). Então o backend sobe com um HOME ESPELHADO: tudo do
 # home real entra por junction (pasta) ou hardlink (arquivo) — skills, plugins,
 # memórias, sessões, .env — e o `config.yaml` é um arquivo NOSSO: cópia do dele sem a
-# entrada `mcp_servers.cua-driver`, regerada a cada subida (não envelhece).
+# entrada `mcp_servers.cua-driver`, regerada a cada subida (não envelhece). Os bancos
+# SQLite e as travas da raiz ficam DE FORA (ver _fora_do_espelho).
 HOME_ESPELHO = os.path.join(os.environ.get("LOCALAPPDATA", AQUI), "petagent", "hermes-home")
 MCP_A_REMOVER = ("cua-driver",)
 BLOCO_CLARIFY = '\n\n# PetAgent: o boneco NAO tem tela de escolhas e o `clarify` espera 3600 s por padrao\n# (medido 10/10/2026: o agente travava em clarify.request e a ponte estourava aos 300 s).\n# Com 8 s ele pergunta, ninguem responde e ele SEGUE SOZINHO, respondendo em texto normal.\n# NAO usar 0: no Hermes 0 = espera ILIMITADA.\nclarify:\n  timeout: 8\n'
+# TETO DE ITERAÇÕES DA IA POR MENSAGEM (pedido da dona, 13/10/2026): o laço que gasta
+# crédito é o do agente — chama o modelo, roda ferramenta, chama de novo. O config do dono
+# deixa 150 voltas por mensagem (e 250 por subagente): um agente em loop queimava os
+# créditos de uma vez. Ao chegar no teto o Hermes pede um resumo ao modelo e responde em
+# texto normal. ⚠️ NÃO usar 0, -1 ou "none": no Hermes isso é ILIMITADO. O app Go repete
+# este número na reserva lenta (`maxIteracoesIA` em chat.go) — os dois andam juntos.
+MAX_ITERACOES_IA = 20
 
 
 def _home_real() -> str:
@@ -133,25 +147,58 @@ def _tira_mcp(texto: str, nomes) -> str:
     return "".join(saida)
 
 
+def _fora_do_espelho(nome: str) -> bool:
+    """Arquivos da raiz que NÃO entram no espelho por hardlink.
+
+    Bancos SQLite (com o -wal/-shm/-journal deles) e travas/pids de processo. O SQLite
+    acha o -wal/-shm pelo CAMINHO do banco: com o mesmo arquivo aberto por dois caminhos
+    (hermes\\state.db no gateway do dono, hermes-home\\state.db no backend do boneco), cada
+    processo pode acabar com o próprio WAL para o MESMO banco — receita de corrupção do
+    histórico do dono. Fora do espelho, o boneco cria os bancos dele; memórias, skills,
+    plugins e personalidade continuam os do dono. (Pastas vão por junction: lá dentro o
+    caminho real é um só e o -wal cai no mesmo lugar.)
+    """
+    n = nome.lower()
+    return n in ("config.yaml", "config.yml") or n.endswith(
+        (".db", ".sqlite", ".sqlite3", "-wal", "-shm", "-journal", ".lock", ".pid"))
+
+
 def _home_do_backend() -> str:
     """Prepara o home espelhado e devolve o caminho (vai em HERMES_HOME)."""
     real = _home_real()
     try:
         os.makedirs(HOME_ESPELHO, exist_ok=True)
-        # 1) espelha o que NÃO é config.yaml (junction para pasta, hardlink para arquivo)
+        # 1) espelha o resto (junction para pasta, hardlink para arquivo)
         for nome in os.listdir(real):
-            if nome in ("config.yaml", "config.yml"):
-                continue
             origem = os.path.join(real, nome)
             destino = os.path.join(HOME_ESPELHO, nome)
-            if os.path.exists(destino):
+            if _fora_do_espelho(nome):
+                # espelho de versão anterior: o banco/trava estava LIGADO ao do dono. Desfaz
+                # o link (some só o nome no espelho; o arquivo do dono fica intacto).
+                if (nome.lower() not in ("config.yaml", "config.yml") and os.path.isfile(destino)
+                        and os.path.samefile(destino, origem)):
+                    try:
+                        os.remove(destino)
+                        log(f"espelho: {nome} desligado do home do dono")
+                    except OSError as e:
+                        log(f"AVISO: {nome} segue ligado ao do dono ({e})")
                 continue
             if os.path.isdir(origem):
-                subprocess.run(["cmd", "/c", "mklink", "/J", destino, origem],
-                               capture_output=True)
-            else:
-                subprocess.run(["cmd", "/c", "mklink", "/H", destino, origem],
-                               capture_output=True)
+                if not os.path.exists(destino):
+                    subprocess.run(["cmd", "/c", "mklink", "/J", destino, origem],
+                                   capture_output=True)
+                continue
+            # arquivo: link REFEITO a cada subida. O Hermes regrava alguns TROCANDO o arquivo
+            # (o .env ao mudar a chave, por exemplo) e o hardlink antigo seguia apontando para
+            # a versão velha.
+            try:
+                if os.path.lexists(destino):
+                    os.remove(destino)
+            except OSError as e:
+                log(f"AVISO: não consegui renovar o link de {nome} ({e})")
+                continue
+            subprocess.run(["cmd", "/c", "mklink", "/H", destino, origem],
+                           capture_output=True)
         # 2) config.yaml: cópia do dele sem os MCPs que poluem a tela
         with open(os.path.join(real, "config.yaml"), "r", encoding="utf-8") as fh:
             bruto = fh.read()
@@ -166,6 +213,12 @@ def _home_do_backend() -> str:
         limpo, trocou = _troca_reasoning(limpo)
         log("config do backend: reasoning_effort=%s (era medium)"
             % ("low" if trocou else "ja estava fora do padrao"))
+        # TETO DE ITERAÇÕES (ver MAX_ITERACOES_IA). No `hermes serve` quem manda é a variável
+        # HERMES_TUI_MAX_TURNS (_env_do_backend); aqui o config espelhado passa a dizer o
+        # mesmo e os SUBAGENTES (delegation), que não têm variável, também ganham o teto.
+        limpo, mudou = _limita_iteracoes(limpo)
+        log("config do backend: max_turns e delegation.max_iterations <= %d (%s)"
+            % (MAX_ITERACOES_IA, "ajustado" if mudou else "ja estava dentro"))
         # O BONECO NÃO TEM TELA DE ESCOLHAS — e o `clarify` espera 1 HORA por padrão.
         #
         # Medido em 10/10/2026 (dono: "pergunta simples levou 205 s" e depois 300 s): o agente
@@ -207,9 +260,14 @@ def _env_do_backend(token: str) -> dict:
     HERMES_HOME vai para o HOME ESPELHADO: herda skills/plugins/memórias/sessões/.env
     do dono por junction+hardlink, mas o config.yaml é nosso — sem o MCP `cua-driver`,
     que abria uma janela de 3840x1440 em cima de tudo (ver _home_do_backend).
+
+    HERMES_TUI_MAX_TURNS é o teto de iterações da IA por mensagem: no `hermes serve` a
+    variável VENCE o `agent.max_turns` do config (tui_gateway/agent_callbacks.py) — vale
+    mesmo se o espelho falhar e o backend subir com o config do dono.
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    env["HERMES_TUI_MAX_TURNS"] = str(MAX_ITERACOES_IA)
     espelho = _home_do_backend()
     if espelho:
         env["HERMES_HOME"] = espelho
@@ -275,6 +333,7 @@ def log(msg: str) -> None:
 # acontecendo enquanto acontece, e o app repassa para a tela.
 # ---------------------------------------------------------------------------
 EM_TESTE = False            # --teste espera UM json no stdout: não emitir progresso
+_pedido_atual = None        # id do pedido em andamento: vai em cada linha (o app descarta o de outro)
 _ultimo_progresso = 0.0
 _INTERVALO_PROGRESSO = 0.5  # freio: sem isto, cada token viraria uma linha (3.802 num turno)
 
@@ -292,8 +351,8 @@ def _progresso(tipo: str, texto: str) -> None:
             return
         _ultimo_progresso = agora
     try:
-        print(json.dumps({"ok": True, "progresso": tipo, "texto": str(texto)[:800]},
-                         ensure_ascii=False), flush=True)
+        print(json.dumps({"ok": True, "id": _pedido_atual, "progresso": tipo,
+                          "texto": str(texto)[:800]}, ensure_ascii=False), flush=True)
     except Exception:  # noqa: BLE001
         pass
 
@@ -304,6 +363,36 @@ def porta_aberta(porta: int) -> bool:
             return True
     except OSError:
         return False
+
+
+def _derruba_arvore(proc) -> None:
+    """Derruba o backend E toda a árvore de processos dele (conserto de 13/10/2026).
+
+    No Hermes 0.21 o `hermes serve` é uma CADEIA — `bin\\hermes.exe` (lançador) → python
+    — e quem escuta a porta é o python. `proc.terminate()` no Windows só mata o processo
+    do topo; quase sempre o lançador leva o filho junto, mas às vezes o serve se
+    re-executa (`python -I -I -c ...runpy`) e esse NETO escapa. Medido em 13/10/2026: o
+    app fechou e o neto seguiu vivo, escutando a porta antiga. Pior que memória: o 0.21
+    RECUSA subir outro serve no mesmo home enquanto o órfão vive ("this host is already
+    served by PID ...", código 78) — a reconexão e a próxima subida do app falhavam e o
+    chat caía na reserva lenta. O `taskkill /T` leva a árvore inteira, qualquer que seja
+    o formato (CREATE_NO_WINDOW: nada de console piscando).
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True, timeout=15,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            proc.terminate()
+        proc.wait(timeout=10)
+    except Exception:  # noqa: BLE001
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class Backend:
@@ -325,7 +414,7 @@ class Backend:
             return False
         env = _env_do_backend(self.token)
         cmd = HERMES_CMD + ["serve", "--port", str(self.porta), "--host", "127.0.0.1", "--skip-build"]
-        log(f"backend: {HERMES_CMD[0]} -m hermes_cli.main serve (PYTHONPATH herdado fora)")
+        log(f"backend: {' '.join(HERMES_CMD)} serve (PYTHONPATH herdado fora)")
         kwargs: dict = {}
         if os.name == "nt":
             si = subprocess.STARTUPINFO()
@@ -424,15 +513,7 @@ class Backend:
         """
         log(f"canal caiu ({motivo or 'sem detalhe'}) — reconectando")
         await self._fechar_canal()
-        if self.proc is not None and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-                try:
-                    self.proc.wait(timeout=10)
-                except Exception:  # noqa: BLE001
-                    self.proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+        _derruba_arvore(self.proc)  # a árvore toda: o serve de verdade é neto do lançador
         # espera a porta soltar; se algum processo alheio/travado a segurar, pega outra
         t0 = time.time()
         while porta_aberta(self.porta) and time.time() - t0 < 20:
@@ -719,12 +800,12 @@ async def servico(bk: "Backend", args) -> int:
         resp, seg = await bk.perguntar(args.teste)
         print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
                          ensure_ascii=False), flush=True)
-        if bk.proc and bk.proc.poll() is None:
-            bk.proc.terminate()
+        _derruba_arvore(bk.proc)
         return 0
 
     # handshake: o app só pergunta depois disto
     print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao}), flush=True)
+    global _pedido_atual
     while True:
         linha = await asyncio.to_thread(sys.stdin.readline)
         if not linha:
@@ -736,18 +817,18 @@ async def servico(bk: "Backend", args) -> int:
         p = str(pedido.get("prompt") or "").strip()
         if not p:
             continue
+        # o id volta em toda linha desta pergunta: se o app já desistiu dela (prazo), a
+        # resposta atrasada não pode ser lida como resposta da pergunta seguinte
+        _pedido_atual = pedido.get("id")
         try:
             resp, seg = await bk.perguntar(p)
-            print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
-                             ensure_ascii=False), flush=True)
+            print(json.dumps({"ok": True, "id": _pedido_atual, "resposta": resp,
+                              "segundos": round(seg, 1)}, ensure_ascii=False), flush=True)
         except Exception as e:  # noqa: BLE001
-            print(json.dumps({"ok": False, "erro": f"{type(e).__name__}: {e}"}), flush=True)
-    # o app fechou: leva o backend junto (sem órfãos)
-    if bk.proc and bk.proc.poll() is None:
-        try:
-            bk.proc.terminate()
-        except Exception:  # noqa: BLE001
-            pass
+            print(json.dumps({"ok": False, "id": _pedido_atual,
+                              "erro": f"{type(e).__name__}: {e}"}), flush=True)
+    # o app fechou: leva o backend junto (sem órfãos — a árvore inteira, ver _derruba_arvore)
+    _derruba_arvore(bk.proc)
     return 0
 
 
@@ -813,6 +894,53 @@ def _troca_reasoning(texto: str) -> tuple:
                 return "\n".join(linhas), True
             return "\n".join(linhas), False     # já está em outro valor: não mexo
     return texto, False
+
+
+def _limita_iteracoes(texto: str) -> tuple:
+    """Teto de MAX_ITERACOES_IA em `agent.max_turns` e `delegation.max_iterations` no
+    config do BONECO (13/10/2026).
+
+    Mesmo molde de _troca_reasoning: textual e só DENTRO do bloco certo — `goals:` também
+    tem `max_turns` e não é para mexer. Valor de 1 a MAX_ITERACOES_IA fica (menos é mais
+    barato); qualquer outro vira o teto — inclusive 0, -1 e "none", que no Hermes são
+    ILIMITADO. Chave ausente entra no topo do bloco; bloco ausente vai no fim.
+    Devolve (texto, mudou).
+    """
+    linhas = texto.split("\n")
+    mudou = False
+    for bloco, chave in (("agent", "max_turns"), ("delegation", "max_iterations")):
+        inicio = next((i for i, l in enumerate(linhas) if l.startswith(bloco + ":")), None)
+        if inicio is None:
+            while linhas and not linhas[-1].strip():
+                linhas.pop()
+            linhas += ["", f"{bloco}:", f"  {chave}: {MAX_ITERACOES_IA}", ""]
+            mudou = True
+            continue
+        recuo, achou = None, False
+        for i in range(inicio + 1, len(linhas)):
+            l = linhas[i]
+            if l and not l[0].isspace() and not l.startswith("#"):
+                break                               # saiu do bloco
+            if not l.strip() or l.strip().startswith("#"):
+                continue
+            if recuo is None:
+                recuo = l[:len(l) - len(l.lstrip())]
+            if l.strip().startswith(chave + ":"):
+                achou = True
+                bruto = l.split(":", 1)[1].split("#")[0].strip().strip("\"'")
+                try:
+                    dentro = 1 <= int(bruto) <= MAX_ITERACOES_IA
+                except ValueError:
+                    dentro = False
+                if not dentro:
+                    linhas[i] = (f"{l[:len(l) - len(l.lstrip())]}{chave}: {MAX_ITERACOES_IA}"
+                                 f"  # PetAgent: teto de creditos (era {bruto or 'vazio'})")
+                    mudou = True
+                break
+        if not achou:
+            linhas.insert(inicio + 1, f"{recuo or '  '}{chave}: {MAX_ITERACOES_IA}")
+            mudou = True
+    return "\n".join(linhas), mudou
 
 
 def _paresDoCatalogo(r) -> list:

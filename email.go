@@ -45,6 +45,18 @@ type CaixaEmail struct {
 const arquivoInbox = `C:\petagent_mail\inbox.json`
 const arquivoStatusPoll = `C:\petagent_mail\status.json`
 
+// scriptPoll / disparaPoll — o lançador da leitura (variáveis para o teste trocar).
+var scriptPoll = `C:\petagent_mail\poll_silencioso.vbs`
+
+var disparaPoll = func(script string) error {
+	cmd := exec.Command("explorer.exe", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+	return cmd.Start()
+}
+
 // StatusPoll — o que o poll.ps1 relata de cada tentativa (04/10/2026).
 //
 // Antes disto o app dormia 40 s no escuro e lia o inbox.json que estivesse lá —
@@ -224,13 +236,15 @@ func impressao(m CabecalhoEmail) string {
 // 2) precisa ser SILENCIOSO (nada de console piscando a cada varredura) →
 //    por isso o alvo é um .vbs (host sem console) que lança o PowerShell oculto.
 // Nunca voltar a chamar .cmd/.bat aqui: gera janela de terminal na tela do usuário.
+//
+// O e-mail é OPCIONAL: sem o script instalado (mail/LEIA-ME.md), não dispara nada.
+// Antes o explorer.exe era chamado com o caminho inexistente a cada ~10 min, e o
+// botão "Verificar agora" respondia "ok" sem que nada fosse lido.
 func (a *App) EmailVerificarAgora() string {
-	cmd := exec.Command("explorer.exe", `C:\petagent_mail\poll_silencioso.vbs`)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	if _, err := os.Stat(scriptPoll); err != nil {
+		return "e-mail não configurado: falta " + scriptPoll + " (veja mail/LEIA-ME.md)"
 	}
-	if err := cmd.Start(); err != nil {
+	if err := disparaPoll(scriptPoll); err != nil {
 		logMsg("email: falha ao disparar leitura silenciosa: " + err.Error())
 		return "erro ao disparar leitura: " + err.Error()
 	}
@@ -311,9 +325,19 @@ func (a *App) EmailMarcar(alvo, tipo string) string {
 // leitura, e dado velho nunca é apresentado como novo.
 func (a *App) emailLoop() {
 	time.Sleep(25 * time.Second) // deixa a janela subir primeiro
+	desligado := false           // avisa no log uma vez, não a cada ciclo
 	for {
 		antes := leStatusPoll()
-		a.EmailVerificarAgora()
+		if r := a.EmailVerificarAgora(); r != "ok" {
+			// nada foi disparado: não há status para esperar
+			if !desligado {
+				logMsg("email: desligado — " + r)
+				desligado = true
+			}
+			time.Sleep(9 * time.Minute)
+			continue
+		}
+		desligado = false
 		s, aTempo := esperaStatusPoll(antes, 35*time.Second)
 		if !aTempo {
 			logMsg("email: poll nao publicou status em 35s — ciclo pulado (nada foi lido)")
