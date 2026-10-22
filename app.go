@@ -415,7 +415,20 @@ func envKey(path, nome string) string {
 // chave. DeepSeek era a única conhecida; em 22/10/2026 a instalação da dona usava a
 // OpenRouter (só OPENROUTER_API_KEY no .env) e o chat mostrava "chave não encontrada" para
 // sempre. Agora tenta as duas, na ordem.
+//
+// 22/10/2026 (painel Inteligência): o saldo é o da IA que o boneco USA de fato — a do
+// Hermes ou a só do boneco (iaAgora, inteligencia.go). Provedor sem rota de saldo não
+// inventa número.
 func balanceText(_ int) string {
+	if e := iaAgora(); e.Chave != "" {
+		if p, ok := provedorPorID(e.Provedor); ok {
+			if !p.Saldo {
+				return "saldo: não informado pelo " + p.Nome
+			}
+			return saldoDoProvedor(p.ID, e.Chave)
+		}
+	}
+	// config do Hermes sem provedor conhecido (auto, custom…): tenta as chaves que existirem
 	env := filepath.Join(hermesDir(), ".env")
 	if key := envKey(env, "DEEPSEEK_API_KEY"); key != "" {
 		body, err := pedeSaldo("https://api.deepseek.com/user/balance", key)
@@ -432,6 +445,19 @@ func balanceText(_ int) string {
 		return lerSaldoOpenRouter(body)
 	}
 	return "saldo indisponível (chave não encontrada)"
+}
+
+// saldoDoProvedor — US$ do provedor (só os que informam: OpenRouter e DeepSeek).
+func saldoDoProvedor(id, key string) string {
+	url, ler := "https://api.deepseek.com/user/balance", lerSaldoDeepSeek
+	if id == "openrouter" {
+		url, ler = urlCreditosOpenRouter, lerSaldoOpenRouter
+	}
+	body, err := pedeSaldo(url, key)
+	if err != nil {
+		return "saldo indisponível (rede)"
+	}
+	return ler(body)
 }
 
 // urlCreditosOpenRouter — variável só para o teste apontar para um servidor local

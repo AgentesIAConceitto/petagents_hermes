@@ -68,6 +68,13 @@ func (a *App) chamarHermesFrio(texto string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, "-z", texto, "--continue", sessaoChat)
+	// IA só do boneco: a reserva usa o home espelhado (que a ponte monta com o modelo e a
+	// chave do boneco) — senão responderia com a IA do Hermes do dono
+	if iaAgora().Modo == "boneco" {
+		if base := os.Getenv("LOCALAPPDATA"); base != "" {
+			cmd.Env = append(os.Environ(), "HERMES_HOME="+filepath.Join(base, "petagent", "hermes-home"))
+		}
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
 		CreationFlags: 0x08000000, // CREATE_NO_WINDOW (nada de console piscando)
@@ -106,7 +113,17 @@ func (a *App) InfoChat() string {
 	saldo := a.balance
 	a.mu.Unlock()
 	pronta, erro := pontePronta, ponteErro
-	b, _ := json.Marshal(map[string]any{"modelo": modeloPonte(), "saldo": saldo, "pronta": pronta, "erro": erro})
+	ef := iaAgora()
+	nome := ef.Provedor
+	if p, ok := provedorPorID(ef.Provedor); ok {
+		nome = p.Nome
+	}
+	modelo := modeloPonte()
+	if modelo == "" {
+		modelo = ef.Modelo // a ponte ainda não disse: o que está configurado
+	}
+	b, _ := json.Marshal(map[string]any{"modelo": modelo, "saldo": saldo, "pronta": pronta, "erro": erro,
+		"provedor": nome, "modo": ef.Modo})
 	return string(b)
 }
 

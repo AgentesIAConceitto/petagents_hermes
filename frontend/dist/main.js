@@ -1205,6 +1205,7 @@ const MENU = {
   ],
   sistema: [
     ["tela", "Tela e borda", () => abrirSeletorTela()],
+    ["inteligencia", "Inteligência", () => abrirInteligencia()],
     ["ajustes", "Aparência", () => abrirAparencia()],
     ["esconder", "Esconder por 15 min", () => esconder(15)],
     ["relogio", "Esconder por 1 h", () => esconder(60)],
@@ -1640,7 +1641,7 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;

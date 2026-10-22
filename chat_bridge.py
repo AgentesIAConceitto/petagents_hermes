@@ -97,6 +97,112 @@ MCP_A_REMOVER = ("cua-driver",)
 BLOCO_CLARIFY = '\n\n# PetAgent: o boneco NAO tem tela de escolhas e o `clarify` espera 3600 s por padrao\n# (medido 10/10/2026: o agente travava em clarify.request e a ponte estourava aos 300 s).\n# Com 8 s ele pergunta, ninguem responde e ele SEGUE SOZINHO, respondendo em texto normal.\n# NAO usar 0: no Hermes 0 = espera ILIMITADA.\nclarify:\n  timeout: 8\n'
 
 
+# IA SÓ DO BONECO (22/10/2026, painel Inteligência do app): quando a dona escolhe um modelo e
+# uma chave só para o boneco, o app manda pela VARIÁVEL DE AMBIENTE desta ponte:
+#   PETAGENT_IA        = {"provedor", "modelo", "base_url", "var"}  (JSON)
+#   PETAGENT_IA_CHAVE  = a chave
+# e o espelho passa a dizer esse modelo (config.yaml) e a ter essa chave (.env PRÓPRIO, no
+# lugar do hardlink). Variável de ambiente sozinha não serve: o Hermes carrega o .env com
+# override=True e a chave do dono venceria. O Hermes do dono NÃO é tocado.
+# Variáveis de chave de IA que saem do .env do espelho quando o boneco tem IA própria (para
+# não sobrar a chave do dono de outro provedor):
+VARS_CHAVE_IA = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN",
+                 "GOOGLE_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY")
+
+
+def _ia_do_boneco() -> dict:
+    """A IA só do boneco (vazio = usa a do Hermes, como sempre)."""
+    try:
+        d = json.loads(os.environ.get("PETAGENT_IA") or "{}")
+    except json.JSONDecodeError:
+        return {}
+    chave = os.environ.get("PETAGENT_IA_CHAVE") or ""
+    if not isinstance(d, dict) or not chave or not all(d.get(k) for k in ("provedor", "modelo", "var")):
+        return {}
+    d["chave"] = chave
+    return d
+
+
+def _troca_modelo(texto: str, ia: dict) -> str:
+    """No bloco `model:`, põe default/provider/base_url do boneco e tira o que prende ao
+    provedor antigo (api_mode, api_key/api fixos). O app faz o MESMO no Hermes do dono quando
+    a escolha é "igual ao Hermes" (inteligencia.go, trocaModeloNoConfig) — os dois andam juntos."""
+    novos = [("default", ia["modelo"]), ("provider", ia["provedor"]), ("base_url", ia.get("base_url") or "")]
+    # mesmo provedor do dono = só o modelo troca (api_mode etc. do provedor ficam)
+    prov_antes = ""
+    no_bloco = False
+    for l in texto.splitlines():
+        if l and l[0] not in " \t" and not l.startswith("#"):
+            no_bloco = l.partition(":")[0].strip() == "model"
+        elif no_bloco and l.strip().startswith("provider:") and len(l) - len(l.lstrip()) <= 2:
+            prov_antes = l.split(":", 1)[1].strip().strip("'\"")
+    trocou_provedor = prov_antes != ia["provedor"]
+    saida, vistos = [], set()
+    dentro = achou = False
+
+    def falta():
+        for k, v in novos:
+            if k not in vistos and v:
+                saida.append(f'  {k}: "{v}"')
+
+    for l in texto.splitlines():
+        if l and l[0] not in " \t" and not l.startswith("#"):
+            if dentro:
+                falta()
+            nome, _, resto = l.partition(":")
+            dentro = nome.strip() == "model"
+            if dentro:
+                achou = True
+                if resto.strip():          # forma curta `model: "x"` vira bloco
+                    saida.append("model:")
+                    continue
+            saida.append(l)
+            continue
+        if dentro:
+            s = l.strip()
+            recuo = l[:len(l) - len(l.lstrip())]
+            k = s.split(":", 1)[0].strip() if ":" in s and not s.startswith("#") else ""
+            if k and len(recuo) <= 2 and k in ("default", "model", "provider", "base_url",
+                                               "api_mode", "api_key", "api"):
+                k = "default" if k == "model" else k
+                if k in ("api_mode", "api_key", "api"):
+                    if not trocou_provedor:
+                        saida.append(l)
+                    continue
+                if k in vistos:
+                    continue
+                vistos.add(k)
+                v = dict(novos)[k]
+                if v:
+                    saida.append(f'{recuo}{k}: "{v}"')
+                continue
+        saida.append(l)
+    if dentro:
+        falta()
+    if not achou:
+        saida += ["", "model:"]
+        falta()
+    return "\n".join(saida) + "\n"
+
+
+def _env_do_espelho(real: str, ia: dict) -> str:
+    """O .env do espelho com a chave do boneco: o do dono SEM as chaves de IA + a do boneco."""
+    linhas = []
+    try:
+        with open(os.path.join(real, ".env"), "r", encoding="utf-8") as fh:
+            for l in fh.read().splitlines():
+                nome = l.strip().removeprefix("export ").split("=", 1)[0].strip()
+                if nome not in VARS_CHAVE_IA:
+                    linhas.append(l)
+    except OSError:
+        pass
+    while linhas and not linhas[-1].strip():
+        linhas.pop()
+    linhas += ["", "# PetAgent: IA só do boneco (painel Inteligência). Refeito a cada subida.",
+               f'{ia["var"]}={ia["chave"]}']
+    return "\n".join(linhas) + "\n"
+
+
 def _home_real() -> str:
     return os.environ.get("HERMES_HOME") or os.path.join(
         os.environ.get("LOCALAPPDATA", AQUI), "hermes")
@@ -144,6 +250,11 @@ def _home_do_backend() -> str:
                 continue
             origem = os.path.join(real, nome)
             destino = os.path.join(HOME_ESPELHO, nome)
+            # .env PRÓPRIO de quando o boneco tinha IA só dele (ver _ia_do_boneco): voltou a
+            # usar a do Hermes, então o espelho volta a ser o link do .env do dono
+            if (nome == ".env" and not _ia_do_boneco() and os.path.isfile(destino)
+                    and not os.path.samefile(destino, origem)):
+                os.remove(destino)
             if os.path.exists(destino):
                 continue
             if os.path.isdir(origem):
@@ -184,6 +295,18 @@ def _home_do_backend() -> str:
             log("config do backend: clarify.timeout=8 (o boneco nao tem tela de escolhas)")
         else:
             log("AVISO: o config do dono ja tem bloco clarify: — nao mexi nele")
+        # IA SÓ DO BONECO (ver _ia_do_boneco): modelo no config e chave num .env PRÓPRIO
+        # do espelho (no lugar do hardlink do .env do dono, que o passo 1 acabou de refazer).
+        # ⚠️ Texto puro, como o .env do próprio Hermes — e só na pasta do PetAgent.
+        ia = _ia_do_boneco()
+        if ia:
+            limpo = _troca_modelo(limpo, ia)
+            env_espelho = os.path.join(HOME_ESPELHO, ".env")
+            if os.path.lexists(env_espelho):
+                os.remove(env_espelho)   # é o hardlink do .env do dono: SÓ o nome sai daqui
+            with open(env_espelho, "w", encoding="utf-8") as fh:
+                fh.write(_env_do_espelho(real, ia))
+            log(f"config do backend: IA só do boneco = {ia['provedor']} / {ia['modelo']}")
         with open(os.path.join(HOME_ESPELHO, "config.yaml"), "w", encoding="utf-8") as fh:
             fh.write(limpo)
         removidos = len(bruto) - len(limpo)
@@ -210,6 +333,7 @@ def _env_do_backend(token: str) -> dict:
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    env.pop("PETAGENT_IA_CHAVE", None)   # a chave já está no .env do espelho; o backend não precisa dela solta
     espelho = _home_do_backend()
     if espelho:
         env["HERMES_HOME"] = espelho
