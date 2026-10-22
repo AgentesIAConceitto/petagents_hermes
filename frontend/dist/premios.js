@@ -334,9 +334,13 @@
     p.classList.remove("oculto");
     p.querySelector("#col-x").onclick = () => { p.classList.add("oculto"); reportarHit(); };
     p.querySelector("#col-achar").onclick = () => { const r = achar(false); if (!r) toast("🎁", "Já achei 4 hoje!", "volto a procurar amanhã 🙂", 3000); galeria(); };
-    const r0 = (window.pet || document.getElementById("pet")).getBoundingClientRect();
-    p.style.left = Math.max(8, Math.min(innerWidth - 340, r0.left - 40)) + "px";
-    p.style.top = Math.max(8, r0.top - 380) + "px";
+    if (typeof posicionaPertoDoPet === "function") {
+      posicionaPertoDoPet(p);   // encostada no boneco, como os outros painéis (main.js)
+    } else {
+      const r0 = (window.pet || document.getElementById("pet")).getBoundingClientRect();
+      p.style.left = Math.max(8, Math.min(innerWidth - 340, r0.left - 40)) + "px";
+      p.style.top = Math.max(8, r0.top - 380) + "px";
+    }
     try { reportarHit(); } catch (e) { }
   }
 
