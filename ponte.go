@@ -41,16 +41,35 @@ var (
 	ponteVidaMu sync.Mutex
 	ponteCmd    *exec.Cmd
 
+	ponteModeloMu sync.Mutex
+	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
+
 	// escritos pelo leitor da ponte e lidos a cada pergunta: sempre com a trava
 	ponteEstadoMu sync.Mutex
 	ponteErro     string
 	pontePronta   bool
-	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
 
 	// prazoPonte — quanto o app espera cada linha da ponte (variável só para o teste
 	// encurtar; o porquê dos 330 s está em perguntaPonte).
 	prazoPonte = 330 * time.Second
 )
+
+// guardaModelo — a ponte manda o modelo no handshake e em cada resposta (vazio = não sabe,
+// e não apaga o que já se sabia).
+func guardaModelo(m string) {
+	if m = strings.TrimSpace(m); m == "" {
+		return
+	}
+	ponteModeloMu.Lock()
+	ponteModelo = m
+	ponteModeloMu.Unlock()
+}
+
+func modeloPonte() string {
+	ponteModeloMu.Lock()
+	defer ponteModeloMu.Unlock()
+	return ponteModelo
+}
 
 // caminhoPonte — o script da ponte, ao lado do executável do app.
 func caminhoPonte() string {
@@ -97,8 +116,8 @@ func caminhoPythonHermes() string {
 	return ""
 }
 
-// sobePonte — liga a ponte (se já não estiver no ar). O agente leva ~10 s para ficar
-// pronto; isso acontece no boot do app, fora do caminho da conversa.
+// sobePonte — liga a ponte (uma vez só). O agente leva ~10 s para ficar pronto;
+// isso acontece no boot do app, fora do caminho da conversa.
 func (a *App) sobePonte() {
 	ponteVidaMu.Lock()
 	defer ponteVidaMu.Unlock()
@@ -153,15 +172,15 @@ func (a *App) sobePonte() {
 }
 
 // reiniciaPonte — derruba e sobe de novo (a IA mudou). Fechar o stdin faz a ponte
-// derrubar o backend dela (a árvore inteira, ver _derruba_arvore) e sair; se não sair em
-// 15 s, morre na marra. Espera a pergunta em andamento terminar (ponteMu).
+// derrubar o backend dela (a árvore inteira) e sair; se não sair em 15 s, morre na marra.
+// Espera a pergunta em andamento terminar (ponteMu).
 func (a *App) reiniciaPonte() {
 	ponteMu.Lock()
 	ponteVidaMu.Lock()
 	marcaPonte(false, "reiniciando o agente")
-	ponteEstadoMu.Lock()
+	ponteModeloMu.Lock()
 	ponteModelo = "" // o handshake novo traz o modelo novo
-	ponteEstadoMu.Unlock()
+	ponteModeloMu.Unlock()
 	if ponteIn != nil {
 		_ = ponteIn.Close()
 	}
@@ -176,8 +195,9 @@ func (a *App) reiniciaPonte() {
 		}
 		ponteCmd = nil
 	}
+	ponteIn, ponteLinhas = nil, nil
 	ponteVidaMu.Unlock()
-	ponteMu.Unlock() // ligaPonte (dentro de sobePonte) pega esta trava
+	ponteMu.Unlock()
 	logMsg("ponte: reiniciando (a IA mudou)")
 	a.sobePonte()
 }
@@ -195,23 +215,6 @@ func marcaPonte(pronta bool, erro string) {
 	if erro != "" {
 		logMsg("ponte: " + erro)
 	}
-}
-
-// guardaModelo — a ponte manda o modelo no handshake e em cada resposta (vazio = não sabe,
-// e não apaga o que já se sabia).
-func guardaModelo(m string) {
-	if m = strings.TrimSpace(m); m == "" {
-		return
-	}
-	ponteEstadoMu.Lock()
-	ponteModelo = m
-	ponteEstadoMu.Unlock()
-}
-
-func modeloPonte() string {
-	ponteEstadoMu.Lock()
-	defer ponteEstadoMu.Unlock()
-	return ponteModelo
 }
 
 // ligaPonte — passa a conversar com a ponte por estes canos.
@@ -249,8 +252,8 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 			marcaPonte(false, "ponte sem agente: "+d.Erro)
 			return
 		}
-		marcaPonte(true, "")
 		guardaModelo(d.Modelo)
+		marcaPonte(true, "")
 		logMsg("ponte: agente quente confirmado (handshake ok)")
 		for {
 			linha, err := r.ReadString('\n')

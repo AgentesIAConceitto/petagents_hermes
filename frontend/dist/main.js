@@ -648,7 +648,7 @@ async function listaBonecos(termo, offset) {
   let d = null;
   try { d = JSON.parse(await G.PetGaleria(petPanelTermo, petPanelOffset)); } catch (e) {}
   if (!d || !d.ok) {
-    alvo.innerHTML = '<div class="aviso">' + escHtml((d && d.erro) || "sem resposta do app") + '</div>';
+    alvo.innerHTML = '<div class="aviso">' + escMenu((d && d.erro) || "sem resposta do app") + '</div>';
     document.getElementById("pets-conta").textContent = "";
     return;
   }

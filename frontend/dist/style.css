@@ -209,6 +209,7 @@ svg.ic {
 }
 .menu {
   position: absolute; z-index: 64; width: 392px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
   display: flex; flex-direction: column; gap: 14px; padding: 16px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -290,6 +291,7 @@ svg.ic {
 /* ───────── APARÊNCIA (menu › Sistema › Aparência) ───────── */
 .aparencia {
   position: absolute; z-index: 65; width: 340px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
   display: flex; flex-direction: column; gap: 18px; padding: 20px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -702,6 +704,8 @@ select.ia-campo { cursor: pointer; }
   flex: 1 1 auto; min-height: 120px; max-height: 340px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px; overflow-y: auto; align-content: start;
 }
+.pets-grade::-webkit-scrollbar { width: 7px; }
+.pets-grade::-webkit-scrollbar-thumb { background: var(--rolagem); border-radius: 4px; }
 .pets-grade .aviso { grid-column: 1 / -1; font-size: 12.5px; color: var(--sub); padding: 10px 2px; }
 .card {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px;
@@ -725,6 +729,8 @@ select.ia-campo { cursor: pointer; }
 /* ── E-MAIL (22/10/2026): números + "remetentes novos, me ensine" ─────────────── */
 .email { width: 432px; }
 .email-lista { overflow-y: auto; max-height: 300px; display: flex; flex-direction: column; gap: 6px; }
+.email-lista::-webkit-scrollbar { width: 7px; }
+.email-lista::-webkit-scrollbar-thumb { background: var(--rolagem); border-radius: 4px; }
 .email-item {
   display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--raio-interno);
   background: var(--sup);

@@ -386,8 +386,8 @@ def _env_do_backend(token: str) -> dict:
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
-    env.pop("PETAGENT_IA_CHAVE", None)   # a chave já está no .env do espelho; o backend não precisa dela solta
     env["HERMES_TUI_MAX_TURNS"] = str(MAX_ITERACOES_IA)
+    env.pop("PETAGENT_IA_CHAVE", None)   # a chave já está no .env do espelho; o backend não precisa dela solta
     espelho = _home_do_backend()
     if espelho:
         env["HERMES_HOME"] = espelho
