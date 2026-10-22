@@ -165,7 +165,7 @@ body.parado .pet.idle svg { animation: none; }
 /* ───────── MENU (dock com abas: Pet · Recursos · Sistema) ─────────
    Opção A da prancha (22/10/2026). Cores, fonte, cantos e traço dos ícones vêm
    das variáveis que o tema.js põe em :root — nada de cor fixa aqui. */
-:where(.menu, .aparencia, .balao, .cg) button {
+:where(.menu, .aparencia, .balao, .cg, .pp) button {
   font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
 }
 svg.ic {
@@ -251,7 +251,7 @@ svg.ic {
 }
 .mtile:active, .mlinha:active, .mcartao:active { transform: scale(.98); }
 .mtile.alerta, .mlinha.alerta, .mcartao.alerta { box-shadow: inset 0 0 0 2px var(--acento); }
-:where(.menu, .aparencia, .balao, .cg) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+:where(.menu, .aparencia, .balao, .cg, .pp) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 /* ───────── APARÊNCIA (menu › Sistema › Aparência) ───────── */
 .aparencia {
@@ -289,6 +289,80 @@ svg.ic {
 }
 .ap-fontes button i { font-style: normal; font-size: 17px; width: 26px; }
 .ap-fontes button.sel { background: var(--acento-suave); border-color: var(--acento); }
+/* ───────── PAINEL DO PET (opção C, 22/10/2026): anéis + cuidado rápido; rotina e pausas ao lado ───────── */
+.bicho.pp {
+  width: 336px; gap: 16px; padding: 16px; font-size: 13px; font-family: var(--fonte);
+  overflow-y: auto; box-shadow: var(--sombra);
+}
+.bicho.pp.pp-lado { width: 320px; gap: 14px; }
+.pp-topo { display: flex; align-items: center; gap: 8px; }
+.pp-topo .botao-x.sel { background: var(--sup2); color: var(--texto); }
+.pp-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pp-quem b { font-size: 15px; font-weight: 650; color: var(--texto); }
+.pp-lado .pp-quem b { font-size: 13.5px; font-weight: 600; }
+.pp-quem span { font-size: 12px; color: var(--sub); }
+.pp-titulo { flex: 1; font-size: 15px; font-weight: 650; }
+.pp-salvo { font-size: 12px; font-weight: 600; color: #35D07F; }
+.pp-aneis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pp-anel { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pp-anel b { font-size: 12px; font-weight: 600; }
+.pp-anel > span { font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.pp-anel-svg { position: relative; width: 64px; height: 64px; }
+.pp-anel-svg > svg { transform: rotate(-90deg); }
+.pp-anel-svg > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.pp-anel-svg .ic { fill: none; }
+.pp-trilho { fill: none; stroke: var(--sup2); stroke-width: 6; }
+.pp-valor { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray .4s ease; }
+.pp-acoes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pp-acoes.dois { grid-template-columns: 1fr auto; }
+.pp .pp-bt {
+  height: 34px; padding: 0 12px; border-radius: var(--raio-interno); font-size: 12.5px; font-weight: 600;
+  background: var(--acento); color: var(--acento-txt);
+}
+.pp .pp-bt.sec { background: var(--sup); color: var(--texto); }
+.pp .pp-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.pp-proximo {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 12.5px;
+  border-radius: var(--raio-interno); background: var(--acento-suave); color: var(--texto);
+}
+.pp-proximo .ic { color: var(--icone); fill: none; }
+.pp-rodape { font-size: 11.5px; color: var(--sub); }
+.pp-sono {
+  display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--raio-botao);
+  background: var(--acento-suave);
+}
+.pp-sono > .ic { color: var(--icone); fill: none; }
+.pp-sono > span { display: flex; flex-direction: column; gap: 2px; }
+.pp-sono > span span { font-size: 12px; color: var(--sub); }
+/* .pp na frente: o `.bicho label` antigo (centraliza tudo) não pode vencer */
+.pp .pp-campo-l { display: flex; flex-direction: column; align-items: stretch; gap: 6px; font-size: 12px; font-weight: 600; color: var(--sub); }
+.pp .pp-campo {
+  height: 36px; padding: 0 10px; font: inherit; font-size: 13px; font-weight: 400;
+  background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); outline: none; min-width: 0; flex: none;
+}
+.pp .pp-campo:focus { border-color: var(--acento); }
+.pp .pp-campo.curto { height: 32px; }
+:root[data-tema="escuro"] .pp .pp-campo { color-scheme: dark; }
+.pp-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--sub); }
+.pp-linha > span:first-child:not(.pp-quem) { color: var(--texto); font-size: 13px; }
+.pp .pp-campo-l .pp-linha .pp-campo { flex: 1; }
+.pp-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
+.pp-sep { height: 1px; background: var(--borda); }
+.pp .pp-switch { position: relative; width: 42px; height: 24px; flex: none; border-radius: 12px; background: var(--sup2); }
+.pp .pp-switch i {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: left .15s ease;
+}
+.pp .pp-switch[aria-checked="true"] { background: var(--acento); }
+.pp .pp-switch[aria-checked="true"] i { left: 21px; }
+
+/* dormindo: fica NA TELA, apagadinho, com zZ — um clique acorda */
+body.pet-dormindo .pet { opacity: .6; }
+body.pet-dormindo .pet .zzz {
+  display: block; color: #C9D2FF; font-weight: 700; letter-spacing: 2px; animation: sobe 2.4s linear infinite;
+}
+
 /* ───────── INTELIGÊNCIA (menu › Sistema › Inteligência) — mesmo visual da Aparência ───────── */
 .aparencia.ia { width: 360px; }
 .ap-seg.ia-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

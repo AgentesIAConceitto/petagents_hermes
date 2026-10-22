@@ -620,19 +620,14 @@ function alternaBoneco() {
 const petPanelEl = document.getElementById("petPanel");
 let petsBase = "", petPanelTermo = "", petPanelOffset = 0;
 
-function posicionaJunto(el, largura) {
-  const r = pet.getBoundingClientRect();
-  const larg = el.offsetWidth || largura, alt = el.offsetHeight || 420;
-  let x = r.left + 14, y = r.top - alt - 14;
-  if (y < 10) y = r.bottom + 14;
-  if (x + larg > innerWidth - 10) x = Math.max(10, innerWidth - larg - 10);
-  if (y + alt > innerHeight - 10) y = Math.max(10, innerHeight - alt - 10);
-  el.style.left = x + "px"; el.style.top = y + "px";
-}
+// 22/10/2026: todos os painéis abrem ENCOSTADOS no boneco, pelo mesmo cálculo do menu
+// (posicionaPertoDoPet: ancorado pela base, então a lista que carrega depois cresce
+// para cima sem desgrudar). Antes cada um tinha a sua conta, com "380 px acima" fixo.
+function posicionaJunto(el) { posicionaPertoDoPet(el); }
 
 async function abrirPainelBonecos(termo) {
   petPanelEl.classList.remove("oculto");
-  posicionaJunto(petPanelEl, 430);
+  posicionaJunto(petPanelEl);
   await listaBonecos(termo === undefined ? "" : termo); // abre mostrando os meus
   reportarHit();
 }
@@ -1377,9 +1372,7 @@ function rotuloCanto(c) {
 async function abrirSeletorTela() {
   fecharMenu();
   telaPanel.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  telaPanel.style.left = Math.max(10, Math.min(r.left + 20, innerWidth - 320)) + "px";
-  telaPanel.style.top = Math.max(10, r.top - 210) + "px";
+  posicionaJunto(telaPanel);
 
   const boxM = document.getElementById("tela-mon");
   boxM.innerHTML = "";
@@ -1438,9 +1431,7 @@ function dominioDe(e) {
 async function abrirEmail() {
   fecharMenu(); fecharSeletorTela();
   emailPanel.classList.remove("oculto");
-  const r = pet.getBoundingClientRect();
-  emailPanel.style.left = Math.max(8, Math.min(r.left + 20, innerWidth - 410)) + "px";
-  emailPanel.style.top = Math.max(8, Math.min(r.top - 380, innerHeight - 470)) + "px";
+  posicionaJunto(emailPanel);
   await renderEmail();
   reportarHit();
 }
@@ -1613,6 +1604,9 @@ pet.addEventListener("mousedown", (e) => {
   window.addEventListener("mouseup", up);
 });
 
+// o bicho está dormindo? (ele fica na tela cochilando; um clique acorda — bicho.js)
+const petDormindo = () => { try { return !!(window.bicho && window.bicho.estaDormindo && window.bicho.estaDormindo()); } catch (e) { return false; } };
+
 /* CLIQUE = AGRADO (carinho), nunca chat. A conversa é no DUPLO CLIQUE ou no
    tile "Conversar" — regra do dono: "clicar nele não quer dizer que eu
    quero um chat com ele, é só um agrado". */
@@ -1621,12 +1615,14 @@ pet.addEventListener("click", () => {
   try { if (G && G.Log) G.Log("clique: click no boneco | interagir=" + cfg.interagir + " | arrastouAgora=" + arrastouAgora); } catch (e2) { }
   if (!cfg.interagir) return;                           // interação desligada: nem carinho
   if (arrastouAgora) { arrastouAgora = false; return; } // foi arrasto, não clique
+  if (petDormindo()) { window.bicho.acordar(); return; } // dormindo: o clique acorda
   carinho();
 });
 pet.addEventListener("dblclick", () => {
   fecharMenu();
   try { if (G && G.Log) G.Log("clique: DUPLO clique no boneco | interagir=" + cfg.interagir); } catch (e2) { }
   if (!cfg.interagir) return;                           // interação desligada: sem chat
+  if (petDormindo()) return;                            // o clique simples já acordou
   abrirBalao(); txt.focus();
 });
 // BOTÃO DIREITO SEMPRE: é a porta de volta quando a interação está desligada.
@@ -1650,7 +1646,7 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;
