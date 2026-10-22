@@ -98,6 +98,18 @@ func (a *App) chamarHermesFrio(texto string) string {
 	return resp
 }
 
+// InfoChat — o que o cabeçalho do chat mostra: o modelo em uso (vem da ponte; vazio
+// enquanto ela não subiu), o saldo já formatado ("US$ 4.82", ou o motivo de não ter) e se
+// o agente quente está de pé (é ele que responde o chat — não o gateway).
+func (a *App) InfoChat() string {
+	a.mu.Lock()
+	saldo := a.balance
+	a.mu.Unlock()
+	pronta, erro := pontePronta, ponteErro
+	b, _ := json.Marshal(map[string]any{"modelo": modeloPonte(), "saldo": saldo, "pronta": pronta, "erro": erro})
+	return string(b)
+}
+
 // ChatIntegrado — o chat está ligado ao Hermes? (o frontend mostra isso na tela)
 func (a *App) ChatIntegrado() string {
 	exe := caminhoHermes()

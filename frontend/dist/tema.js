@@ -36,6 +36,10 @@ const ICONES = (() => {
     ajustes: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
     seta: "M9 6l6 6-6 6",
     fechar: "M18 6 6 18M6 6l12 12",
+    menos: "M5 12h14",
+    enviar: "M5 12h14M13 6l6 6-6 6",
+    copiar: "M9 9h11v11H9zM5 15H4V4h11v1",
+    ok: "M20 6 9 17l-5-5",
   };
 })();
 
@@ -43,6 +47,16 @@ function icone(nome, tam) {
   const t = tam || 20;
   return `<svg class="ic" width="${t}" height="${t}" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONES[nome] || ""}"/></svg>`;
 }
+
+// botões do HTML marcados com data-ic="nome" ganham o ícone (o texto, se houver, fica depois)
+function pintaIconesFixos() {
+  document.querySelectorAll("[data-ic]").forEach((el) => {
+    if (el.querySelector("svg.ic")) return;
+    el.insertAdjacentHTML("afterbegin", icone(el.dataset.ic, el.tagName === "SPAN" ? 15 : 18));
+  });
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", pintaIconesFixos);
+else pintaIconesFixos();
 
 const APARENCIA_PADRAO = { modo: "escuro", acento: "#5B6CFF", fonte: "inter", icones: "fina", cantos: "suaves" };
 
@@ -71,13 +85,13 @@ const CANTOS = {
 const PALETAS = {
   escuro: {
     fundo: "#18191D", sup: "#24252B", sup2: "#2E3037", elev: "#383A42", entrada: "#111215",
-    texto: "#F2F2F5", sub: "#A9ABB6", borda: "rgba(255,255,255,0.10)", hover: "rgba(255,255,255,0.07)",
+    texto: "#F2F2F5", sub: "#A9ABB6", borda: "rgba(255,255,255,0.10)", hover: "rgba(255,255,255,0.07)", rolagem: "rgba(255,255,255,0.20)",
     sombra: "0 24px 60px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.30)",
     sombraAba: "0 1px 2px rgba(0,0,0,0.5)", perigo: "#FF8A7A",
   },
   claro: {
     fundo: "#FFFFFF", sup: "#F3F3F6", sup2: "#E8E8ED", elev: "#FFFFFF", entrada: "#FFFFFF",
-    texto: "#1A1B1F", sub: "#5D5F6A", borda: "rgba(20,20,35,0.12)", hover: "rgba(20,20,35,0.06)",
+    texto: "#1A1B1F", sub: "#5D5F6A", borda: "rgba(20,20,35,0.12)", hover: "rgba(20,20,35,0.06)", rolagem: "rgba(20,20,35,0.25)",
     sombra: "0 24px 60px rgba(20,20,45,0.22), 0 2px 8px rgba(20,20,45,0.10)",
     sombraAba: "0 1px 3px rgba(20,20,40,0.18)", perigo: "#C2362A",
   },
@@ -113,7 +127,7 @@ function aplicaAparencia(ap) {
   const ct = CANTOS[ap.cantos] || CANTOS.suaves;
   const v = {
     "--fundo": p.fundo, "--sup": p.sup, "--sup2": p.sup2, "--elev": p.elev, "--entrada": p.entrada,
-    "--texto": p.texto, "--sub": p.sub, "--borda": p.borda, "--hover": p.hover,
+    "--texto": p.texto, "--sub": p.sub, "--borda": p.borda, "--hover": p.hover, "--rolagem": p.rolagem,
     "--sombra": p.sombra, "--sombra-aba": p.sombraAba, "--perigo": p.perigo,
     "--acento": ap.acento,
     "--acento-txt": la > 0.42 ? "#15161A" : "#FFFFFF",

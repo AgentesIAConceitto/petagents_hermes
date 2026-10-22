@@ -724,7 +724,8 @@ async def servico(bk: "Backend", args) -> int:
         return 0
 
     # handshake: o app só pergunta depois disto
-    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao}), flush=True)
+    # o modelo vai junto: o app mostra no cabeçalho do chat qual IA está respondendo
+    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao, "modelo": bk.modelo}), flush=True)
     while True:
         linha = await asyncio.to_thread(sys.stdin.readline)
         if not linha:
@@ -738,7 +739,8 @@ async def servico(bk: "Backend", args) -> int:
             continue
         try:
             resp, seg = await bk.perguntar(p)
-            print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1)},
+            print(json.dumps({"ok": True, "resposta": resp, "segundos": round(seg, 1),
+                              "modelo": bk.modelo},
                              ensure_ascii=False), flush=True)
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"ok": False, "erro": f"{type(e).__name__}: {e}"}), flush=True)

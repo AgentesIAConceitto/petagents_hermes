@@ -5,6 +5,8 @@
 @font-face { font-family: "Fraunces"; src: url("fontes/fraunces-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("fontes/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-display: swap; }
 * { box-sizing: border-box; }
+/* barra de rolagem fina e nas cores do tema em TODO lugar (chat, menu, galeria, e-mail) */
+* { scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent; }
 html, body {
   margin: 0; padding: 0; width: 100%; height: 100%;
   background: transparent; overflow: hidden;
@@ -79,14 +81,17 @@ body.parado .pet.idle svg { animation: none; }
 .pensando-pontos i:nth-child(2){ animation-delay:.15s } .pensando-pontos i:nth-child(3){ animation-delay:.3s }
 @keyframes ponto { 0%,100%{opacity:.35; transform:translateY(0)} 50%{opacity:1; transform:translateY(-4px)} }
 
-/* ───────── BALÃO ───────── */
+/* ───────── BALÃO ─────────
+   22/10/2026: maior (460 × até 55% da tela) e redimensionável pela alça; o tamanho
+   (width/height) é do JS — ver ancoraBalao e cfg.chat. Ancorado pelo rodapé: cresce
+   para cima, nunca por cima do pet. */
 .balao {
-  position: absolute; width: 420px; max-width: 90vw; min-height: 150px;
+  position: absolute; width: 460px; max-width: calc(100vw - 20px);
   display: flex; flex-direction: column;
-  background: var(--fundo); color: var(--texto);
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel);
   box-shadow: var(--sombra);
-  overflow: hidden; z-index: 50;
+  z-index: 50;
 }
 .balao.oculto { display: none; }
 /* rabinho do balão */
@@ -95,34 +100,72 @@ body.parado .pet.idle svg { animation: none; }
   border: 8px solid transparent; border-top-color: var(--fundo);
 }
 .balao.flip::after { left: auto; right: 42px; }
-.balao-topo { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  background: var(--sup); border-bottom: 1px solid var(--borda); }
-.balao-topo strong { font-size: 13px; }
-.balao-topo .sub { font-size: 11px; opacity: .65; margin-left: auto; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: #35d07f; }
-.dot.erro { background: #ff5252; } .dot.dormindo { background: #8a93a0; }
-.dot.pensando { background: #ffc94a; animation: pulso 1s infinite; }
-.x { background: transparent; border: 0; color: var(--sub); font-size: 16px; cursor: pointer; }
-.msgs { flex: 1; max-height: none; overflow-y: auto; padding: 10px; display: flex;
-  flex-direction: column; gap: 8px; scrollbar-width: thin;
+/* aberto embaixo do boneco (ele está na borda de cima): rabinho em cima, alça embaixo */
+.balao.embaixo::after { bottom: auto; top: -14px; border-top-color: transparent; border-bottom-color: var(--fundo); }
+.balao.embaixo .balao-puxa { top: auto; bottom: 0; }
+/* alça de redimensionar: canto de cima, do lado oposto ao rabinho */
+.balao-puxa {
+  position: absolute; top: 0; right: 0; width: 16px; height: 16px; cursor: nesw-resize;
+  border-top-right-radius: var(--raio-painel); opacity: .45;
+  background: linear-gradient(45deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
+}
+.balao.flip .balao-puxa {
+  right: auto; left: 0; cursor: nwse-resize;
+  border-top-right-radius: 0; border-top-left-radius: var(--raio-painel);
+  background: linear-gradient(-45deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
+}
+.balao-puxa:hover { opacity: 1; }
+
+/* cabeçalho do balão e do chat estendido: ● nome do pet / modelo · saldo · gasto de hoje */
+.chat-topo, .cg-topo {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-bottom: 1px solid var(--borda);
+}
+.chat-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.chat-quem b { font-size: 14px; font-weight: 650; color: var(--texto); }
+.chat-quem .sub {
+  font-size: 12px; color: var(--sub);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #35d07f; }
+.dot.erro { background: #ff5252; }
+.dot.aviso { background: #ffc94a; }
+.dot.pensando { background: var(--acento); animation: pulso 1s infinite; }
+
+.msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex;
+  flex-direction: column; gap: 8px;
   /* a cor do texto vem DAQUI (e não só do balão): em 02/10/2026 o chat estendido
      ficou com texto preto porque só o .balao definia color */
   color: var(--texto); }
-.msgs .m { font-size: 13px; line-height: 1.35; padding: 7px 10px; border-radius: var(--raio-botao); max-width: 92%; white-space: pre-wrap; word-break: break-word; }
+.msgs .m { font-size: 13.5px; line-height: 1.4; padding: 8px 12px; border-radius: var(--raio-botao); max-width: 92%; white-space: pre-wrap; word-break: break-word; }
 .msgs .m code { background: var(--sup2); border-radius: 4px; padding: 0 4px; font-size: 12px; }
 .msgs .eu  { align-self: flex-end; background: var(--acento); color: var(--acento-txt); }
 .msgs .ele { align-self: flex-start; background: var(--sup); border: 1px solid var(--borda); }
-.msgs .meta { font-size: 10px; opacity: .55; align-self: center; }
-.balao-rodape { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--borda); }
-#txt { flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--acento);
-  border-radius: var(--raio-interno); padding: 8px 10px; font-size: 13px; outline: none; }
-#enviar { background: var(--acento); border: 0; color: var(--acento-txt); font-weight: 700; width: 36px;
-  border-radius: var(--raio-interno); cursor: pointer; }
+.msgs .meta { font-size: 11px; color: var(--sub); align-self: center; }
+/* rodapé da resposta: hora · quanto levou (era a linha solta "via Hermes · 13.9 s") */
+.msgs .m .rodape-msg { display: block; margin-top: 6px; font-size: 11px; color: var(--sub); white-space: normal; }
+/* o pet "digitando": três pontinhos (+ o passo e o relógio que a ponte manda) */
+.msgs .ao-vivo .digitando { display: inline-flex; gap: 4px; padding: 4px 0; }
+.msgs .ao-vivo .digitando i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--sub); animation: ponto 1s infinite;
+}
+.msgs .ao-vivo .digitando i:nth-child(2) { animation-delay: .15s; }
+.msgs .ao-vivo .digitando i:nth-child(3) { animation-delay: .3s; }
+.msgs .ao-vivo .passo { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sub); white-space: normal; }
+
+.balao-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
+#txt { flex: 1; min-width: 0; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); padding: 9px 12px; font: inherit; font-size: 13.5px; outline: none; }
+#txt:focus { border-color: var(--acento); }
+#txt::placeholder { color: var(--sub); }
+#enviar { flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno); }
+#enviar:hover { filter: brightness(1.08); }
 
 /* ───────── MENU (dock com abas: Pet · Recursos · Sistema) ─────────
    Opção A da prancha (22/10/2026). Cores, fonte, cantos e traço dos ícones vêm
    das variáveis que o tema.js põe em :root — nada de cor fixa aqui. */
-:where(.menu, .aparencia) button {
+:where(.menu, .aparencia, .balao, .cg) button {
   font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
 }
 svg.ic {
@@ -130,7 +173,7 @@ svg.ic {
   stroke: currentColor; stroke-width: var(--ic-sw); stroke-linecap: round; stroke-linejoin: round;
 }
 .menu {
-  position: absolute; z-index: 64; width: 392px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--sup2) transparent;
+  position: absolute; z-index: 64; width: 392px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 14px; padding: 16px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -207,11 +250,11 @@ svg.ic {
 }
 .mtile:active, .mlinha:active, .mcartao:active { transform: scale(.98); }
 .mtile.alerta, .mlinha.alerta, .mcartao.alerta { box-shadow: inset 0 0 0 2px var(--acento); }
-:where(.menu, .aparencia) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+:where(.menu, .aparencia, .balao, .cg) button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 
 /* ───────── APARÊNCIA (menu › Sistema › Aparência) ───────── */
 .aparencia {
-  position: absolute; z-index: 65; width: 340px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--sup2) transparent;
+  position: absolute; z-index: 65; width: 340px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 18px; padding: 20px;
   background: var(--fundo); color: var(--texto); font-family: var(--fonte);
   border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
@@ -310,61 +353,54 @@ svg.ic {
 /* ───────── CHAT ESTENDIDO ─────────
    Não é janela do Windows: é um painel do overlay (que cobre a tela). Como o
    fundo é transparente, ele se comporta como janela: centraliza, arrasta e
-   redimensiona. O título mantém a identidade do produto. */
-/* o balão do boneco cresce para CIMA e para no máximo 30% da altura da tela
-   (a posição é ancorada pelo rodapé no JS — ver ancoraBalao) */
-.balao { max-height: 30vh; }
+   redimensiona — e lembra onde ficou (cfg.chatGrande). O cabeçalho é o mesmo do
+   balão (.cg-topo divide as regras com .chat-topo). */
 .cg {
   position: absolute; z-index: 70; display: flex; flex-direction: column;
-  background: var(--fundo); color: var(--texto); /* mesma cor do balão */
+  background: var(--fundo); color: var(--texto); font-family: var(--fonte); /* mesma cor do balão */
   border: 1px solid var(--borda); border-radius: var(--raio-painel);
   box-shadow: var(--sombra); overflow: hidden; min-width: 380px; min-height: 280px;
 }
 .cg.oculto { display: none; }
-.cg-topo {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: move;
-  /* mesmo padrão de cores do balão pequeno (pedido do dono, 02/10/2026) */
-  background: var(--sup);
-  border-bottom: 1px solid var(--borda); user-select: none;
-}
-.cg-tit { font-size: 12.5px; font-weight: 700; color: var(--texto); }
-.cg-marca { font-size: 10px; letter-spacing: .5px; color: var(--sub); opacity: .95;
-  border: 1px solid var(--borda); border-radius: 6px; padding: 1px 6px; }
-.cg-sub { font-size: 10px; opacity: .6; margin-left: auto; }
-.cg-x { cursor: pointer; font-size: 13px; padding: 0 4px; opacity: .8; }
-.cg-x:hover { opacity: 1; }
-.cg-msgs { flex: 1; max-height: none; overflow-y: auto; }
-.cg-rodape { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--borda); }
+.cg-topo { cursor: move; user-select: none; }
+.cg-msgs { flex: 1; overflow-y: auto; }
+.cg-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
 .cg-rodape input {
-  flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--acento);
-  border-radius: var(--raio-interno); font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;
+  flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
+  border-radius: var(--raio-interno); font-family: inherit; font-size: 13.5px; padding: 9px 12px; outline: none;
 }
+.cg-rodape input:focus { border-color: var(--acento); }
+.cg-rodape input::placeholder { color: var(--sub); }
+.cg-bt {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno);
+  font-size: 13px; font-weight: 600; padding: 8px 14px;
+}
+.cg-bt:hover { filter: brightness(1.08); }
 /* botão secundário (voltar ao chat pequeno) na paleta do chat */
 .cg-bt.sec {
-  background: var(--sup); color: var(--texto);
-  border: 1px solid var(--borda); font-weight: 600; padding: 5px 10px; font-size: 11px;
+  background: transparent; color: var(--sub); border: 1px solid var(--borda);
+  font-size: 12px; padding: 6px 10px;
 }
-.cg-bt.sec:hover { background: var(--sup2); }
-.cg-rodape input::placeholder { color: var(--sub); opacity: .55; }
-/* copiar mensagem: aparece discreto e nunca atrapalha a leitura */
+.cg-bt.sec:hover { filter: none; box-shadow: inset 0 0 0 999px var(--hover); color: var(--texto); }
+.cg-bt .ic { width: 15px; height: 15px; }
+/* copiar mensagem: aparece só no hover e nunca atrapalha a leitura */
 .msgs .m { position: relative; }
 .msgs .m .copiar {
-  position: absolute; top: 2px; right: 4px; font-size: 11px; line-height: 1;
-  padding: 3px 5px; border-radius: 6px; cursor: pointer; opacity: .35;
-  background: var(--sup2); color: var(--sub); user-select: none;
+  position: absolute; top: 4px; right: 4px; display: flex; padding: 4px; line-height: 0;
+  border-radius: var(--raio-interno); cursor: pointer; opacity: 0;
+  background: var(--fundo); color: var(--sub); border: 1px solid var(--borda); user-select: none;
+  transition: opacity .12s ease;
 }
-.msgs .m:hover .copiar { opacity: .95; }
-.msgs .m .copiar.copiado { color: var(--acento-txt); background: #35d07f; opacity: 1; }
-.msgs .eu .copiar { background: var(--sup2); }
-.cg-bt {
-  background: var(--acento); color: var(--acento-txt); border: 0; border-radius: var(--raio-interno); cursor: pointer;
-  font-family: inherit; font-size: 12px; font-weight: 700; padding: 8px 14px;
-}
-.cg-bt:hover { background: var(--acento); }
+.msgs .m:hover .copiar { opacity: 1; }
+.msgs .m .copiar:hover { color: var(--texto); }
+.msgs .m .copiar.copiado { color: var(--acento); opacity: 1; }
+.msgs .m .copiar .ic { fill: none; }
 .cg-puxa {
-  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 45%, var(--sub) 50%, var(--sub) 60%, transparent 65%);
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; opacity: .45;
+  background: linear-gradient(135deg, transparent 48%, var(--sub) 52%, var(--sub) 60%, transparent 64%);
 }
+.cg-puxa:hover { opacity: 1; }
 
 /* ───────── BICHO (tamagotchi): painel, barras e movimento ───────── */
 .bicho {
@@ -451,8 +487,6 @@ svg.ic {
   flex: 1 1 auto; min-height: 110px; display: grid; grid-template-columns: repeat(4, 1fr);
   gap: 7px; overflow-y: auto; align-content: start;
 }
-.pets-grade::-webkit-scrollbar { width: 7px; }
-.pets-grade::-webkit-scrollbar-thumb { background: var(--sup2); border-radius: 4px; }
 .pets-grade .aviso { grid-column: 1 / -1; font-size: 11px; opacity: .8; padding: 8px 2px; }
 .card {
   display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px;
@@ -491,8 +525,6 @@ svg.ic {
 .email.oculto { display: none; }
 .email-resumo { font-size: 11px; color: var(--sub); line-height: 1.35; }
 .email-lista { overflow-y: auto; max-height: 300px; display: flex; flex-direction: column; gap: 5px; }
-.email-lista::-webkit-scrollbar { width: 7px; }
-.email-lista::-webkit-scrollbar-thumb { background: var(--sup2); border-radius: 4px; }
 .email-item {
   display: flex; gap: 6px; align-items: center; padding: 5px 7px; border-radius: var(--raio-interno);
   background: var(--sup); border: 1px solid var(--borda);

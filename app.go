@@ -411,25 +411,49 @@ func envKey(path, nome string) string {
 	return m[1]
 }
 
-// balanceText — saldo DeepSeek ao vivo (conta compartilhada). Nunca imprime a chave.
+// balanceText — saldo ao vivo da conta que o Hermes usa (compartilhada). Nunca imprime a
+// chave. DeepSeek era a única conhecida; em 22/10/2026 a instalação da dona usava a
+// OpenRouter (só OPENROUTER_API_KEY no .env) e o chat mostrava "chave não encontrada" para
+// sempre. Agora tenta as duas, na ordem.
 func balanceText(_ int) string {
-	key := envKey(filepath.Join(hermesDir(), ".env"), "DEEPSEEK_API_KEY")
-	if key == "" {
-		return "saldo indisponível (chave não encontrada)"
+	env := filepath.Join(hermesDir(), ".env")
+	if key := envKey(env, "DEEPSEEK_API_KEY"); key != "" {
+		body, err := pedeSaldo("https://api.deepseek.com/user/balance", key)
+		if err != nil {
+			return "saldo indisponível (rede)"
+		}
+		return lerSaldoDeepSeek(body)
 	}
-	req, err := http.NewRequest("GET", "https://api.deepseek.com/user/balance", nil)
+	if key := envKey(env, "OPENROUTER_API_KEY"); key != "" {
+		body, err := pedeSaldo(urlCreditosOpenRouter, key)
+		if err != nil {
+			return "saldo indisponível (rede)"
+		}
+		return lerSaldoOpenRouter(body)
+	}
+	return "saldo indisponível (chave não encontrada)"
+}
+
+// urlCreditosOpenRouter — variável só para o teste apontar para um servidor local
+var urlCreditosOpenRouter = "https://openrouter.ai/api/v1/credits"
+
+func pedeSaldo(url, key string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "saldo indisponível"
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Accept", "application/json")
 	cli := &http.Client{Timeout: 25 * time.Second}
 	resp, err := cli.Do(req)
 	if err != nil {
-		return "saldo indisponível (rede)"
+		return nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
+}
+
+func lerSaldoDeepSeek(body []byte) string {
 	var d struct {
 		Available bool `json:"is_available"`
 		Infos     []struct {
@@ -446,6 +470,20 @@ func balanceText(_ int) string {
 		}
 	}
 	return d.Infos[0].Currency + " " + d.Infos[0].Total
+}
+
+// OpenRouter: /api/v1/credits devolve o comprado e o usado; o saldo é a diferença.
+func lerSaldoOpenRouter(body []byte) string {
+	var d struct {
+		Data *struct {
+			Total *float64 `json:"total_credits"`
+			Usado *float64 `json:"total_usage"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &d) != nil || d.Data == nil || d.Data.Total == nil || d.Data.Usado == nil {
+		return "saldo indisponível (formato)"
+	}
+	return fmt.Sprintf("US$ %.2f", *d.Data.Total-*d.Data.Usado)
 }
 
 func (a *App) warmBalance() {
@@ -485,7 +523,7 @@ func (a *App) stateLoop() {
 		}
 		if num := strings.TrimPrefix(bal, "US$ "); strings.HasPrefix(bal, "US$ ") {
 			if f, err := parseFloat(num); err == nil && f < 3.0 {
-				st.State, st.Detail = "erro", "saldo DeepSeek abaixo de US$ 3"
+				st.State, st.Detail = "erro", "saldo abaixo de US$ 3"
 			}
 		}
 		if a.ctx != nil {
@@ -564,7 +602,7 @@ func (a *App) SendChat(text string) string {
 		a.mu.Lock()
 		b := a.balance
 		a.mu.Unlock()
-		return "Saldo DeepSeek: " + b + " (conta compartilhada)"
+		return "Saldo: " + b + " (conta compartilhada)"
 	case low == "status", strings.Contains(low, "gateway"):
 		age := heartbeatAge()
 		if age < 0 {
@@ -575,7 +613,16 @@ func (a *App) SendChat(text string) string {
 		}
 		return fmt.Sprintf("Atenção: gateway sem heartbeat há %d min.", age/60)
 	}
-	return a.chamarHermes(text)
+	resp := a.chamarHermes(text)
+	// a resposta gastou crédito: relê o saldo (no máximo 1x/min) para o "gasto de hoje"
+	// do cabeçalho do chat acompanhar — o pet-state leva o valor novo em até 15 s
+	a.mu.Lock()
+	velho := time.Since(a.balanceAt) > time.Minute
+	a.mu.Unlock()
+	if velho {
+		go a.warmBalance()
+	}
+	return resp
 }
 
 // SavePet / LoadPet — posição e estado do boneco (pet como dado).
