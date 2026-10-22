@@ -71,6 +71,20 @@ func caminhoPythonHermes() string {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
+		// Hermes 0.21+ (Windows): o venv mora em installs\<id>\environments\<hash>\venv
+		// (nome sorteado). Se houver mais de um, o mais recente é o da instalação atual.
+		achados, _ := filepath.Glob(filepath.Join(base, "hermes", "installs", "*",
+			"environments", "*", "venv", "Scripts", "python.exe"))
+		var maisNovo time.Time
+		p = ""
+		for _, c := range achados {
+			if st, err := os.Stat(c); err == nil && st.ModTime().After(maisNovo) {
+				maisNovo, p = st.ModTime(), c
+			}
+		}
+		if p != "" {
+			return p
+		}
 	}
 	if p, err := exec.LookPath("python"); err == nil {
 		return p

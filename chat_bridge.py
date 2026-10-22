@@ -70,6 +70,12 @@ def _achar_hermes() -> list[str]:
     for v in venvs:
         if v and os.path.exists(os.path.join(v, "Scripts", "python.exe")):
             return [os.path.join(v, "Scripts", "python.exe"), "-m", "hermes_cli.main"]
+    # Hermes 0.21+ (Windows): não há mais venv fixo. O lançador `bin\hermes.exe` escolhe
+    # o python e o venv da instalação, tira PYTHONPATH/PYTHONHOME e respeita HERMES_HOME
+    # (o home espelhado) — a armadilha 2 acima era do lançador antigo.
+    novo = os.path.join(LOCALAPPDATA, "hermes", "bin", "hermes.exe")
+    if os.path.exists(novo):
+        return [novo]
     # nada encontrado: o log de "não encontrado" aponta onde eu olhei
     return [os.path.join(venvs[-1], "Scripts", "python.exe"), "-m", "hermes_cli.main"]
 
@@ -326,7 +332,7 @@ class Backend:
             return False
         env = _env_do_backend(self.token)
         cmd = HERMES_CMD + ["serve", "--port", str(self.porta), "--host", "127.0.0.1", "--skip-build"]
-        log(f"backend: {HERMES_CMD[0]} -m hermes_cli.main serve (PYTHONPATH herdado fora)")
+        log(f"backend: {' '.join(HERMES_CMD)} serve (PYTHONPATH herdado fora)")
         kwargs: dict = {}
         if os.name == "nt":
             si = subprocess.STARTUPINFO()
