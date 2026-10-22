@@ -35,7 +35,11 @@ var (
 	ponteLinhas chan string // stdout da ponte, linha a linha — de UM leitor só (ligaPonte)
 	ponteMu     sync.Mutex  // uma pergunta por vez
 	ponteSeq    int         // id da pergunta em andamento (só muda com ponteMu)
-	ponteUma    sync.Once
+
+	// o processo da ponte: guardado para poder REINICIAR (painel Inteligência trocou a IA).
+	// Antes era um sync.Once e o processo nem era guardado — subia uma vez e pronto.
+	ponteVidaMu sync.Mutex
+	ponteCmd    *exec.Cmd
 
 	ponteModeloMu sync.Mutex
 	ponteModelo   string // o modelo que a ponte diz estar usando (cabeçalho do chat)
@@ -115,13 +119,21 @@ func caminhoPythonHermes() string {
 // sobePonte — liga a ponte (uma vez só). O agente leva ~10 s para ficar pronto;
 // isso acontece no boot do app, fora do caminho da conversa.
 func (a *App) sobePonte() {
-	ponteUma.Do(func() {
+	ponteVidaMu.Lock()
+	defer ponteVidaMu.Unlock()
+	if ponteCmd != nil {
+		return
+	}
+	func() {
 		script, py := caminhoPonte(), caminhoPythonHermes()
 		if script == "" || py == "" {
 			marcaPonte(false, "ponte indisponível (script ou python não encontrados)")
 			return
 		}
 		cmd := exec.Command(py, script)
+		// IA só do boneco (inteligencia.go): modelo e chave vão para a ponte pelo AMBIENTE,
+		// nunca pela linha de comando; ela monta o espelho com eles
+		cmd.Env = append(os.Environ(), envPonte()...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			HideWindow:    true,
 			CreationFlags: 0x08000000, // CREATE_NO_WINDOW
@@ -148,8 +160,40 @@ func (a *App) sobePonte() {
 			return
 		}
 		logMsg("ponte: chat quente ligado (hermes acp via chat_bridge.py)")
+		ponteCmd = cmd
 		ligaPonte(in, out)
-	})
+	}()
+}
+
+// reiniciaPonte — derruba e sobe de novo (a IA mudou). Fechar o stdin faz a ponte
+// derrubar o backend dela (a árvore inteira) e sair; se não sair em 15 s, morre na marra.
+// Espera a pergunta em andamento terminar (ponteMu).
+func (a *App) reiniciaPonte() {
+	ponteMu.Lock()
+	ponteVidaMu.Lock()
+	marcaPonte(false, "reiniciando o agente")
+	ponteModeloMu.Lock()
+	ponteModelo = "" // o handshake novo traz o modelo novo
+	ponteModeloMu.Unlock()
+	if ponteIn != nil {
+		_ = ponteIn.Close()
+	}
+	if ponteCmd != nil {
+		fim := make(chan struct{})
+		go func(c *exec.Cmd) { _ = c.Wait(); close(fim) }(ponteCmd)
+		select {
+		case <-fim:
+		case <-time.After(15 * time.Second):
+			_ = ponteCmd.Process.Kill()
+			logMsg("ponte: não saiu sozinha em 15 s — encerrada à força")
+		}
+		ponteCmd = nil
+	}
+	ponteIn, ponteLinhas = nil, nil
+	ponteVidaMu.Unlock()
+	ponteMu.Unlock()
+	logMsg("ponte: reiniciando (a IA mudou)")
+	a.sobePonte()
 }
 
 func estadoPonte() (pronta bool, erro string) {
