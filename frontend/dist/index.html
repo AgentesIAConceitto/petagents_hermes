@@ -69,9 +69,11 @@
   <div id="menu" class="menu oculto" aria-label="Menu do pet"></div>
 
   <!-- balãozinho de aviso (toast) — tarefa concluída, lembrete, gateway -->
-  <div id="toast" class="toast oculto">
-    <div class="toast-ico" id="toast-ico">✅</div>
+  <div id="toast" class="toast oculto" role="status">
+    <span class="toast-ico" id="toast-ico"></span>
     <div class="toast-txt"><b id="toast-tit"></b><span id="toast-sub"></span></div>
+    <button class="toast-x botao-x" id="toast-x" data-ic="fechar" aria-label="Dispensar"></button>
+    <div class="toast-acoes" id="toast-acoes"></div>
   </div>
 
   <!-- camada de efeitos (emojis que sobem) -->
@@ -95,45 +97,41 @@
 
   <!-- ================= PAINEL DE E-MAIL ================= -->
   <!-- ============ PAINEL DE BONECOS (galeria Petdex) ============ -->
-  <div id="petPanel" class="pets oculto">
-    <div class="pets-tit">🐾 Escolher boneco <span id="pets-atual" class="pets-sub"></span>
-      <span id="pets-x" class="pets-x" title="fechar">✕</span></div>
-    <div class="pets-linha">
-      <input id="pets-termo" class="pets-inp" type="text" placeholder="buscar: capivara, mecha, dragão…" />
-      <div class="b" id="pets-buscar">🔎 buscar</div>
+  <div id="petPanel" class="pets painel-n oculto" aria-label="Trocar boneco">
+    <div class="pn-topo"><span class="pn-quem"><b>Trocar boneco</b><span id="pets-atual"></span></span>
+      <button class="botao-x" id="pets-x" data-ic="fechar" aria-label="Fechar"></button></div>
+    <label class="pn-busca"><span data-ic="buscar"></span>
+      <input id="pets-termo" type="text" placeholder="buscar: capivara, mecha, dragão…" autocomplete="off" aria-label="Buscar boneco" /></label>
+    <div class="pn-abas" role="tablist">
+      <button role="tab" id="pets-instalados">Meus</button><button role="tab" id="pets-galeria">Galeria</button>
+      <button role="tab" id="pets-bichinhos">Bichinhos</button><button role="tab" id="pets-personagens">Personagens</button>
     </div>
-    <div class="pets-linha">
-      <div class="b" id="pets-instalados">meus bonecos</div>
-      <div class="b" id="pets-galeria">ver a galeria (4.873)</div>
-      <div class="b" id="pets-bichinhos">bichinhos</div>
-      <div class="b" id="pets-personagens">personagens</div>
-    </div>
-    <div id="pets-conta" class="pets-dica">…</div>
     <div id="pets-lista" class="pets-grade"></div>
-    <div class="pets-linha">
-      <div class="b" id="pets-mais">mais bonecos…</div>
-      <div class="b" id="pets-vetor">usar o vetor (nosso)</div>
-      <div class="b" id="pets-fechar">Fechar</div>
-    </div>
+    <div class="pn-rodape"><span id="pets-conta" class="pn-nota"></span>
+      <button class="pn-bt sec" id="pets-vetor">Usar o boneco padrão</button>
+      <button class="pn-bt sec" id="pets-mais">Mais</button></div>
   </div>
 
-  <div id="email" class="email oculto">
-    <div class="tela-tit">📧 E-mail — triagem que aprende</div>
-    <div class="email-resumo" id="email-resumo"></div>
+  <div id="email" class="email painel-n oculto" aria-label="E-mail">
+    <div class="pn-topo"><span class="pn-ico" data-ic="email"></span>
+      <span class="pn-quem"><b>E-mail</b><span id="email-conta">triagem que aprende</span></span>
+      <button class="botao-x" id="email-fechar" data-ic="fechar" aria-label="Fechar"></button></div>
+    <div class="pn-numeros" id="email-resumo"></div>
+    <div class="pn-sec"><b>Remetentes novos — me ensine</b><span id="email-faltam"></span></div>
     <div class="email-lista" id="email-lista"></div>
-    <div class="tela-linha">
-      <div class="b" id="email-verificar">↻ Verificar agora</div>
-      <div class="b" id="email-fechar">Fechar</div>
-    </div>
-    <div class="tela-dica">Só leitura: nada é apagado, movido ou marcado. Cada decisão sua vira regra.</div>
+    <div class="pn-rodape"><span class="pn-nota">Só leitura: nada é apagado, movido ou marcado. Cada escolha sua vira regra.</span>
+      <button class="pn-bt" id="email-verificar"><span data-ic="atualizar"></span>Verificar agora</button></div>
   </div>
 
   <!-- ================= SELETOR DE TELA / BORDA ================= -->
-  <div id="tela" class="tela oculto">
-    <div class="tela-tit">Tela e borda de encaixe</div>
-    <div class="tela-linha" id="tela-mon"></div>
-    <div class="tela-linha" id="tela-canto"></div>
-    <div class="tela-dica" id="tela-atual"></div>
+  <div id="tela" class="tela painel-n oculto" aria-label="Tela e borda">
+    <div class="pn-topo"><span class="pn-quem"><b>Tela e borda</b><span id="tela-atual"></span></span>
+      <button class="botao-x" id="tela-x" data-ic="fechar" aria-label="Fechar"></button></div>
+    <div class="pn-sec"><b>Em qual tela</b></div>
+    <div class="tela-mon" id="tela-mon"></div>
+    <div class="pn-sec"><b>Onde ele fica</b></div>
+    <div class="tela-mapa" id="tela-canto"></div>
+    <p class="pn-nota">Arrastar o boneco também funciona: solto perto de um canto, ele gruda nele.</p>
   </div>
 
   <script src="tema.js"></script>
