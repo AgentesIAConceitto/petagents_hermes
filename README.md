@@ -142,11 +142,20 @@ go build ./... && go vet ./...      # tem de passar limpo
 wails build -s                      # gera build/bin/petagent.exe
 ```
 
-### Configuração (painel 🐾)
+### O painel do pet (menu › Pet › Como está / Cuidar dele)
 
-Nome do bicho, horário de trabalho (início/fim), **água a cada (h)**, **caminhar a
-cada (min)**, modo foco, dormir (1–4 h), perfil de animação, escolha de boneco na
-galeria, gráfico do bicho e a coleção 💎. Tudo pelo painel — sem editar arquivo.
+Um painel só, encostado no boneco: **4 anéis** (Água, Comida, Movimento, Carinho — cheio
+é bem), botões de cuidado rápido e o **próximo lembrete**. A engrenagem abre ao lado a
+**rotina** (nome, expediente com minutos, água e caminhada a cada X) e as **pausas**:
+
+- **Modo foco** — o pet fica quieto e só lembra da água (nem baú aparece). Não mexe nas
+  notificações do Windows nem de outros apps.
+- **Dormir** (30 min, 1 h, 2 h, 4 h) — ele cochila no canto, apagadinho e com zZ: sem
+  lembretes e sem as barras caírem. Um clique nele acorda; o painel tem "Acordar agora"
+  e "+1 h".
+
+Mudou a rotina? Grava na hora e mostra "✓ salvo". Perfil de animação, boneco da galeria
+e a coleção 💎 ficam no menu.
 
 ### Configurar a IA (menu › Sistema › Inteligência)
 
@@ -343,11 +352,19 @@ go build ./... && go vet ./...      # must pass clean
 wails build -s                      # produces build/bin/petagent.exe
 ```
 
-### Configuration (panel 🐾)
+### The pet panel (menu › Pet › Como está / Cuidar dele)
 
-Pet name, working hours (start/end), **water every (h)**, **walk every (min)**, focus
-mode, sleep (1–4 h), animation profile, character gallery, pet stats graph and the 💎
-collection. Everything from the panel — no file editing.
+One panel, right next to the pet: **4 rings** (Water, Food, Movement, Affection — full
+means fine), quick-care buttons and the **next reminder**. The gear opens, alongside, the
+**routine** (name, working hours with minutes, water and walk every X) and the **breaks**:
+
+- **Focus mode** — the pet stays quiet and only reminds you of water (no chests either).
+  It does not touch Windows or other apps' notifications.
+- **Sleep** (30 min, 1 h, 2 h, 4 h) — it naps in its corner, dimmed with zZ: no reminders
+  and the bars stop dropping. Click it to wake up; the panel has "Acordar agora" and "+1 h".
+
+Changing the routine saves right away and shows "✓ salvo". Animation profile, character
+gallery and the 💎 collection live in the menu.
 
 ### Configuring the AI (menu › Sistema › Inteligência)
 

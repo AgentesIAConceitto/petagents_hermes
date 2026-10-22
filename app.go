@@ -617,19 +617,18 @@ func (a *App) SetHitRects(js string) {
 // SendChat — conversa de verdade com o Hermes.
 //
 // Híbrido de propósito:
-//   * "saldo" e "status" respondem NA HORA, local (zero token, zero espera);
+//   * "saldo" e "status" (a palavra sozinha) respondem NA HORA, local (zero token);
 //   * todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
 //     leva ~30 s e consome tokens da conta compartilhada.
 func (a *App) SendChat(text string) string {
-	low := strings.ToLower(strings.TrimSpace(text))
-	switch {
-	case strings.Contains(low, "saldo"):
+	switch comandoLocal(text) {
+	case "saldo":
 		a.warmBalance()
 		a.mu.Lock()
 		b := a.balance
 		a.mu.Unlock()
 		return "Saldo: " + b + " (conta compartilhada)"
-	case low == "status", strings.Contains(low, "gateway"):
+	case "status":
 		age := heartbeatAge()
 		if age < 0 {
 			return "Não achei o heartbeat do gateway."
@@ -649,6 +648,21 @@ func (a *App) SendChat(text string) string {
 		go a.warmBalance()
 	}
 	return resp
+}
+
+// comandoLocal — "saldo" | "status" quando a mensagem é respondida aqui; "" = agente.
+//
+// Só a palavra SOZINHA é comando ("saldo", "status", "gateway", com ou sem "?").
+// Antes bastava CONTER a palavra: "qual o saldo do projeto?" ou "configure o gateway
+// do Telegram" devolviam o saldo/heartbeat e a pergunta nunca chegava ao agente.
+func comandoLocal(texto string) string {
+	switch strings.Trim(strings.ToLower(texto), " \t\r\n?!.") {
+	case "saldo":
+		return "saldo"
+	case "status", "gateway":
+		return "status"
+	}
+	return ""
 }
 
 // SavePet / LoadPet — posição e estado do boneco (pet como dado).
