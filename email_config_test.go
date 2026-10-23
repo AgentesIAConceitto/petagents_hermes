@@ -23,8 +23,8 @@ func TestEmailSemContasNaoConecta(t *testing.T) {
 	if conexoes != 0 {
 		t.Errorf("tentou conectar %d vez(es) sem nenhuma conta", conexoes)
 	}
-	if !strings.Contains(r, "não configurado") {
-		t.Errorf("EmailVerificarAgora() = %q, queria aviso de e-mail não configurado", r)
+	if !strings.Contains(r, "Nenhuma conta") {
+		t.Errorf("EmailVerificarAgora() = %q, queria aviso de nenhuma conta conectada", r)
 	}
 	var d map[string]any
 	_ = json.Unmarshal([]byte(NewApp().EmailResumo()), &d)

@@ -991,6 +991,10 @@ select.ia-campo { cursor: pointer; }
 .painel-n .email-item .bt.lixo { background: rgba(255,82,82,.10); color: var(--perigo); }
 :root[data-tema="escuro"] .painel-n .email-item .bt.imp { color: #5FE39A; }
 .painel-n .email-item .bt:hover { filter: brightness(1.15); }
+.email [hidden] { display: none !important; }
+.pn-numeros .email-vazio { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.email-vazio b { font-size: 14px; font-weight: 600; color: var(--texto); }
+.email-vazio .pn-bt { margin-top: 6px; }
 /* importantes + resumo (23/10/2026) */
 .email-lista.email-imp { max-height: 260px; }
 .email-lista:not(.email-imp) { max-height: 200px; }
