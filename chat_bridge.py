@@ -667,8 +667,9 @@ class Backend:
             for s in linhas:
                 if not isinstance(s, dict) or not s.get("id"):
                     continue
+                previa = re.sub(r"\s*@file:\S+", "", _sem_contexto_anexado(s.get("preview") or "")).strip()
                 lista.append({"id": s.get("id"), "titulo": s.get("title") or "",
-                              "previa": s.get("preview") or "", "inicio": s.get("started_at") or 0,
+                              "previa": previa, "inicio": s.get("started_at") or 0,
                               "mensagens": s.get("message_count") or 0})
             return {"conversas": lista, "atual": self.chave}
 
@@ -692,7 +693,7 @@ class Backend:
             for m in dados.get("messages") or []:
                 if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
                     continue
-                t = str(m.get("text") or "")
+                t = _sem_contexto_anexado(str(m.get("text") or ""))
                 t = re.sub(r"data:image/[^\s)\"']+", "[imagem]", t)
                 if t.strip():
                     msgs.append({"quem": "eu" if m["role"] == "user" else "ele", "texto": t,
@@ -1183,6 +1184,14 @@ def _erro_legivel(msg: str) -> str:
     if len(msg) > 400:
         msg = msg[:400] + "…"
     return f"Não consegui responder — o Hermes avisou um erro:\n\n{msg}\n\n(Detalhe no ponte.log.)"
+
+
+def _sem_contexto_anexado(t: str) -> str:
+    """A mensagem como a pessoa escreveu (22/10/2026). O Hermes guarda a mensagem com o
+    conteúdo do `@file:` EMBUTIDO ("--- Attached Context ---" + o texto inteiro do arquivo) —
+    medido no teste: reabrir a conversa mostrava o PDF todo dentro da bolha. A marca `@file:`
+    fica (a tela a troca pelo chip do anexo); o conteúdo, não."""
+    return t.split("\n--- Attached Context ---", 1)[0].rstrip()
 
 
 def _dados_do_rpc(r) -> dict:
