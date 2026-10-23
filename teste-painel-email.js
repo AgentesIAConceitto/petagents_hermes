@@ -37,7 +37,13 @@ const caixa = {
     de_email: "x@ev<img/src/onerror=alert(1)//",
     assunto: ATAQUE,
     nao_lida: true,
+    conta: ATAQUE,
   }],
+  // varias contas (22/10/2026): o endereco e o erro de cada conta tambem vem de fora
+  contas: [
+    { usuario: ATAQUE, estado: "erro", erro: ATAQUE },
+    { usuario: ATAQUE, estado: "precisa_entrar", erro: "" },
+  ],
 };
 
 const criados = [];
@@ -67,6 +73,20 @@ for (const nome of ["escHtml", "dominioDe", "renderEmail"]) {
   if (!html.includes("&lt;img")) falhas.push("o texto do e-mail sumiu (deveria aparecer escapado)");
   if (falhas.length) {
     console.log("FALHOU:\n  - " + falhas.join("\n  - ") + "\n\nHTML gerado:\n" + html);
+    process.exit(1);
+  }
+  // sem conta nenhuma: o painel oferece "Adicionar conta" (e nao quebra)
+  ctx.G = { EmailResumo: async () => JSON.stringify({ sem_contas: true, erro: ATAQUE }) };
+  criados.length = 0;
+  fixos["email-lista"].filhos = [];
+  await vm.runInContext("renderEmail()", ctx);
+  const html2 = [fixos["email-lista"], fixos["email-resumo"], ...criados].map((e) => e.innerHTML).join("\n");
+  if (/<img|<script/i.test(html2)) falhas.push("sem contas: o erro virou tag de verdade");
+  if (!html2.includes("&lt;img")) falhas.push("sem contas: o texto do erro sumiu");
+  if (!fixos["email-lista"].filhos.some((b) => b.textContent === "Adicionar conta"))
+    falhas.push("sem contas: faltou o botao Adicionar conta");
+  if (falhas.length) {
+    console.log("FALHOU:\n  - " + falhas.join("\n  - ") + "\n\nHTML gerado:\n" + html2);
     process.exit(1);
   }
   console.log("OK: remetente, assunto, dominio e conta aparecem como texto");

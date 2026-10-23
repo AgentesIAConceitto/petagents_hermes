@@ -184,8 +184,9 @@ def iniciar(args=None) -> int:
     if _rodando():
         print("• o boneco já está na tela")
         return 0
-    # explorer.exe: sobe o app no contexto NÃO-elevado do usuário (senão o acesso
-    # ao Outlook por COM falha, e nada quebra silenciosamente) e desanexa limpo.
+    # explorer.exe: sobe o app no contexto NÃO-elevado do usuário (janela elevada
+    # não recebe arquivo arrastado do Explorer, e o anexo do chat depende disso)
+    # e desanexa limpo.
     subprocess.Popen(["explorer.exe", str(exe)], creationflags=DETACHED)
     _log("iniciar")
     print("[ok] boneco subindo...")

@@ -435,6 +435,17 @@ select.ia-campo { cursor: pointer; }
 .ia-status.ok { color: #1f9d55; background: rgba(53,208,127,.12); }
 .ia-status.erro { color: var(--perigo); background: rgba(255,82,82,.10); }
 :root[data-tema="escuro"] .ia-status.ok { color: #5fe39a; }
+
+/* Contas de e-mail (email-contas.js) — mesmo visual da Inteligência */
+.aparencia.ec { width: 360px; }
+.ec-conta { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--raio-interno); background: var(--sup); }
+.ec-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ec-info b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-info > span { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-estado.ok { color: #1f9d55; }
+.ec-estado.erro { color: var(--perigo); }
+:root[data-tema="escuro"] .ec-estado.ok { color: #5fe39a; }
+.ec-2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 8px; }
 .ap-amostra {
   display: flex; justify-content: space-between; padding: 10px 14px;
   background: var(--sup); border-radius: var(--raio-botao); color: var(--icone);
@@ -464,6 +475,7 @@ select.ia-campo { cursor: pointer; }
 .pn-sec span { font-size: 12px; color: var(--sub); }
 .pn-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
 .pn-aviso { padding: 10px 12px; border-radius: var(--raio-interno); background: rgba(242,179,61,.14); font-size: 12.5px; }
+.pn-numeros .pn-aviso { grid-column: 1 / -1; }
 .pn-rodape { display: flex; align-items: center; gap: 8px; }
 .pn-rodape .pn-nota { flex: 1; }
 :where(.painel-n, .toast, .col, .premio) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
