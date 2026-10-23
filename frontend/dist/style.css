@@ -991,6 +991,15 @@ select.ia-campo { cursor: pointer; }
 .painel-n .email-item .bt.lixo { background: rgba(255,82,82,.10); color: var(--perigo); }
 :root[data-tema="escuro"] .painel-n .email-item .bt.imp { color: #5FE39A; }
 .painel-n .email-item .bt:hover { filter: brightness(1.15); }
+/* importantes + resumo (23/10/2026) */
+.email-lista.email-imp { max-height: 260px; }
+.email-lista:not(.email-imp) { max-height: 200px; }
+.email-item .txt[title] { cursor: pointer; }
+.email-res { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--texto); white-space: normal; }
+.email-res:empty { display: none; }
+.painel-n .email-item .bt.res { background: var(--sup); color: var(--texto); }
+.painel-n .email-item .bt.abrir { background: var(--acento); color: #fff; }
+.painel-n .email-item .bt:disabled { opacity: .55; cursor: default; }
 .email-vazio { padding: 18px; border-radius: var(--raio-interno); background: var(--sup); text-align: center; font-size: 13px; color: var(--sub); }
 
 /* ── PRESENTE ACHADO (22/10/2026): nasce em cima do boneco; clicar abre a Coleção ── */

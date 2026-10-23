@@ -1622,20 +1622,43 @@ async function renderEmail() {
   res.innerHTML = num(imp.length, "importantes", "ok") + num(doms.length, "para decidir", "acento") +
     num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "") +
     (problemas.length ? '<div class="pn-aviso">' + problemas.join("<br>") + "</div>" : "");
+  // importantes: com o resumo (automático) e o "Abrir" (onde responder)
+  const impBox = document.getElementById("email-importantes"), impN = document.getElementById("email-imp-n");
+  if (impBox) {
+    impBox.innerHTML = "";
+    if (impN) impN.textContent = imp.length ? (imp.length > 8 ? "8 mais recentes de " + imp.length : String(imp.length)) : "";
+    if (!imp.length) impBox.innerHTML = '<div class="email-vazio">Nenhum e-mail importante na última leitura.</div>';
+    imp.slice(0, 8).forEach((m) => {
+      const it = itemEmail(m, escHtml(m.de_nome || m.de_email || "?") + " <i>· " + escHtml(String(m.quando || "").slice(11, 16)) + "</i>",
+        escHtml(String(m.assunto || "(sem assunto)").slice(0, 90)), varias);
+      if (!m.resumo) {
+        const br = document.createElement("button");
+        br.className = "bt res"; br.textContent = "Resumir"; br.title = "ler o texto e resumir (vai para a sua IA)";
+        br.onclick = () => resumirEmail(m, it.res, br);
+        it.el.appendChild(br);
+      }
+      if (/^https:\/\//.test(m.link || "")) {
+        const ba = document.createElement("button");
+        ba.className = "bt abrir"; ba.textContent = "Abrir"; ba.title = "abrir no webmail para responder";
+        ba.onclick = () => abrirLinkEmail(m.link);
+        it.el.appendChild(ba);
+      }
+      impBox.appendChild(it.el);
+    });
+  }
   if (faltamEl && doms.length) faltamEl.textContent = doms.length + " para decidir";
   if (!doms.length) {
     box.innerHTML = '<div class="email-vazio">Tudo ensinado. Na próxima leitura eu já sei separar sozinha.</div>';
+    reportarHit();
     return;
   }
   doms.slice(0, 14).forEach((k) => {
     const ms = porDom[k], m = ms[0];
-    const el = document.createElement("div");
-    el.className = "email-item";
-    // remetente, endereço e assunto são escritos por QUEM MANDA o e-mail: só texto escapado
-    el.innerHTML = '<span class="ponto' + (m.nao_lida ? " on" : "") + '" title="' + (m.nao_lida ? "não lido" : "lido") + '"></span>' +
-      '<div class="txt"><b>' + escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i></b><span>" +
-      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)) +
-      (varias ? " <i>· " + escHtml(m.conta || "") + "</i>" : "") + "</span></div>";
+    const it = itemEmail(m, escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i>",
+      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)), varias);
+    const el = it.el;
+    it.txt.title = "clique para resumir o mais recente";
+    it.txt.onclick = () => { if (!m.resumo) resumirEmail(m, it.res, null); };
     const bi = document.createElement("button");
     bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "sempre importante: " + k;
     bi.onclick = () => marcarEmail(k, "importante");
@@ -1646,6 +1669,50 @@ async function renderEmail() {
     box.appendChild(el);
   });
   reportarHit();
+}
+
+// itemEmail — uma linha da lista. titulo/sub já vêm ESCAPADOS por quem chama; o
+// resumo (gerado a partir do texto do e-mail, que é de fora) só entra como texto.
+function itemEmail(m, titulo, sub, varias) {
+  const el = document.createElement("div");
+  el.className = "email-item";
+  const ponto = document.createElement("span");
+  ponto.className = "ponto" + (m.nao_lida ? " on" : "");
+  ponto.title = m.nao_lida ? "não lido" : "lido";
+  const txt = document.createElement("div");
+  txt.className = "txt";
+  txt.innerHTML = "<b>" + titulo + "</b><span>" + sub + (varias ? " <i>· " + escHtml(m.conta || "") + "</i>" : "") + "</span>";
+  const res = document.createElement("p");
+  res.className = "email-res";
+  res.textContent = m.resumo || "";
+  txt.appendChild(res);
+  el.appendChild(ponto); el.appendChild(txt);
+  return { el, txt, res };
+}
+
+async function resumirEmail(m, alvo, bt) {
+  if (!G || !G.EmailResumir || m.resumindo) return;
+  m.resumindo = true;
+  alvo.textContent = "resumindo…";
+  if (bt) bt.disabled = true;
+  let r = { ok: false, erro: "não consegui resumir" };
+  try { r = JSON.parse(await G.EmailResumir(m.conta_id, m.uid)); } catch (e) {}
+  m.resumindo = false;
+  if (bt) bt.disabled = false;
+  if (r.ok) {
+    m.resumo = r.resumo;
+    alvo.textContent = r.resumo;
+    if (bt) bt.remove();
+  } else {
+    alvo.textContent = "";
+    toast("📧", "O resumo não saiu", r.erro, 8000, true);
+  }
+  reportarHit();
+}
+
+function abrirLinkEmail(link) {
+  if (!/^https:\/\//.test(link || "")) return;
+  try { window.runtime.BrowserOpenURL(link); } catch (e) {}
 }
 
 async function marcarEmail(alvo, tipo) {
@@ -1883,6 +1950,10 @@ function ligarEventos() {
     if (/saldo/i.test(a.texto || "")) {   // saldo baixo: dá para resolver dali mesmo
       toast("alerta", "Saldo baixo", (estado.balance || "").replace(".", ",") + " — recarregue para o chat não parar.", 20000, false,
         { acoes: [{ r: "Abrir Inteligência", fn: () => abrirInteligencia() }] });
+    } else if (a.tipo === "email") {   // e-mail importante: resumo no texto, e onde responder
+      const acoes = [{ r: "Ver no painel", fn: () => abrirEmail() }];
+      if (/^https:\/\//.test(a.link || "")) acoes.unshift({ r: "Abrir", prim: true, fn: () => abrirLinkEmail(a.link) });
+      toast("📧", a.titulo || "E-mail importante", a.texto || "", 25000, false, { acoes });
     } else {
       toast(a.icone || "🔔", a.titulo || "Aviso", a.texto || "", 9000);
     }

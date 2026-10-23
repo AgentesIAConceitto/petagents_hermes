@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ── Agente de e-mail (triagem que aprende) ────────────────────────────
@@ -35,6 +37,11 @@ type CabecalhoEmail struct {
 	NaoLida bool   `json:"nao_lida"`
 	Tamanho int    `json:"tamanho"`
 	Conta   string `json:"conta"` // de qual conta veio (várias contas ao mesmo tempo)
+	ContaID string `json:"conta_id"`
+	UID     uint32 `json:"uid"`    // para buscar o texto depois (resumo)
+	MsgID   string `json:"msg_id"` // Message-ID: o link "Abrir" do Gmail acha o e-mail por ele
+	Resumo  string `json:"resumo,omitempty"`
+	Link    string `json:"link,omitempty"` // onde responder (webmail da conta)
 }
 
 type CaixaEmail struct {
@@ -95,19 +102,9 @@ func estadoDe(id string) estadoConta {
 
 // leConta — uma conta, com a credencial certa (senha ou token renovado).
 func leConta(c ContaEmail) (CaixaEmail, error) {
-	cred := credencial{usuario: c.Usuario}
-	if c.auth() == "microsoft" {
-		tok, err := tokenMicrosoft(c)
-		if err != nil {
-			return CaixaEmail{}, err
-		}
-		cred.token = tok
-	} else {
-		s, err := decifra(c.Segredo)
-		if err != nil || s == "" {
-			return CaixaEmail{}, errors.New("não consegui abrir a senha guardada: remova a conta e adicione de novo")
-		}
-		cred.senha = s
+	cred, err := credencialDe(c)
+	if err != nil {
+		return CaixaEmail{}, err
 	}
 	return leCaixaIMAP(c, cred)
 }
@@ -332,7 +329,14 @@ func (a *App) EmailResumo() string {
 	}
 	// mais novas primeiro, misturando as contas
 	sort.SliceStable(todas, func(i, j int) bool { return todas[i].Quando > todas[j].Quando })
+	porID := map[string]ContaEmail{}
+	for _, c := range contas {
+		porID[c.ID] = c
+	}
+	resumos := func() map[string]resumoSalvo { resumosMu.Lock(); defer resumosMu.Unlock(); return leResumos() }()
 	for _, m := range todas {
+		m.Resumo = resumos[impressao(m)].Resumo
+		m.Link = linkWebmail(porID[m.ContaID], m)
 		switch classifica(r, m) {
 		case "importante":
 			imp = append(imp, m)
@@ -387,6 +391,18 @@ func (a *App) EmailMarcar(alvo, tipo string) string {
 	gravaRegras(r)
 	logMsg("email: aprendido -> " + tipo + " " + alvo)
 	return "ok"
+}
+
+// avisoEmail — o balão de e-mail importante: com o resumo e o botão "Abrir"
+// (link do webmail da conta, onde a pessoa responde).
+func (a *App) avisoEmail(titulo, texto, link string) {
+	logMsg("aviso: " + titulo + " | " + texto)
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "aviso", map[string]string{
+		"icone": "📧", "titulo": titulo, "texto": texto, "tipo": "email", "link": link,
+	})
 }
 
 // emailLoop — a cada ~10 min: lê as contas e avisa o que for importante.
@@ -461,6 +477,23 @@ func (a *App) processaEmail() {
 	}
 	if len(novos) > 0 {
 		gravaVistos(vistos)
+		porID := map[string]ContaEmail{}
+		for _, c := range contas {
+			porID[c.ID] = c
+		}
+		// os importantes novos são resumidos sozinhos (no máximo maxResumosCiclo por
+		// leitura; o resto fica com o botão "Resumir" do painel). Falhou: avisa sem resumo.
+		resumos := map[int]string{}
+		for i, m := range novos {
+			if i >= maxResumosCiclo {
+				break
+			}
+			if r, err := resumeMensagem(porID[m.ContaID], m); err == nil {
+				resumos[i] = r
+			} else {
+				logMsg("email: resumo automatico falhou (" + m.Conta + "): " + err.Error())
+			}
+		}
 		// teto de balõezinhos: no máximo 3 na tela, o resto vira resumo
 		limite := 3
 		for i, m := range novos {
@@ -473,11 +506,15 @@ func (a *App) processaEmail() {
 			if nome == "" {
 				nome = m.DeEmail
 			}
-			titulo := "E-mail importante"
+			titulo := "E-mail importante · " + nome
 			if len(contas) > 1 {
 				titulo += " · " + m.Conta
 			}
-			a.aviso("📧", titulo, nome+" — "+m.Assunto)
+			texto := m.Assunto
+			if r := resumos[i]; r != "" {
+				texto += " — " + r
+			}
+			a.avisoEmail(titulo, texto, linkWebmail(porID[m.ContaID], m))
 			time.Sleep(900 * time.Millisecond)
 		}
 	}

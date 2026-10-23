@@ -5,10 +5,10 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend/memory"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-imap/server"
@@ -42,7 +42,7 @@ func servidorIMAP(t *testing.T) (host string, porta int, inbox *memory.Mailbox) 
 		"Date: " + time.Now().Format(time.RFC1123Z) + "\r\n" +
 		"Message-ID: <teste-1@localhost>\r\n" +
 		"Content-Type: text/plain\r\n\r\n" +
-		"Corpo que nunca deve ser lido."
+		"Pode confirmar a entrega para o dia 30? Valor: R$ 1.200."
 	if err := inbox.CreateMessage([]string{}, time.Now(), bytes.NewBufferString(corpo)); err != nil {
 		t.Fatal(err)
 	}
@@ -56,18 +56,62 @@ func servidorIMAP(t *testing.T) (host string, porta int, inbox *memory.Mailbox) 
 	go func() { _ = s.Serve(ln) }()
 	t.Cleanup(func() { _ = s.Close() })
 
+	comandosMu.Lock()
+	comandos.Reset()
+	comandosMu.Unlock()
 	antes := conectaIMAP
 	t.Cleanup(func() { conectaIMAP = antes })
 	conectaIMAP = func(h string, p int) (*client.Client, error) {
-		return client.Dial(net.JoinHostPort(h, strconv.Itoa(p)))
+		conn, err := net.Dial("tcp", net.JoinHostPort(h, strconv.Itoa(p)))
+		if err != nil {
+			return nil, err
+		}
+		return client.New(gravaConn{conn})
 	}
 	return "127.0.0.1", ln.Addr().(*net.TCPAddr).Port, inbox
 }
 
-// TestLeituraIMAPNaoMarcaComoLido — a promessa do recurso: SÓ LEITURA. Depois de
-// ler, a mensagem que estava não lida continua não lida no servidor.
+// O servidor de memória do go-imap NUNCA marca \Seen (nem num BODY[] sem PEEK):
+// conferir as flags dele não prova nada. Por isso o teste confere o que o app
+// MANDA ao servidor — é isso que um Gmail ou Outlook de verdade obedece.
+var (
+	comandosMu sync.Mutex
+	comandos   strings.Builder
+)
+
+type gravaConn struct{ net.Conn }
+
+func (g gravaConn) Write(b []byte) (int, error) {
+	comandosMu.Lock()
+	comandos.Write(b)
+	comandosMu.Unlock()
+	return g.Conn.Write(b)
+}
+
+// confereSoLeitura — caixa aberta com EXAMINE, nada que altere a caixa, e o texto
+// (quando pedido) só com BODY.PEEK[]. BODY[] sem PEEK marca como lido.
+func confereSoLeitura(t *testing.T, querTexto bool) {
+	t.Helper()
+	comandosMu.Lock()
+	cmds := strings.ToUpper(comandos.String())
+	comandosMu.Unlock()
+	if !strings.Contains(cmds, "EXAMINE INBOX") {
+		t.Errorf("a caixa não foi aberta com EXAMINE (só leitura):\n%s", cmds)
+	}
+	for _, proibido := range []string{"SELECT ", "STORE", "EXPUNGE", "COPY ", "MOVE ", "BODY["} {
+		if strings.Contains(cmds, proibido) {
+			t.Errorf("o app mandou %q ao servidor — isso altera a caixa ou marca como lido:\n%s", proibido, cmds)
+		}
+	}
+	if querTexto != strings.Contains(cmds, "BODY.PEEK[") {
+		t.Errorf("BODY.PEEK[ esperado=%v nos comandos:\n%s", querTexto, cmds)
+	}
+}
+
+// TestLeituraIMAPNaoMarcaComoLido — a promessa do recurso: SÓ LEITURA. A varredura
+// abre a caixa com EXAMINE e só pede cabeçalhos.
 func TestLeituraIMAPNaoMarcaComoLido(t *testing.T) {
-	host, porta, inbox := servidorIMAP(t)
+	host, porta, _ := servidorIMAP(t)
 	c := ContaEmail{Provedor: "outro", Usuario: "username", Host: host, Porta: porta}
 
 	cx, err := leCaixaIMAP(c, credencial{usuario: "username", senha: "password"})
@@ -92,11 +136,7 @@ func TestLeituraIMAPNaoMarcaComoLido(t *testing.T) {
 		t.Errorf("Quando=%q não foi entendido como agora (fuso perdido?)", m.Quando)
 	}
 
-	for _, f := range inbox.Messages[1].Flags {
-		if f == imap.SeenFlag {
-			t.Fatal("a leitura marcou a mensagem como LIDA no servidor: o recurso tem de ser só leitura")
-		}
-	}
+	confereSoLeitura(t, false)
 }
 
 // TestSenhaErradaExplicaEmPortugues — o erro vai direto para a tela da pessoa.

@@ -1,23 +1,34 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"html"
+	"io"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
+	"github.com/emersion/go-message/charset"
+	"github.com/emersion/go-message/mail"
 	"github.com/emersion/go-sasl"
 )
 
+// assunto e remetente em ISO-8859-x, Windows-125x, ISO-2022-JP... (não só UTF-8)
+func init() { imap.CharsetReader = charset.Reader }
+
 // ── Leitura por IMAP (22/10/2026) ─────────────────────────────────────
 // SÓ LEITURA, como sempre foi: a caixa é aberta com EXAMINE (o servidor recusa
-// qualquer mudança) e só se pedem cabeçalhos — ENVELOPE, FLAGS, INTERNALDATE,
-// RFC822.SIZE. Nunca BODY[] (que marcaria como lido), nunca STORE/COPY/EXPUNGE.
+// qualquer mudança). A varredura pede só cabeçalhos — ENVELOPE, FLAGS,
+// INTERNALDATE, RFC822.SIZE, UID. O texto, para o resumo (email_resumo.go), vem
+// com BODY.PEEK[] — o PEEK é o que impede o servidor de marcar como lido.
+// Nunca BODY[] sem PEEK, nunca STORE/COPY/EXPUNGE.
 //
 // Duas regras herdadas do leitor antigo do Outlook (incidente de 04/10/2026) que
 // continuam valendo aqui:
@@ -41,29 +52,38 @@ var conectaIMAP = func(host string, porta int) (*client.Client, error) {
 	return client.DialWithDialerTLS(d, net.JoinHostPort(host, strconv.Itoa(porta)), &tls.Config{ServerName: host})
 }
 
-// leCaixaIMAP — conecta, entra, lê os cabeçalhos das últimas mensagens e sai.
-func leCaixaIMAP(c ContaEmail, cred credencial) (CaixaEmail, error) {
-	var cx CaixaEmail
+// abreInbox — conecta, entra e abre a INBOX em modo só leitura. Quem chama faz Logout.
+func abreInbox(c ContaEmail, cred credencial) (*client.Client, *imap.MailboxStatus, error) {
 	cli, err := conectaIMAP(c.Host, c.Porta)
 	if err != nil {
-		return cx, erroIMAP(err, c)
+		return nil, nil, erroIMAP(err, c)
 	}
-	defer cli.Logout()
 	cli.Timeout = 30 * time.Second
-
 	if cred.token != "" {
 		err = cli.Authenticate(&xoauth2{usuario: cred.usuario, token: cred.token})
 	} else {
 		err = cli.Login(cred.usuario, cred.senha)
 	}
 	if err != nil {
-		return cx, erroLogin(err, c)
+		cli.Logout()
+		return nil, nil, erroLogin(err, c)
 	}
-
 	mbox, err := cli.Select("INBOX", true) // true = EXAMINE (só leitura)
 	if err != nil {
-		return cx, fmt.Errorf("entrei, mas não consegui abrir a Caixa de Entrada: %v", err)
+		cli.Logout()
+		return nil, nil, fmt.Errorf("entrei, mas não consegui abrir a Caixa de Entrada: %v", err)
 	}
+	return cli, mbox, nil
+}
+
+// leCaixaIMAP — conecta, entra, lê os cabeçalhos das últimas mensagens e sai.
+func leCaixaIMAP(c ContaEmail, cred credencial) (CaixaEmail, error) {
+	var cx CaixaEmail
+	cli, mbox, err := abreInbox(c, cred)
+	if err != nil {
+		return cx, err
+	}
+	defer cli.Logout()
 
 	cx.Conta = c.Usuario
 	cx.Contexto = "imap"
@@ -83,12 +103,12 @@ func leCaixaIMAP(c ContaEmail, cred credencial) (CaixaEmail, error) {
 		}
 		seq := new(imap.SeqSet)
 		seq.AddRange(de, mbox.Messages)
-		itens := []imap.FetchItem{imap.FetchEnvelope, imap.FetchFlags, imap.FetchInternalDate, imap.FetchRFC822Size}
+		itens := []imap.FetchItem{imap.FetchEnvelope, imap.FetchFlags, imap.FetchInternalDate, imap.FetchRFC822Size, imap.FetchUid}
 		ch := make(chan *imap.Message, 16)
 		fim := make(chan error, 1)
 		go func() { fim <- cli.Fetch(seq, itens, ch) }()
 		for m := range ch {
-			cx.Mensagens = append(cx.Mensagens, cabecalhoDe(m, c.Usuario))
+			cx.Mensagens = append(cx.Mensagens, cabecalhoDe(m, c))
 		}
 		if err := <-fim; err != nil {
 			return cx, fmt.Errorf("a leitura dos cabeçalhos falhou no meio: %v", err)
@@ -101,8 +121,8 @@ func leCaixaIMAP(c ContaEmail, cred credencial) (CaixaEmail, error) {
 
 // cabecalhoDe — a hora sai em hora LOCAL sem fuso, no mesmo formato que ehNova e
 // idadeLeitura esperam (ver email_fuso_test.go).
-func cabecalhoDe(m *imap.Message, conta string) CabecalhoEmail {
-	h := CabecalhoEmail{Conta: conta, Tamanho: int(m.Size), NaoLida: true}
+func cabecalhoDe(m *imap.Message, c ContaEmail) CabecalhoEmail {
+	h := CabecalhoEmail{Conta: c.Usuario, ContaID: c.ID, UID: m.Uid, Tamanho: int(m.Size), NaoLida: true}
 	for _, f := range m.Flags {
 		if f == imap.SeenFlag {
 			h.NaoLida = false
@@ -111,6 +131,7 @@ func cabecalhoDe(m *imap.Message, conta string) CabecalhoEmail {
 	quando := m.InternalDate
 	if e := m.Envelope; e != nil {
 		h.Assunto = e.Subject
+		h.MsgID = e.MessageId
 		if len(e.From) > 0 && e.From[0] != nil {
 			h.DeNome = e.From[0].PersonalName
 			h.DeEmail = e.From[0].Address()
@@ -123,6 +144,104 @@ func cabecalhoDe(m *imap.Message, conta string) CabecalhoEmail {
 		h.Quando = quando.In(time.Local).Format("2006-01-02T15:04:05")
 	}
 	return h
+}
+
+// limiteCorpo — basta o começo do e-mail para resumir; anexo grande nem desce.
+const limiteCorpo = 256 << 10
+
+// leTextoIMAP — o TEXTO de uma mensagem (pelo UID), para o resumo. BODY.PEEK[]:
+// lê sem marcar como lida. Só os primeiros 256 KB.
+func leTextoIMAP(c ContaEmail, cred credencial, uid uint32) (string, error) {
+	cli, _, err := abreInbox(c, cred)
+	if err != nil {
+		return "", err
+	}
+	defer cli.Logout()
+	secao := &imap.BodySectionName{Peek: true, Partial: []int{0, limiteCorpo}}
+	seq := new(imap.SeqSet)
+	seq.AddNum(uid)
+	ch := make(chan *imap.Message, 1)
+	fim := make(chan error, 1)
+	go func() { fim <- cli.UidFetch(seq, []imap.FetchItem{secao.FetchItem()}, ch) }()
+	var bruto []byte
+	for m := range ch {
+		for _, lit := range m.Body {
+			if lit != nil {
+				bruto, _ = io.ReadAll(lit)
+			}
+		}
+	}
+	if err := <-fim; err != nil {
+		return "", fmt.Errorf("não consegui ler o texto do e-mail: %v", err)
+	}
+	if bruto == nil {
+		return "", errors.New("o e-mail não está mais na Caixa de Entrada")
+	}
+	return textoDaMensagem(bruto), nil
+}
+
+// textoDaMensagem — prefere text/plain; sem ele, o text/html sem as tags. Anexos
+// ficam de fora (só o nome entra, para o resumo saber que existem).
+func textoDaMensagem(bruto []byte) string {
+	r, err := mail.CreateReader(bytes.NewReader(bruto))
+	if err != nil && r == nil {
+		return string(bruto)
+	}
+	var plano, emHTML strings.Builder
+	var anexos []string
+	for {
+		p, err := r.NextPart()
+		if err == io.EOF || (err != nil && p == nil) {
+			break
+		}
+		switch h := p.Header.(type) {
+		case *mail.InlineHeader:
+			tipo, _, _ := h.ContentType()
+			b, _ := io.ReadAll(io.LimitReader(p.Body, limiteCorpo))
+			switch {
+			case tipo == "text/plain" && plano.Len() == 0:
+				plano.Write(b)
+			case tipo == "text/html" && emHTML.Len() == 0:
+				emHTML.Write(b)
+			}
+		case *mail.AttachmentHeader:
+			if nome, _ := h.Filename(); nome != "" {
+				anexos = append(anexos, nome)
+			}
+		}
+	}
+	texto := plano.String()
+	if strings.TrimSpace(texto) == "" {
+		texto = semTags(emHTML.String())
+	}
+	texto = compactaEspacos(texto)
+	if len(anexos) > 0 {
+		texto += "\n\n[anexos: " + strings.Join(anexos, ", ") + "]"
+	}
+	return texto
+}
+
+var (
+	reBlocoHTML  = regexp.MustCompile(`(?is)<(script|style|head)[^>]*>.*?</(script|style|head)>`)
+	reQuebraHTML = regexp.MustCompile(`(?i)<(br|/p|/div|/tr|/li|/h[1-6])[^>]*>`)
+	reTagHTML    = regexp.MustCompile(`(?s)<[^>]+>`)
+	reEspacos    = regexp.MustCompile(`[ \t\r\f\v]+`)
+	reLinhas     = regexp.MustCompile(`\n{3,}`)
+)
+
+func semTags(s string) string {
+	s = reBlocoHTML.ReplaceAllString(s, "")
+	s = reQuebraHTML.ReplaceAllString(s, "\n")
+	s = reTagHTML.ReplaceAllString(s, "")
+	return html.UnescapeString(s)
+}
+
+func compactaEspacos(s string) string {
+	linhas := strings.Split(reEspacos.ReplaceAllString(s, " "), "\n")
+	for i := range linhas {
+		linhas[i] = strings.TrimSpace(linhas[i])
+	}
+	return strings.TrimSpace(reLinhas.ReplaceAllString(strings.Join(linhas, "\n"), "\n\n"))
 }
 
 // erroIMAP — falha de conexão em português (a tela mostra isto para a pessoa).
