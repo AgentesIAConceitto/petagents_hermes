@@ -188,9 +188,9 @@ function montaLado() {
       <button class="cg-bt lado-nova" id="lado-nova">${icone("adicionar", 16)}Nova conversa</button>
       <label class="lado-busca">${icone("buscar", 15)}
         <input id="lado-busca" type="text" placeholder="Buscar conversas…" autocomplete="off" aria-label="Buscar conversas" /></label>
-      <div class="lado-filtros">
-        <label class="lado-chip">${icone("pasta", 13)}<select id="lado-pasta" aria-label="Filtrar por pasta"></select></label>
-        <label class="lado-chip tag" id="lado-tag-rot">${icone("etiqueta", 13)}<select id="lado-tag" aria-label="Filtrar por etiqueta"></select></label>
+      <div class="lado-filtros" id="lado-filtros">
+        <label class="lado-chip" id="lado-pasta-rot">${icone("pasta", 13)}<select id="lado-pasta" aria-label="Filtrar por pasta"></select></label>
+        <label class="lado-chip" id="lado-tag-rot">${icone("etiqueta", 13)}<select id="lado-tag" aria-label="Filtrar por etiqueta"></select></label>
       </div>
     </div>
     <div class="lado-lista" id="lado-lista"></div>`;
@@ -219,12 +219,18 @@ function todasEtiquetas() {
 function pintaLado() {
   if (!ladoEl) return;
   montaLado();
-  const pastas = [["*", "Todas as pastas"], ...conv.pastas.map((p) => [p, p]), ["", "Sem pasta"]];
+  // rótulos curtos ("Pastas", "Etiquetas" = todas) e, sem nada para filtrar, o filtro some
+  const pastas = [["*", "Pastas"], ...conv.pastas.map((p) => [p, p]), ["", "Sem pasta"]];
   opcoes(document.getElementById("lado-pasta"), pastas, conv.pasta);
   conv.pasta = document.getElementById("lado-pasta").value;
   const tags = todasEtiquetas();
   if (conv.etiqueta && !tags.includes(conv.etiqueta)) conv.etiqueta = "";
-  opcoes(document.getElementById("lado-tag"), [["", tags.length ? "Etiqueta" : "Sem etiquetas"], ...tags.map((t) => [t, "#" + t])], conv.etiqueta);
+  opcoes(document.getElementById("lado-tag"), [["", "Etiquetas"], ...tags.map((t) => [t, "#" + t])], conv.etiqueta);
+  const temPasta = conv.pastas.length > 0 || conv.pasta !== "*", temTag = tags.length > 0;
+  document.getElementById("lado-pasta-rot").classList.toggle("oculto", !temPasta);
+  document.getElementById("lado-tag-rot").classList.toggle("oculto", !temTag);
+  document.getElementById("lado-filtros").classList.toggle("oculto", !temPasta && !temTag);
+  document.getElementById("lado-pasta-rot").classList.toggle("ativa", conv.pasta !== "*");
   document.getElementById("lado-tag-rot").classList.toggle("ativa", !!conv.etiqueta);
   pintaLista();
 }
