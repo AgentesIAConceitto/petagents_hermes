@@ -101,11 +101,11 @@ func pedidoGroq(metodo, rota, chave, tipo string, corpo io.Reader) (int, []byte,
 func erroGroq(st int, corpo []byte) string {
 	switch st {
 	case 401, 403:
-		return "a chave do Groq foi recusada — confira em Sistema › Inteligência"
+		return "A chave do Groq foi recusada. Confira a chave em Sistema › Inteligência."
 	case 413:
-		return "o áudio ficou grande demais — grave um pedaço menor"
+		return "O áudio ficou grande demais. Grave um trecho mais curto."
 	case 429:
-		return "o Groq pediu uma pausa (limite da conta grátis) — tente de novo em instantes"
+		return "O Groq atingiu o limite de uso da conta gratuita. Tente novamente em instantes."
 	}
 	var d struct {
 		Error struct {
@@ -113,9 +113,9 @@ func erroGroq(st int, corpo []byte) string {
 		} `json:"error"`
 	}
 	if json.Unmarshal(corpo, &d) == nil && d.Error.Message != "" {
-		return fmt.Sprintf("o Groq respondeu %d: %s", st, d.Error.Message)
+		return fmt.Sprintf("O Groq respondeu com erro (código %d): %s", st, d.Error.Message)
 	}
-	return fmt.Sprintf("o Groq respondeu %d", st)
+	return fmt.Sprintf("O Groq respondeu com erro (código %d).", st)
 }
 
 // extensaoAudio — o Groq decide o formato pelo nome do arquivo.
@@ -150,19 +150,19 @@ func (a *App) VozSalvar(chave string) string {
 	}
 	st, corpo, err := pedidoGroq("GET", "/models", chave, "", nil)
 	if err != nil {
-		return falha("sem rede — confira a internet")
+		return falha("Sem conexão com a internet. Verifique a rede e tente novamente.")
 	}
 	if st != 200 {
 		return falha(erroGroq(st, corpo))
 	}
 	c, err := cifra(chave)
 	if err != nil {
-		return falha("não consegui proteger a chave (DPAPI)")
+		return falha("Não foi possível proteger a chave com a criptografia do Windows (DPAPI).")
 	}
 	b, _ := json.MarshalIndent(vozSalva{Chave: c}, "", "  ")
 	_ = os.MkdirAll(pastaPetAgente(), 0o755)
 	if err := os.WriteFile(arquivoVoz(), b, 0o600); err != nil {
-		return falha("não consegui gravar: " + err.Error())
+		return falha("Não foi possível salvar a chave: " + err.Error())
 	}
 	logMsg("voz: chave do Groq salva")
 	return respostaJSON(map[string]any{"ok": true})
@@ -174,11 +174,11 @@ func (a *App) Transcrever(b64, mime string) string {
 	chave := chaveVoz()
 	if chave == "" {
 		return respostaJSON(map[string]any{"ok": false, "semChave": true,
-			"erro": "falta a chave do Groq para eu entender áudio"})
+			"erro": "Para transcrever áudio, é preciso cadastrar uma chave do Groq."})
 	}
 	audio, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil || len(audio) == 0 {
-		return falha("o áudio chegou vazio")
+		return falha("O áudio chegou vazio. Grave novamente.")
 	}
 	if len(audio) > maxAudio {
 		return falha(erroGroq(413, nil))
@@ -197,7 +197,7 @@ func (a *App) Transcrever(b64, mime string) string {
 	st, resp, err := pedidoGroq("POST", "/audio/transcriptions", chave, w.FormDataContentType(), &corpo)
 	if err != nil {
 		logMsg("voz: Groq sem rede: " + err.Error())
-		return falha("sem rede — não consegui mandar o áudio")
+		return falha("Sem conexão com a internet: não foi possível enviar o áudio.")
 	}
 	if st != 200 {
 		logMsg(fmt.Sprintf("voz: Groq respondeu %d", st))

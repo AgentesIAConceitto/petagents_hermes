@@ -133,7 +133,7 @@ func (a *App) sobePonte() {
 		}
 		script, py := caminhoPonte(), caminhoPythonHermes()
 		if script == "" || py == "" {
-			marcaPonte(false, "ponte indisponível (script ou python não encontrados)")
+			marcaPonte(false, "Agente indisponível (script da ponte ou Python não encontrado)")
 			return
 		}
 		cmd := exec.Command(py, script)
@@ -150,12 +150,12 @@ func (a *App) sobePonte() {
 		}
 		in, err := cmd.StdinPipe()
 		if err != nil {
-			marcaPonte(false, "stdin "+err.Error())
+			marcaPonte(false, "Falha ao iniciar a ponte (stdin): "+err.Error())
 			return
 		}
 		var out io.ReadCloser
 		if out, err = cmd.StdoutPipe(); err != nil {
-			marcaPonte(false, "stdout "+err.Error())
+			marcaPonte(false, "Falha ao iniciar a ponte (stdout): "+err.Error())
 			return
 		}
 		// o stderr da ponte vai para arquivo: quando ela morria calada (02/10/2026)
@@ -166,7 +166,7 @@ func (a *App) sobePonte() {
 			cmd.Stderr = f
 		}
 		if err = cmd.Start(); err != nil {
-			marcaPonte(false, "start "+err.Error())
+			marcaPonte(false, "Falha ao iniciar a ponte: "+err.Error())
 			return
 		}
 		logMsg("ponte: chat quente ligado (hermes acp via chat_bridge.py)")
@@ -181,7 +181,7 @@ func (a *App) sobePonte() {
 func (a *App) reiniciaPonte() {
 	ponteMu.Lock()
 	ponteVidaMu.Lock()
-	marcaPonte(false, "reiniciando o agente")
+	marcaPonte(false, "Reiniciando o agente")
 	ponteModeloMu.Lock()
 	ponteModelo = "" // o handshake novo traz o modelo novo
 	ponteModeloMu.Unlock()
@@ -240,7 +240,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 		// espera o handshake: a ponte só vale quando diz "pronto: true"
 		linha, err := r.ReadString('\n')
 		if err != nil {
-			marcaPonte(false, "ponte morreu antes do handshake: "+err.Error())
+			marcaPonte(false, "A ponte parou antes de confirmar a conexão: "+err.Error())
 			return
 		}
 		var d struct {
@@ -250,11 +250,11 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 			Conversa string `json:"conversa"`
 		}
 		if json.Unmarshal([]byte(linha), &d) != nil {
-			marcaPonte(false, "handshake ilegível: "+strings.TrimSpace(linha))
+			marcaPonte(false, "Resposta inicial da ponte ilegível: "+strings.TrimSpace(linha))
 			return
 		}
 		if !d.Pronto {
-			marcaPonte(false, "ponte sem agente: "+d.Erro)
+			marcaPonte(false, "A ponte não conseguiu iniciar o agente: "+d.Erro)
 			return
 		}
 		guardaModelo(d.Modelo)
@@ -267,7 +267,7 @@ func ligaPonte(in io.WriteCloser, out io.Reader) {
 				linhas <- linha
 			}
 			if err != nil {
-				marcaPonte(false, "ponte encerrou: "+err.Error())
+				marcaPonte(false, "A ponte foi encerrada: "+err.Error())
 				return
 			}
 		}
@@ -309,7 +309,7 @@ func (a *App) pedidoPonte(pedido map[string]any, esperar bool) (respostaPonte, b
 	_, operacao := pedido["op"]
 	if pronta, erro := estadoPonte(); !pronta {
 		if operacao {
-			return respostaPonte{Erro: "o agente ainda não está pronto"}, false
+			return respostaPonte{Erro: "O agente ainda não está pronto."}, false
 		}
 		if erro != "" {
 			logMsg("ponte: indisponível (" + erro + ") — usando a reserva lenta")
@@ -341,7 +341,7 @@ func (a *App) pedidoPonte(pedido map[string]any, esperar bool) (respostaPonte, b
 		case linha, aberta := <-ponteLinhas:
 			if !aberta {
 				logMsg("ponte: encerrou no meio da pergunta — reserva lenta")
-				return respostaPonte{Erro: "a ponte encerrou"}, false
+				return respostaPonte{Erro: "A conexão com o agente foi encerrada."}, false
 			}
 			var d respostaPonte
 			if err := json.Unmarshal([]byte(linha), &d); err != nil {
@@ -423,5 +423,5 @@ func (a *App) pedidoPonte(pedido map[string]any, esperar bool) (respostaPonte, b
 	return respostaPonte{OK: true, Resposta: msgPonteDemorou, Erro: msgPonteDemorou}, true
 }
 
-const msgPonteDemorou = "A resposta está demorando demais — parei de esperar para não gastar " +
-	"créditos em dobro (o Hermes ainda pode estar terminando). Tente de novo daqui a pouco."
+const msgPonteDemorou = "A resposta está demorando demais. Parei de esperar para não gastar " +
+	"créditos em dobro (o Hermes ainda pode estar terminando). Tente novamente daqui a pouco."

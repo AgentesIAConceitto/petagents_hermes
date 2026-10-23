@@ -48,9 +48,9 @@ function reportarHit() {
    A janela agora COBRE a tela inteira: o boneco anda por ela toda e encaixa
    em qualquer borda. Posição guardada como {borda, offset} — não como x/y. */
 const PERFIS = {
-  calmo:      { respira: 3600, salto: 0.45, vagueia: 24000, andar: 0.5, rotulo: "😌 calmo" },
-  agitado:    { respira: 1500, salto: 1.0,  vagueia: 7000,  andar: 1.0, rotulo: "⚡ agitado" },
-  brincalhao: { respira: 2300, salto: 0.8,  vagueia: 12000, andar: 0.8, rotulo: "🤹 brincalhão" },
+  calmo:      { respira: 3600, salto: 0.45, vagueia: 24000, andar: 0.5, rotulo: "😌 Calmo" },
+  agitado:    { respira: 1500, salto: 1.0,  vagueia: 7000,  andar: 1.0, rotulo: "⚡ Agitado" },
+  brincalhao: { respira: 2300, salto: 0.8,  vagueia: 12000, andar: 0.8, rotulo: "🤹 Brincalhão" },
 };
 // canto: "" | "ini" | "fim" — encostado também no começo/fim da borda (um canto da tela)
 // parado: não anda sozinho (pedido do dono, 13/10/2026) · tamanho: escala do boneco
@@ -209,7 +209,7 @@ function mudaTamanho(novo) {
   aplicaTamanho();
   if (!cfg.canto) cfg.offset = Math.round(cfg.offset + (antes - lado()) / 2);
   aplicaPosicao(); salvarPet();
-  toast("📏", "Tamanho " + Math.round(s * 100) + "%", "gire a rodinha do mouse em cima de mim para ajustar", 1800, true);
+  toast("📏", "Tamanho: " + Math.round(s * 100) + "%", "Use a roda do mouse sobre o boneco para ajustar.", 1800, true);
 }
 // tile do menu: desce um degrau (100 → 85 → 70 → 55 → 40 → volta a 100)
 function cicloTamanho() {
@@ -230,7 +230,7 @@ function alternaParado() {
   }
   salvarPet();
   toast(cfg.parado ? "📌" : "🚶", cfg.parado ? "Fico parado aqui" : "Vou passear de vez em quando",
-    cfg.parado ? "só saio do lugar se você me arrastar (ou mandar brincar)" : "ando pela borda e volto a me mexer", 2600, true);
+    cfg.parado ? "Só saio do lugar se você me arrastar ou mandar brincar." : "Vou andar pela borda da tela de vez em quando.", 2600, true);
 }
 
 // posição a partir de {borda, offset, canto}: a caixa encosta na borda com margem
@@ -367,7 +367,7 @@ function cicloPerfil() {
   const i = ORDEM_PERFIL.indexOf(cfg.perfil);
   cfg.perfil = ORDEM_PERFIL[(i + 1) % ORDEM_PERFIL.length];
   aplicaPerfil(); salvarPet();
-  toast("🎭", "Perfil: " + PERFIS[cfg.perfil].rotulo, "ritmo das animações ajustado", 2600, true);
+  toast("🎭", "Perfil: " + PERFIS[cfg.perfil].rotulo, "O ritmo das animações foi ajustado.", 2600, true);
 }
 
 function alternaInteracao() {
@@ -375,12 +375,12 @@ function alternaInteracao() {
   // avisa ANTES de desligar: toast() obedece cfg.interagir e não apareceria depois
   if (!ligando) {
     toast("🖱", "Interação desligada",
-      "o boneco ignora cliques; botão direito nele reabre este menu", 5000, true);
+      "O boneco passa a ignorar cliques. Para reabrir este menu, clique nele com o botão direito.", 5000, true);
   }
   cfg.interagir = ligando;
   aplicaInteracao(); salvarPet();
   if (ligando) {
-    toast("🖱", "Interação ligada", "pode me clicar, arrastar e conversar", 2600, true);
+    toast("🖱", "Interação ligada", "Você já pode me clicar, me arrastar e conversar comigo.", 2600, true);
   }
 }
 
@@ -606,11 +606,11 @@ try {
 } catch (e) { }
 
 function alternaBoneco() {
-  if (!dex) { carregarPetDex(); toast("🐾", "Buscando boneco da galeria…", "Petdex", 2400, true); return; }
+  if (!dex) { carregarPetDex(); toast("🐾", "Buscando o boneco na galeria…", "Petdex", 2400, true); return; }
   cfg.dexOn = !cfg.dexOn;
   pet.classList.toggle("dex", !!cfg.dexOn);
-  if (cfg.dexOn) { toast("🐾", "Boneco da galeria: " + dex.nome, "as linhas viram as emoções dele", 2600, true); dexToca(estado.state || "idle"); }
-  else { clearInterval(dexTimer); aplicaTamanho(); toast("🐾", "Boneco vetor (nosso)", "", 2400, true); }
+  if (cfg.dexOn) { toast("🐾", "Boneco da galeria: " + dex.nome, "As animações acompanham o estado do boneco.", 2600, true); dexToca(estado.state || "idle"); }
+  else { clearInterval(dexTimer); aplicaTamanho(); toast("🐾", "Boneco padrão", "", 2400, true); }
   aplicaPosicao(); salvarPet();
 }
 
@@ -644,28 +644,28 @@ async function listaBonecos(termo, offset) {
   }
   document.getElementById("pets-termo").value = abaDe[petPanelTermo] ? "" : petPanelTermo;
   const alvo = document.getElementById("pets-lista");
-  alvo.innerHTML = '<div class="aviso">carregando… (na primeira busca o catálogo da galeria pode levar alguns segundos)</div>';
+  alvo.innerHTML = '<div class="aviso">Carregando… Na primeira busca, o catálogo da galeria pode levar alguns segundos.</div>';
   let d = null;
   try { d = JSON.parse(await G.PetGaleria(petPanelTermo, petPanelOffset)); } catch (e) {}
   if (!d || !d.ok) {
-    alvo.innerHTML = '<div class="aviso">' + escMenu((d && d.erro) || "sem resposta do app") + '</div>';
+    alvo.innerHTML = '<div class="aviso">' + escMenu((d && d.erro) ? fraseUI(d.erro) : "O app não respondeu. Feche o painel e tente de novo.") + '</div>';
     document.getElementById("pets-conta").textContent = "";
     return;
   }
   petsBase = d.base || petsBase;
   document.getElementById("pets-atual").textContent =
-    "agora: " + ((dex && cfg.dexOn) ? dex.slug : "boneco padrão");
+    "Em uso: " + ((dex && cfg.dexOn) ? dex.slug : "boneco padrão");
   const n = (d.itens || []).length;
   document.getElementById("pets-conta").textContent =
-    petPanelTermo === "" ? (d.total + " bonecos nesta máquina")
-    : petPanelTermo === "*" ? ("galeria completa · " + d.total + " bonecos · mostrando de " + (petPanelOffset + 1) + " a " + (petPanelOffset + n))
-    : (d.total + " encontrados · " + (n ? "mostrando " + n : "nenhum"));
+    petPanelTermo === "" ? (d.total + " bonecos neste computador")
+    : petPanelTermo === "*" ? ("Galeria completa: " + d.total + " bonecos (exibindo de " + (petPanelOffset + 1) + " a " + (petPanelOffset + n) + ")")
+    : (d.total + " encontrados" + (n ? " (exibindo " + n + ")" : ""));
   document.getElementById("pets-mais").style.display = d.tem_mais ? "" : "none";
   alvo.innerHTML = "";
   const cartao = (slug, nome, tipo, url, sel, local) => {
     const c = document.createElement("div");
     c.className = "card" + (sel ? " sel" : "");
-    c.title = nome + (tipo ? " · " + tipo : "") + (local ? "" : " — será baixado da galeria");
+    c.title = nome + (tipo ? " · " + tipo : "") + (local ? "" : " · Será baixado da galeria");
     const t = document.createElement("div");
     t.className = "thumb";
     if (url) t.style.backgroundImage = "url(" + url + ")";
@@ -678,14 +678,14 @@ async function listaBonecos(termo, offset) {
     c.onclick = () => usarBoneco(slug, local);
     alvo.appendChild(c);
   };
-  if (!petPanelTermo) cartao("__vetor__", "boneco padrão", "sem download", "", !cfg.dexOn, true);
+  if (!petPanelTermo) cartao("__vetor__", "Boneco padrão", "sem download", "", !cfg.dexOn, true);
   for (const it of (d.itens || [])) {
     const local = !!it.local && !!petsBase;
     const url = local ? (petsBase + "/sheet/" + it.slug) : (it.sprite || "");
     cartao(it.slug, it.nome || it.slug, it.tipo, url,
            !!(dex && cfg.dexOn && dex.slug === it.slug), local);
   }
-  if (!alvo.children.length) alvo.innerHTML = '<div class="aviso">nenhum boneco encontrado</div>';
+  if (!alvo.children.length) alvo.innerHTML = '<div class="aviso">Nenhum boneco encontrado.</div>';
 }
 
 async function usarBoneco(slug, local) {
@@ -699,15 +699,15 @@ async function usarBoneco(slug, local) {
     return;
   }
   if (!local) {
-    toast("⬇", "Baixando " + slug + "…", "da galeria Petdex", 3200, true);
+    toast("⬇", "Baixando " + slug + "…", "Da galeria Petdex.", 3200, true);
     let r = null;
     try { r = JSON.parse(await G.PetDexBaixar(slug)); } catch (e) {}
-    if (!r || !r.ok) { toast("⚠️", "Download falhou", (r && r.erro) || "sem rede?", 3600, true); return; }
+    if (!r || !r.ok) { toast("⚠️", "Não foi possível baixar o boneco", (r && r.erro) ? fraseUI(r.erro) : "Sem conexão com a internet. Verifique a rede e tente de novo.", 3600, true); return; }
   }
   try { await G.PetDexEscolher(slug); } catch (e) {}
   cfg.dexOn = true; salvarPet();
   await carregarPetDex();
-  toast("🐾", "Boneco: " + slug, "aplicado", 2200, true);
+  toast("🐾", "Boneco: " + slug, "Aplicado.", 2200, true);
   fecharPainelBonecos(); // escolheu → fecha e mostra o boneco novo
 }
 
@@ -807,16 +807,16 @@ function pintaCabecalhoChat() {
   if (saldo !== null) {
     partes.push(moeda(saldo));
     const g = gastoHoje(saldo);
-    if (g >= 0.005) partes.push("hoje −" + moeda(g));
+    if (g >= 0.005) partes.push("Hoje −" + moeda(g));
   } else if (/chave/.test(saldoTxt)) {
-    partes.push("saldo: configure a chave");
+    partes.push("Saldo: configure a chave");
   }
   // o ponto: pensando (esperando resposta) › fora do ar › saldo baixo › ok
   let cls = "", linha = partes.join(" · ");
   if (ocupado) { cls = "pensando"; linha = nome + " está pensando…"; }
-  else if (!infoChat.pronta && infoChat.erro) { cls = "erro"; linha = "agente fora do ar — respondo pelo modo lento"; }
-  else if (!infoChat.pronta) { cls = "aviso"; linha = "conectando ao agente…"; }
-  else if (saldo !== null && saldo < 3) { cls = "aviso"; linha = "saldo baixo · " + linha; }
+  else if (!infoChat.pronta && infoChat.erro) { cls = "erro"; linha = "Agente indisponível: respondendo pelo modo lento"; }
+  else if (!infoChat.pronta) { cls = "aviso"; linha = "Conectando ao agente…"; }
+  else if (saldo !== null && saldo < 3) { cls = "aviso"; linha = "Saldo baixo · " + linha; }
   // o detalhe técnico (gateway, motivo do saldo) continua acessível: passar o mouse
   const dica = [estado.detail, saldoTxt, infoChat.erro].filter(Boolean).join(" · ");
   // CONVERSAS (22/10/2026): o título é o da conversa aberta (conversas.js); o nome do pet
@@ -896,7 +896,7 @@ function iniciaAoVivo() {
 
 function progressoAoVivo(p) {
   if (!p || !p.tipo) return;
-  if (p.tipo === "passo") _vivoRotulo = String(p.texto || "trabalhando");
+  if (p.tipo === "passo") _vivoRotulo = String(p.texto || "Trabalhando");
   else _vivoTexto = String(p.texto || "");
   if (!_vivoInicio) _vivoInicio = Date.now();
   _pintaVivo();
@@ -947,7 +947,7 @@ function pintaConversa() {
         const cp = document.createElement("span");
         cp.className = "copiar";
         cp.innerHTML = icone("copiar", 14);
-        cp.title = "copiar esta mensagem";
+        cp.title = "Copiar esta mensagem";
         cp.onclick = (ev) => { ev.stopPropagation(); copiarTexto(m.texto, cp); };
         el.appendChild(cp);
       }
@@ -1009,7 +1009,7 @@ function bolhaAnexos(anexos) {
     if (!a.thumb) {
       const n = document.createElement("span");
       n.className = "m-anexo-nome";
-      n.textContent = a.nome || "anexo";
+      n.textContent = a.nome || "Anexo";
       c.appendChild(n);
     }
     box.appendChild(c);
@@ -1136,7 +1136,7 @@ async function enviarTexto(texto, input) {
   input.placeholder = nomeDoPet() + " está pensando…";
   pintaCabecalhoChat();
   reiniciarAuto();
-  let resp = "(sem resposta)";
+  let resp = "(Sem resposta)";
   const t0 = Date.now();
   let conversaResp = "";
   try {
@@ -1145,12 +1145,12 @@ async function enviarTexto(texto, input) {
       const aberta = typeof conversaAberta === "function" ? conversaAberta() : "";
       const pedido = texto || "Dê uma olhada no que eu anexei e me diga o que tem.";
       const r = JSON.parse(await G.SendChatEm(aberta, pedido, JSON.stringify(ids)));
-      resp = r.resposta || "(sem resposta)";
+      resp = r.resposta || "(Sem resposta)";
       conversaResp = r.conversa || "";
     } else {
       resp = G ? await G.SendChat(texto) : "(fora do Wails)";
     }
-  } catch (e) { resp = "erro: " + e; }
+  } catch (e) { resp = "Erro: " + e; }
   const levou = Math.round((Date.now() - t0) / 100) / 10;
   ocupado = false;
   input.disabled = false;
@@ -1352,7 +1352,7 @@ function montarMenu() {
   if (abaMenu === "pet") {
     corpo = `<div class="menu-grade">${MENU.pet.map(([ico, nome]) =>
       `<button class="mtile" data-acao="${escMenu(nome)}"><span class="mtile-ico">${icone(ico)}</span>` +
-      `<span>${escMenu(nome)}</span>${r.pendente === ico ? '<i class="pendente" title="pedindo agora"></i>' : ""}</button>`).join("")}</div>
+      `<span>${escMenu(nome)}</span>${r.pendente === ico ? '<i class="pendente" title="Pedindo agora"></i>' : ""}</button>`).join("")}</div>
       <div class="mlista"><div class="menu-secao">Boneco</div>${MENU.boneco.map((it) => linha(it)).join("")}</div>`;
   } else if (abaMenu === "recursos") {
     corpo = `<div class="mlista largo">${MENU.recursos.map(([ico, nome, , desc]) =>
@@ -1439,17 +1439,17 @@ function reagir(texto, novoEstado) {
 }
 function subAlimentar(tipo) {
   abrirBalao();
-  msg(tipo === "lanche" ? "Lanche enfileirado (tarefa pequena). Etapa 2: vai para o agente."
-                        : "Refeição enfileirada (tarefa grande). Etapa 2: vai para o agente.", "ele");
+  msg(tipo === "lanche" ? "Lanche anotado (tarefa pequena). O envio ao agente chega numa próxima versão."
+                        : "Refeição anotada (tarefa grande). O envio ao agente chega numa próxima versão.", "ele");
 }
 async function status() {
   abrirBalao();
-  try { G && await G.ShowStatus(); } catch (e) { msg("status indisponível", "ele"); }
+  try { G && await G.ShowStatus(); } catch (e) { msg("Não foi possível consultar o status agora. Tente de novo em instantes.", "ele"); }
 }
 function dormir(min) {
-  aplicarEstado({ state: "dormindo", detail: `dormindo ${min} min` });
+  aplicarEstado({ state: "dormindo", detail: `Dormindo por ${min} min` });
   abrirBalao(); msg(`Vou tirar um cochilo de ${min} minutos. zZz`, "ele");
-  setTimeout(() => aplicarEstado({ state: "idle", detail: "acordei" }), min * 60000);
+  setTimeout(() => aplicarEstado({ state: "idle", detail: "Acordado" }), min * 60000);
   setTimeout(() => fecharBalao(), 6000);
 }
 // DESLIGAR — fecha o PetAgent de vez (obrigatório no menu).
@@ -1480,8 +1480,8 @@ const telaSel = { monitor: 1, canto: "baixo-esquerda" };
 
 function rotuloCanto(c) {
   return ({
-    "baixo-esquerda": "◣ baixo-esq", "baixo-direita": "◢ baixo-dir",
-    "cima-esquerda": "◤ cima-esq", "cima-direita": "◥ cima-dir",
+    "baixo-esquerda": "◣ Inferior esquerdo", "baixo-direita": "◢ Inferior direito",
+    "cima-esquerda": "◤ Superior esquerdo", "cima-direita": "◥ Superior direito",
   })[c] || c;
 }
 
@@ -1496,7 +1496,7 @@ async function abrirSeletorTela() {
   try { ms = JSON.parse((G ? await G.ListarMonitores() : "[]") || "[]"); } catch (e) {}
   const d = DPR();
   if (!ms.length) {
-    boxM.innerHTML = '<span class="pn-nota">não consegui listar as telas</span>';
+    boxM.innerHTML = '<span class="pn-nota">Não foi possível listar as telas.</span>';
   } else {
     const x0 = Math.min(...ms.map((m) => m.x)), y0 = Math.min(...ms.map((m) => m.y));
     const x1 = Math.max(...ms.map((m) => m.x + m.w)), y1 = Math.max(...ms.map((m) => m.y + m.h));
@@ -1528,10 +1528,10 @@ async function abrirSeletorTela() {
 
 // 2) onde ele fica: os 4 cantos e o meio de cada borda, num desenho de tela
 const ALVOS_TELA = [
-  ["cima", "ini", "canto superior esquerdo", 0, 0], ["cima", "", "meio da borda de cima", 0.5, 0],
-  ["cima", "fim", "canto superior direito", 1, 0], ["esquerda", "", "meio da borda esquerda", 0, 0.5],
-  ["direita", "", "meio da borda direita", 1, 0.5], ["baixo", "ini", "canto inferior esquerdo", 0, 1],
-  ["baixo", "", "meio da borda de baixo", 0.5, 1], ["baixo", "fim", "canto inferior direito", 1, 1],
+  ["cima", "ini", "Canto superior esquerdo", 0, 0], ["cima", "", "Meio da borda superior", 0.5, 0],
+  ["cima", "fim", "Canto superior direito", 1, 0], ["esquerda", "", "Meio da borda esquerda", 0, 0.5],
+  ["direita", "", "Meio da borda direita", 1, 0.5], ["baixo", "ini", "Canto inferior esquerdo", 0, 1],
+  ["baixo", "", "Meio da borda inferior", 0.5, 1], ["baixo", "fim", "Canto inferior direito", 1, 1],
 ];
 // (borda, canto) → ponto na tela: na borda de cima/baixo "ini" é a esquerda; nas laterais, o alto
 function pontoDaPosicao(borda, canto) {
@@ -1567,7 +1567,7 @@ function pintaMapaTela() {
     mapa.appendChild(b);
   }
   document.getElementById("tela-atual").textContent =
-    "agora: Tela " + telaSel.monitor + (rotuloAtual ? " · " + rotuloAtual : " · borda " + cfg.borda);
+    "Atual: Tela " + telaSel.monitor + (rotuloAtual ? " · " + rotuloAtual : " · Borda " + cfg.borda);
   reportarHit();
 }
 
@@ -1849,10 +1849,10 @@ function testeAviso() {
 
 // lembrete de água (local, já funciona)
 function agua(min) {
-  toast("💧", "Lembrete marcado", "Te chamo em " + min + " min para beber água.", 3500, true);
+  toast("💧", "Lembrete marcado", "Vou te chamar daqui a " + min + " min para você beber água.", 3500, true);
   clearTimeout(aguaTimer);
   aguaTimer = setTimeout(() => {
-    toast("💧", "Hora da água!", "Bebe um copo e volta pro foco. 💪", 15000);
+    toast("💧", "Hora da água!", "Beba um copo e volte ao foco. 💪", 15000);
     explosao(["💧", "🚰", "🥤"], 5);
   }, min * 60000);
 }
@@ -1965,7 +1965,7 @@ function ligarEventos() {
   // avisos do Go (gateway voltou, saldo baixo, tarefa concluída) → balãozinho na tela
   R.EventsOn("aviso", (a) => {
     if (/saldo/i.test(a.texto || "")) {   // saldo baixo: dá para resolver dali mesmo
-      toast("alerta", "Saldo baixo", (estado.balance || "").replace(".", ",") + " — recarregue para o chat não parar.", 20000, false,
+      toast("alerta", "Saldo baixo", (estado.balance ? "Saldo atual: " + estado.balance.replace(".", ",") + ". " : "") + "Recarregue os créditos para o chat não parar.", 20000, false,
         { acoes: [{ r: "Abrir Inteligência", fn: () => abrirInteligencia() }] });
     } else if (a.tipo === "email") {   // e-mail importante: resumo no texto, e onde responder
       const acoes = [{ r: "Ver no painel", fn: () => abrirEmail() }];
@@ -1986,7 +1986,7 @@ function ligarEventos() {
   // volta do "esconder N min": quem conta o tempo é o Go — aqui só damos o recado
   // (balãozinho, que é a voz do bicho: não abre chat nem entra no histórico)
   R.EventsOn("volta-escondido", (min) => {
-    toast("👋", "Voltei!", "fiquei " + min + " min fora, capturas liberadas", 3200, true);
+    toast("👋", "Voltei!", "Fiquei " + min + " min escondido para liberar as capturas de tela.", 3200, true);
   });
 
   R.EventsOn("tela-aplicada", (t) => {
@@ -2044,6 +2044,6 @@ setInterval(reportarHit, 500);
   // Antes isto abria o balão sozinho no boot E deixava um "Pronto." DENTRO da
   // conversa, que parecia resposta do agente e poluía o histórico.
   setTimeout(() => toast("🐾", "PetAgent",
-    "Pronto. Duplo clique em mim para conversar.", 8000, true), 800);
+    "Tudo pronto. Clique duas vezes em mim para conversar.", 8000, true), 800);
   log("frontend boot ok");
 })();
