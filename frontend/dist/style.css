@@ -649,7 +649,7 @@ select.ia-campo { cursor: pointer; }
 .cg-lado.carregando { opacity: .6; pointer-events: none; }
 /* topo da lista enxuto (dona, 23/10/2026: "tá ocupando muito espaço"): filtros numa linha
    só, curtos, e que somem enquanto não há pasta nem etiqueta para filtrar */
-.lado-topo { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 6px; }
+.lado-topo { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 6px; }
 .lado-nova { justify-content: center; height: 36px; font-size: 13.5px; }
 .lado-busca {
   display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; color: var(--sub);
@@ -661,16 +661,32 @@ select.ia-campo { cursor: pointer; }
 .lado-filtros { display: flex; gap: 6px; }
 .lado-filtros.oculto, .lado-chip.oculto { display: none; }
 .lado-chip {
-  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 2px 0 8px; min-width: 0; flex: 0 1 auto;
-  border-radius: 999px; border: 1px solid var(--borda); background: transparent; color: var(--sub); font-size: 12px;
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px 0 9px !important; min-width: 0; flex: 0 1 auto;
+  border-radius: 999px; border: 1px solid var(--borda) !important; color: var(--sub) !important; font-size: 12px; font-weight: 600;
 }
-.lado-chip select {
-  border: 0; outline: none; background: none; color: inherit; font: inherit; font-weight: 600;
-  min-width: 0; width: 100%; text-overflow: ellipsis; cursor: pointer; color-scheme: light dark;
-}
-.lado-chip option { background: var(--fundo); color: var(--texto); }
+.lado-chip span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lado-chip:hover, .lado-chip[aria-expanded="true"] { color: var(--texto) !important; box-shadow: inset 0 0 0 999px var(--hover); }
+.lado-chip[aria-expanded="true"] .ic:last-child { transform: rotate(180deg); }
 /* filtro em uso: aceso na cor de destaque */
-.lado-chip.ativa { border-color: var(--acento); color: var(--texto); background: var(--hover); }
+.lado-chip.ativa { border-color: var(--acento) !important; color: var(--texto) !important; background: var(--hover) !important; }
+/* o menu do filtro: do app (o <select> do Windows saía branco, fora do tema) */
+.lado-drop {
+  position: absolute; z-index: 4; min-width: 190px; max-width: calc(100% - 20px); max-height: 260px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1px; padding: 5px;
+  background: var(--elev); border: 1px solid var(--borda); border-radius: var(--raio-botao); box-shadow: var(--sombra);
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
+}
+.lado-drop.oculto { display: none; }
+.lado-op {
+  display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 9px !important; width: 100%;
+  border-radius: var(--raio-interno); font-size: 13px; text-align: left; color: var(--texto);
+}
+.lado-op > .ic:first-child { color: var(--sub); }
+.lado-op span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lado-op em { font-style: normal; font-size: 11.5px; color: var(--sub); }
+.lado-op:hover, .lado-op:focus-visible { box-shadow: inset 0 0 0 999px var(--hover); outline: none !important; }
+.lado-op.sel { font-weight: 600; }
+.lado-op.sel > .ic:last-child { color: var(--acento); }
 .lado-lista {
   flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 12px; display: flex; flex-direction: column; gap: 2px;
   scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
