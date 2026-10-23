@@ -10,6 +10,10 @@
 ' E deixa rastro em %LOCALAPPDATA%\petagent\atalho.log — se um dia "nao subiu",
 ' a resposta esta la, nao na memoria de ninguem.
 '
+' Argumento opcional: o caminho do petagent.exe (ex.: o build\bin do repositorio,
+' para o atalho de desenvolvimento). Sem argumento, usa a copia instalada.
+' A checagem "ja esta na tela" vale para qualquer petagent.exe: nunca dois bonecos.
+'
 ' ASCII puro de proposito: o host de script le .vbs como ANSI e acento quebra o parse.
 
 Option Explicit
@@ -18,6 +22,7 @@ Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 exePath = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\petagent\petagent.exe"
+If WScript.Arguments.Count > 0 Then exePath = WScript.Arguments(0)
 logPath = sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\petagent\atalho.log"
 
 If Not fso.FileExists(exePath) Then
