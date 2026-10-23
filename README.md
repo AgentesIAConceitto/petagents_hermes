@@ -91,8 +91,14 @@ bicho que *também* cuida de você é útil.
   Não precisa de programa de e-mail instalado.
 - Avisa só o que é importante e **aprende** com você (marca como importante/lixo pelo
   painel). As regras valem para todas as contas.
-- **Só leitura**: abre a caixa em modo só leitura e busca apenas os cabeçalhos
-  (remetente, assunto, data). Nada é apagado, movido ou marcado como lido.
+- **Resumo**: os e-mails importantes que chegam são resumidos sozinhos (2 a 4 frases: do
+  que se trata, o que pedem, prazos e valores). O resumo aparece no balão e no painel,
+  com o botão **Abrir** para responder no webmail da conta. Nos outros e-mails, clique
+  para resumir. O texto do e-mail vai para a IA do painel **Inteligência**, numa chamada
+  direta à API do modelo, sem passar pelo agente do Hermes (que tem ferramentas): um
+  e-mail malicioso não vira comando.
+- **Só leitura**: abre a caixa em modo só leitura (`EXAMINE`); o texto, quando é preciso
+  resumir, vem com `BODY.PEEK[]`. Nada é apagado, movido ou marcado como lido.
 - Senhas e tokens ficam cifrados com DPAPI em `%LOCALAPPDATA%\petagent\email_contas.json`
   e nunca voltam para a tela.
 
@@ -260,8 +266,8 @@ Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
   primeiro recado após subir o app pode sair mudo.
 - E-mail: lê só a **Caixa de Entrada** (as últimas 50 mensagens de cada conta). O login
   pelo navegador do Google não está disponível (exigiria a revisão de segurança do
-  Google); o Gmail entra com senha de app. Assuntos em codificações raras (fora de
-  UTF-8 e Latin-1) podem aparecer sem decodificar.
+  Google); o Gmail entra com senha de app. O resumo usa a IA configurada no painel
+  Inteligência: sem chave lá, os balões saem só com remetente e assunto.
 - **Anexos**: Word, Excel e PowerPoint ainda não vão direto (salve como PDF/CSV); vídeo e
   áudio anexado não são aceitos. O PDF vai só como texto: gráfico e foto de dentro dele a IA
   não vê. Com o agente rápido fora do ar, a mensagem com anexo não vai pelo modo lento.
@@ -350,8 +356,14 @@ human biology, because a pet that only asks for things is annoying, and a pet th
   IMAP. No mail client needed.
 - Notifies only about what matters and **learns** from you (mark things important/junk
   in the panel). Rules apply to every account.
-- **Read-only**: the mailbox is opened read-only and only headers are fetched (sender,
-  subject, date). Nothing is deleted, moved or marked as read.
+- **Summary**: important incoming e-mails are summarized automatically (2–4 sentences:
+  what it is about, what is asked, deadlines and amounts). The summary shows in the
+  toast and in the panel, with an **Abrir** button to reply in the account's webmail.
+  Other e-mails are summarized on click. The e-mail text goes to the AI set in the
+  **Inteligência** panel through a direct model API call, never through the Hermes
+  agent (which has tools): a malicious e-mail cannot become a command.
+- **Read-only**: the mailbox is opened read-only (`EXAMINE`); the text, when a summary
+  is needed, is fetched with `BODY.PEEK[]`. Nothing is deleted, moved or marked as read.
 - Passwords and tokens are DPAPI-encrypted in `%LOCALAPPDATA%\petagent\email_contas.json`
   and never sent back to the UI.
 
@@ -517,8 +529,8 @@ the launcher stay where they are.
   first message after startup may be silent.
 - E-mail: only the **Inbox** is read (the latest 50 messages of each account). Google
   browser sign-in is not available (it would require Google's security review); Gmail
-  uses an app password. Subjects in rare encodings (other than UTF-8 and Latin-1) may
-  show undecoded.
+  uses an app password. Summaries use the AI set in the Inteligência panel: without a
+  key there, toasts show only sender and subject.
 - **Attachments**: Word/Excel/PowerPoint must be saved as PDF/CSV first; video and audio
   files are not accepted; PDFs go as text only (charts and photos inside them are not seen).
 - Sprites come from PetDex at runtime; the artwork belongs to its original authors.
