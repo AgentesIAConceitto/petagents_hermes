@@ -747,14 +747,28 @@ select.ia-campo { cursor: pointer; }
 .cm-sug-bt:hover { border-color: var(--acento) !important; }
 .cm-excluir { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px !important; border-radius: var(--raio-interno); color: var(--perigo) !important; font-weight: 600; font-size: 13.5px; }
 .cm-excluir:hover { box-shadow: inset 0 0 0 999px var(--hover); }
-.cm-confirma {
-  display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--raio-botao);
-  border: 1px solid var(--perigo); background: var(--sup);
+/* a conversa do menu aberto fica destacada (e o ⋯ dela, aceso), mesmo sem o mouse em cima */
+.lado-item.menu-de { background: var(--hover); box-shadow: inset 0 0 0 1.5px var(--acento); }
+.lado-item.menu-de .lado-mais { opacity: 1; color: var(--texto); }
+.lado-item.menu-de .li-data { visibility: hidden; }
+/* modal de excluir: no meio do chat grande, fundo escurecido (nada de caixa dentro do menu) */
+.conv-modal {
+  position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(10, 10, 16, .45); backdrop-filter: blur(2px);
 }
-.cm-confirma.oculto { display: none; }
-.cm-confirma b { font-size: 13.5px; }
-.cm-confirma span { font-size: 12.5px; line-height: 1.45; color: var(--sub); }
-.cm-confirma div { display: flex; gap: 8px; justify-content: flex-end; }
+.conv-modal.oculto { display: none; }
+.cmod-caixa {
+  width: 360px; max-width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px;
+  background: var(--elev); border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
+}
+.cmod-ic {
+  width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px;
+  color: var(--perigo); background: color-mix(in srgb, var(--perigo) 14%, transparent);
+}
+.cmod-caixa b { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.cmod-caixa span { font-size: 13px; line-height: 1.5; color: var(--sub); }
+.cmod-acoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.cmod-acoes .cm-bt { height: 36px; }
 .cm-bt { height: 32px; padding: 0 14px !important; border-radius: var(--raio-interno); border: 1px solid var(--borda) !important; font-size: 13px; font-weight: 600; }
 .cm-bt.perigo { background: var(--perigo) !important; border-color: transparent !important; color: #15161A !important; }
 
