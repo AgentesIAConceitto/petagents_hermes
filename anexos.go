@@ -49,16 +49,16 @@ var (
 		".kt": true, ".swift": true, ".vue": true, ".jsx": true, ".tsx": true, ".env.example": true, ".srt": true}
 	// formatos que a pessoa vai tentar e que ainda não vão: o recado diz o que fazer
 	extRecado = map[string]string{
-		".doc": "Arquivos do Word ainda não são aceitos. Salve como PDF e anexe novamente.",
+		".doc":  "Arquivos do Word ainda não são aceitos. Salve como PDF e anexe novamente.",
 		".docx": "Arquivos do Word ainda não são aceitos. Salve como PDF e anexe novamente.",
-		".xls": "Planilhas do Excel ainda não são aceitas. Salve como CSV e anexe novamente.",
+		".xls":  "Planilhas do Excel ainda não são aceitas. Salve como CSV e anexe novamente.",
 		".xlsx": "Planilhas do Excel ainda não são aceitas. Salve como CSV e anexe novamente.",
-		".ppt": "Apresentações do PowerPoint ainda não são aceitas. Salve como PDF e anexe novamente.",
+		".ppt":  "Apresentações do PowerPoint ainda não são aceitas. Salve como PDF e anexe novamente.",
 		".pptx": "Apresentações do PowerPoint ainda não são aceitas. Salve como PDF e anexe novamente.",
-		".mp4": "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
-		".mov": "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
-		".mp3": "Arquivos de áudio ainda não são aceitos. Use o microfone do chat.",
-		".zip": "Arquivos compactados não são aceitos. Descompacte e anexe somente o necessário.",
+		".mp4":  "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
+		".mov":  "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
+		".mp3":  "Arquivos de áudio ainda não são aceitos. Use o microfone do chat.",
+		".zip":  "Arquivos compactados não são aceitos. Descompacte e anexe somente o necessário.",
 	}
 )
 

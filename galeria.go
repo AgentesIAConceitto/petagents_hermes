@@ -151,9 +151,11 @@ func campo(m map[string]any, k string) string {
 }
 
 // PetGaleria — lista para o painel.
-//   termo == ""  → os bonecos JÁ INSTALADOS na máquina (o "vetor" entra no front)
-//   termo == "*" → navega a galeria inteira, em páginas
-//   outro termo  → busca no catálogo por nome, slug ou tipo
+//
+//	termo == ""  → os bonecos JÁ INSTALADOS na máquina (o "vetor" entra no front)
+//	termo == "*" → navega a galeria inteira, em páginas
+//	outro termo  → busca no catálogo por nome, slug ou tipo
+//
 // `deslocamento` pagina os resultados (a galeria tem ~4.900 bonecos).
 func (a *App) PetGaleria(termo string, deslocamento int) string {
 	const porPagina = 24

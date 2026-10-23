@@ -45,7 +45,7 @@ type provedorIA struct {
 	// garanteComplemento). Vazio = só a biblioteca que já vem com o Hermes.
 	Complemento string `json:"complemento,omitempty"`
 	modelos     string // rota que lista os modelos
-	teste   string // rota que valida a chave sem gastar token
+	teste       string // rota que valida a chave sem gastar token
 }
 
 // lista curta de propósito: os provedores de chave de API mais usados. Ids e variáveis

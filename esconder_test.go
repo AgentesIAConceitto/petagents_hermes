@@ -48,13 +48,14 @@ func TestEsconderPorVoltaSozinho(t *testing.T) {
 // (o timer do primeiro clique venceu no meio do teste do terceiro).
 //
 // Roteiro aqui: esconde 1 min; 5 s depois esconde 1 min de novo (o mais novo manda).
-//   t≈60s → o timer ANTIGO vence: tem de ser DESCARTADO (janela segue escondida)
-//   t≈65s → o timer NOVO vence: aí sim volta
+//
+//	t≈60s → o timer ANTIGO vence: tem de ser DESCARTADO (janela segue escondida)
+//	t≈65s → o timer NOVO vence: aí sim volta
 func TestEsconderPorTimerAntigoNaoReexibe(t *testing.T) {
-	a := NewApp() // ctx nil: mede o relógio e o flag, não o WindowShow
-	a.EsconderPor(1)               // timer A vence em t≈60s
+	a := NewApp()    // ctx nil: mede o relógio e o flag, não o WindowShow
+	a.EsconderPor(1) // timer A vence em t≈60s
 	time.Sleep(5 * time.Second)
-	a.EsconderPor(1)               // timer B (mais novo) vence em t≈65s — ele manda
+	a.EsconderPor(1) // timer B (mais novo) vence em t≈65s — ele manda
 
 	// ⚠️ cronômetro: medir ENTRE os dois vencimentos. Antes eu dormia 5+62=67s, ou
 	// seja DEPOIS de B vencer, e o teste acusava bug onde não havia (lição).

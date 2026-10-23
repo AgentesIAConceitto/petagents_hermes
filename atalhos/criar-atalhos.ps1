@@ -1,11 +1,11 @@
-# criar-atalhos.ps1 — cria o atalho da AREA DE TRABALHO e o de INICIO AUTOMATICO
+# criar-atalhos.ps1 - cria o atalho da AREA DE TRABALHO e o de INICIO AUTOMATICO
 # do PetAgent, apontando para o lancador (lancar.vbs) que fica com o app.
 #
 #   powershell -ExecutionPolicy Bypass -File criar-atalhos.ps1
 #
 # Aditivo e reversivel: nao mexe em nada existente, so cria dois .lnk. Para
 # desfazer, apague os dois atalhos ("PetAgent.lnk" na area de trabalho e na pasta
-# Inicializacao) — o app e o lancador ficam onde estao.
+# Inicializacao) - o app e o lancador ficam onde estao.
 # ASCII puro: o PowerShell 5.1 le .ps1 como ANSI e acento quebra o parse.
 
 $ErrorActionPreference = "Stop"

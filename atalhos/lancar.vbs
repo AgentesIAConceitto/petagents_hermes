@@ -1,4 +1,4 @@
-' PetAgent — lancador (atalho da area de trabalho e inicio automatico usam ESTE arquivo).
+' PetAgent - lancador (atalho da area de trabalho e inicio automatico usam ESTE arquivo).
 '
 ' Faz o mesmo que o plugin faz em  hermes petagent iniciar :
 '   1) se o boneco JA esta na tela, nao abre um segundo (idempotente)
@@ -7,7 +7,7 @@
 '      janela elevada, e o anexo do chat depende disso; e o boneco nao precisa
 '      de privilegio de administrador para nada
 '   3) sem janela de console
-' E deixa rastro em %LOCALAPPDATA%\petagent\atalho.log — se um dia "nao subiu",
+' E deixa rastro em %LOCALAPPDATA%\petagent\atalho.log - se um dia "nao subiu",
 ' a resposta esta la, nao na memoria de ninguem.
 '
 ' Argumento opcional: o caminho do petagent.exe (ex.: o build\bin do repositorio,
