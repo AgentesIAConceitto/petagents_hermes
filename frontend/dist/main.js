@@ -810,11 +810,16 @@ function pintaCabecalhoChat() {
   else if (saldo !== null && saldo < 3) { cls = "aviso"; linha = "saldo baixo · " + linha; }
   // o detalhe técnico (gateway, motivo do saldo) continua acessível: passar o mouse
   const dica = [estado.detail, saldoTxt, infoChat.erro].filter(Boolean).join(" · ");
-  for (const [d, t, s] of [["dot", "balao-titulo", "balao-sub"], ["cg-dot", "cg-tit", "cg-sub"]]) {
+  // CONVERSAS (22/10/2026): o título é o da conversa aberta (conversas.js); o nome do pet
+  // desce para a linha de baixo. No chat grande, a pasta e as etiquetas vêm antes.
+  const titulo = typeof tituloConversa === "function" ? tituloConversa() : "";
+  const comNome = titulo && !ocupado ? [nome, linha].filter(Boolean).join(" · ") : linha;
+  const org = typeof rotuloOrganizacao === "function" ? rotuloOrganizacao() : "";
+  for (const [d, t, s, grande] of [["dot", "balao-titulo", "balao-sub", false], ["cg-dot", "cg-tit", "cg-sub", true]]) {
     const elD = document.getElementById(d), elT = document.getElementById(t), elS = document.getElementById(s);
     if (elD) { elD.className = "dot " + cls; elD.title = dica; }
-    if (elT) elT.textContent = nome;
-    if (elS) { elS.textContent = linha; elS.title = dica; }
+    if (elT) elT.textContent = titulo || nome;
+    if (elS) { elS.textContent = [grande ? org : "", comNome].filter(Boolean).join(" · "); elS.title = dica; }
   }
 }
 
@@ -907,12 +912,26 @@ function pintaConversa() {
     for (const m of conversa) {
       const el = document.createElement("div");
       el.className = "m " + m.quem;
-      el.innerHTML = formata(m.texto);
-      // rodapé discreto da resposta: hora e quanto levou (era a linha "via Hermes · 13.9 s")
-      if (m.hora || m.seg) {
+      // anexos (22/10/2026): os desta tela vêm em m.anexos (com miniatura); os de uma conversa
+      // reaberta vêm do Hermes como marcas no texto (@file:…, [User attached image: …])
+      const sep = m.quem === "eu" ? separaAnexosDoTexto(m.texto) : { texto: m.texto, anexos: [] };
+      const anexos = (m.anexos && m.anexos.length) ? m.anexos : sep.anexos;
+      if (anexos.length) {
+        el.classList.add("com-anexo");
+        el.appendChild(bolhaAnexos(anexos));
+      }
+      if (sep.texto.trim()) {
+        const tx = document.createElement("span");
+        tx.className = "m-texto";
+        tx.innerHTML = formata(sep.texto);
+        el.appendChild(tx);
+      }
+      // rodapé discreto da resposta: hora e quanto levou (era a linha "via Hermes · 13.9 s");
+      // na mensagem com anexo, quantos foram e o tamanho estimado em tokens
+      if (m.hora || m.seg || m.custo) {
         const rp = document.createElement("span");
         rp.className = "rodape-msg";
-        rp.textContent = [m.hora, m.seg ? String(m.seg).replace(".", ",") + " s" : ""].filter(Boolean).join(" · ");
+        rp.textContent = [m.custo, m.hora, m.seg ? String(m.seg).replace(".", ",") + " s" : ""].filter(Boolean).join(" · ");
         el.appendChild(rp);
       }
       if (m.quem !== "meta") { // linhas de status não ganham botão de copiar
@@ -929,6 +948,63 @@ function pintaConversa() {
   if (_vivoInicio) _pintaVivo(); // repintar a conversa não pode sumir com a bolha "digitando"
   rolarAoFim();   // antes era `alvo.scrollTop` por alvo: não pegava com o balão oculto
   ancoraBalao();
+}
+
+/* Marcas de anexo que o Hermes guarda no texto da mensagem (conversa reaberta): a ponte
+   acrescenta "@file:…" (texto/PDF) e o Hermes, "[User attached image: …]". Viram chips e
+   saem do texto. O PDF vai como "nome.pdf.txt": o chip mostra "nome.pdf". */
+function separaAnexosDoTexto(texto) {
+  const anexos = [];
+  const nomeDe = (c) => String(c).split(/[\\/]/).pop().replace(/\.pdf\.txt$/i, ".pdf");
+  let t = String(texto || "")
+    .replace(/\[User attached (image|PDF): ([^\]]+)\]/g, (_, tipo, n) => {
+      anexos.push({ nome: nomeDe(n.replace(/\s*\(\d+ page\(s\)\)$/, "")), tipo: tipo === "image" ? "imagem" : "pdf" });
+      return "";
+    })
+    .replace(/@file:(?:`([^`]+)`|"([^"]+)"|(\S+))/g, (_, a, b, c) => {
+      const n = nomeDe(a || b || c);
+      anexos.push({ nome: n, tipo: /\.pdf$/i.test(n) ? "pdf" : "texto" });
+      return "";
+    })
+    .replace(/^\[imagem\]$/gm, () => { anexos.push({ nome: "imagem", tipo: "imagem" }); return ""; });
+  return { texto: anexos.length ? t.trim() : String(texto || ""), anexos };
+}
+
+// o selo colorido do tipo (PDF vermelho, CSV verde…) — o mesmo nos chips da fila (anexo.js)
+function seloAnexo(a) {
+  const ext = (/\.([a-z0-9]+)$/i.exec(a.nome || "") || [, ""])[1].toLowerCase();
+  const s = document.createElement("span");
+  s.className = "selo-anexo " + (a.tipo === "imagem" ? "img" : a.tipo === "pdf" ? "pdf" : ext === "csv" || ext === "tsv" ? "csv" : "txt");
+  if (a.thumb) {
+    const img = document.createElement("img");
+    img.src = a.thumb;          // miniatura gerada aqui mesmo (canvas): data:image/jpeg
+    img.alt = "";
+    s.appendChild(img);
+  } else if (a.tipo === "imagem") {
+    s.innerHTML = icone("imagem", 16);
+  } else {
+    s.textContent = a.tipo === "pdf" ? "PDF" : (ext || "txt").slice(0, 4).toUpperCase();
+  }
+  return s;
+}
+
+function bolhaAnexos(anexos) {
+  const box = document.createElement("span");
+  box.className = "m-anexos";
+  for (const a of anexos) {
+    const c = document.createElement("span");
+    c.className = "m-anexo" + (a.thumb ? " foto" : "");
+    c.title = a.nome || "";
+    c.appendChild(seloAnexo(a));
+    if (!a.thumb) {
+      const n = document.createElement("span");
+      n.className = "m-anexo-nome";
+      n.textContent = a.nome || "anexo";
+      c.appendChild(n);
+    }
+    box.appendChild(c);
+  }
+  return box;
 }
 
 /* Copiar mensagem: a API de clipboard exige contexto seguro e no WebView2 nem
@@ -1033,10 +1109,16 @@ function reiniciarAuto() {
 
 async function enviarTexto(texto, input) {
   texto = (texto || "").trim();
-  if (!texto || ocupado) return;
+  if (ocupado) return;
+  // ANEXOS (anexo.js): os arquivos da fila vão junto. false = ainda há um lendo ou um grande
+  // esperando confirmação — a mensagem não sai (o aviso já está na tela)
+  const anx = typeof anexosDaMensagem === "function" ? anexosDaMensagem() : null;
+  if (anx === false) return;
+  const ids = anx ? anx.ids : [];
+  if (!texto && !ids.length) return;
   input.value = "";
   if (typeof pararFala === "function") pararFala(); // pergunta nova: a resposta antiga se cala
-  msg(texto, "eu");
+  msg(texto, "eu", ids.length ? { anexos: anx.itens, custo: anx.custo } : undefined);
   classePet("pensando");
   ocupado = true;                       // esperando resposta: o balão NÃO se esconde
   iniciaAoVivo();                       // a bolha "digitando" (era a linha "⏳ consultando…")
@@ -1046,7 +1128,19 @@ async function enviarTexto(texto, input) {
   reiniciarAuto();
   let resp = "(sem resposta)";
   const t0 = Date.now();
-  try { resp = G ? await G.SendChat(texto) : "(fora do Wails)"; } catch (e) { resp = "erro: " + e; }
+  let conversaResp = "";
+  try {
+    if (G && G.SendChatEm) {
+      // a conversa aberta na tela (conversas.js) + os anexos já preparados no Go
+      const aberta = typeof conversaAberta === "function" ? conversaAberta() : "";
+      const pedido = texto || "Dê uma olhada no que eu anexei e me diga o que tem.";
+      const r = JSON.parse(await G.SendChatEm(aberta, pedido, JSON.stringify(ids)));
+      resp = r.resposta || "(sem resposta)";
+      conversaResp = r.conversa || "";
+    } else {
+      resp = G ? await G.SendChat(texto) : "(fora do Wails)";
+    }
+  } catch (e) { resp = "erro: " + e; }
   const levou = Math.round((Date.now() - t0) / 100) / 10;
   ocupado = false;
   input.disabled = false;
@@ -1081,6 +1175,8 @@ async function enviarTexto(texto, input) {
     abrirBalao(false);                  // garante o balão aberto para mostrar a resposta
   }
   atualizaInfoChat();                   // o modelo pode ter chegado agora, com a resposta
+  // a lista de conversas: esta subiu para o topo (e o Hermes dá o título logo depois)
+  if (typeof conversaRespondida === "function") conversaRespondida(conversaResp);
   reiniciarAuto();
   reportarHit();
 }
@@ -1111,6 +1207,7 @@ function abrirChatGrande() {
     cg.style.top = Math.max(0, Math.min(innerHeight - 40, y)) + "px";
     cg.dataset.pos = "1";
   }
+  if (typeof aoAbrirChatGrande === "function") aoAbrirChatGrande(); // lista de conversas em dia
   document.getElementById("cg-txt").focus();
   reportarHit();
 }
