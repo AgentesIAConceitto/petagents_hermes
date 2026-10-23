@@ -64,24 +64,24 @@ function pintaIA() {
   if (!a || !pv) {
     p.innerHTML = `<div class="ap-topo">${icone("inteligencia")}<b>Inteligência</b>
       <button class="botao-x" data-fechar aria-label="Fechar">${icone("fechar", 18)}</button></div>
-      <p class="ap-dica">Não consegui ler a configuração agora. Feche e abra de novo.</p>`;
+      <p class="ap-dica">Não foi possível ler a configuração. Feche o painel e abra novamente.</p>`;
     p.querySelector("[data-fechar]").onclick = fecharInteligencia;
     return;
   }
   const salva = chaveSalvaIA();
   const ef = a.efetivo || {};
   const agora = ef.modelo
-    ? `Agora: <b>${escIA(ef.modelo)}</b> · ${escIA(ef.nome || ef.provedor)} · ${ef.modo === "boneco" ? "só do boneco" : "igual ao Hermes"}`
-    : "Ainda não há IA configurada.";
+    ? `Em uso: <b>${escIA(ef.modelo)}</b> · ${escIA(ef.nome || ef.provedor)} · ${ef.modo === "boneco" ? "Só para o boneco" : "Igual ao Hermes"}`
+    : "Nenhuma IA configurada ainda.";
   const dicaModo = ia.modo === "hermes"
-    ? "Vale para tudo que usa o seu Hermes: o boneco, o Telegram, o terminal."
+    ? "Vale para tudo o que usa o seu Hermes: o boneco, o Telegram e o terminal."
     : "Só o boneco usa esta IA. O resto do Hermes continua como está.";
   const status = ia.status
     ? `<div class="ia-status ${ia.status.tipo}">${escIA(ia.status.texto)}</div>` : "";
   p.innerHTML = `
     <div class="ap-topo">${icone("inteligencia")}<b>Inteligência</b>
       <button class="botao-x" data-fechar aria-label="Fechar">${icone("fechar", 18)}</button></div>
-    ${ia.boasVindas ? `<p class="ia-boas">Oi! Para eu conversar de verdade, preciso de uma IA. Escolha o provedor, cole a sua chave e pronto.</p>` : ""}
+    ${ia.boasVindas ? `<p class="ia-boas">Oi! Para conversar de verdade, eu preciso de uma IA. Escolha o provedor e cole a sua chave para começar.</p>` : ""}
     <p class="ap-dica">${agora}</p>
     <div class="ap-sec"><span>Onde vale</span>
       <div class="ap-seg ia-2">${[["hermes", "Igual ao Hermes"], ["boneco", "Só para o boneco"]].map(([v, r]) =>
@@ -93,13 +93,13 @@ function pintaIA() {
     <div class="ap-sec"><span>Chave</span>
       ${ia.trocandoChave || !salva
         ? `<input class="ia-campo" data-chave type="password" autocomplete="off" spellcheck="false"
-             placeholder="${escIA(pv.prefixo ? pv.prefixo + "…" : "cole a chave aqui")}" value="${escIA(ia.chaveNova)}">`
+             placeholder="${escIA(pv.prefixo ? pv.prefixo + "…" : "Cole a chave aqui")}" value="${escIA(ia.chaveNova)}">`
         : `<div class="ia-linha"><code class="ia-mascara">${escIA(salva)}</code>
              <button class="ia-bt sec" data-trocar>Trocar</button></div>`}
-      <a href="#" class="ia-link" data-pagina>onde pego a minha chave? ↗</a></div>
+      <a href="#" class="ia-link" data-pagina>Como obter a minha chave ↗</a></div>
     <div class="ap-sec"><span>Modelo</span>
       <input class="ia-campo" data-modelo list="ia-modelos" autocomplete="off" spellcheck="false"
-        placeholder="buscar ou digitar o modelo…" value="${escIA(ia.modelo)}">
+        placeholder="Busque ou digite o modelo…" value="${escIA(ia.modelo)}">
       <datalist id="ia-modelos">${ia.modelos.slice(0, 600).map((m) => `<option value="${escIA(m)}"></option>`).join("")}</datalist>
       <p class="ia-nota" data-nota-modelos>${notaModelosIA(pv)}</p></div>
     ${status}
@@ -139,14 +139,14 @@ function secaoVozIA() {
   if (!a) return "";
   const status = v.status ? `<div class="ia-status ${v.status.tipo}">${escIA(v.status.texto)}</div>` : "";
   return `
-    <div class="ap-sec"><span>Voz — falar pelo microfone do chat</span>
+    <div class="ap-sec"><span>Voz: falar pelo microfone do chat</span>
       ${v.trocando || !a.temChave
         ? `<input class="ia-campo" data-voz-chave type="password" autocomplete="off" spellcheck="false"
-             placeholder="chave do Groq (gsk_…)" value="${escIA(v.nova)}">`
+             placeholder="Chave do Groq (gsk_…)" value="${escIA(v.nova)}">`
         : `<div class="ia-linha"><code class="ia-mascara">${escIA(a.chave)}</code>
              <button class="ia-bt sec" data-voz-trocar>Trocar</button></div>`}
-      <p class="ia-nota">O áudio vira texto pelo Groq Whisper (conta grátis, ~1 s por frase).
-        <a href="#" class="ia-link" data-voz-pagina>criar a minha chave ↗</a></p>
+      <p class="ia-nota">O áudio é transcrito pelo Groq Whisper (conta gratuita, cerca de 1 s por frase).
+        <a href="#" class="ia-link" data-voz-pagina>Criar a minha chave ↗</a></p>
       ${status}
       ${v.trocando || !a.temChave
         ? `<div class="ia-acoes"><button class="ia-bt" data-voz-salvar ${v.ocupado ? "disabled" : ""}>Testar e salvar a voz</button></div>`
@@ -169,19 +169,19 @@ function ligaSecaoVozIA(q) {
 async function salvaVozIA() {
   const v = ia.voz;
   if (!v.nova.trim()) { v.status = { tipo: "erro", texto: "Cole a chave do Groq." }; pintaIA(); return; }
-  v.ocupado = true; v.status = { tipo: "info", texto: "testando a chave…" }; pintaIA();
-  let r = { ok: false, erro: "não consegui salvar" };
+  v.ocupado = true; v.status = { tipo: "info", texto: "Testando a chave…" }; pintaIA();
+  let r = { ok: false, erro: "não foi possível salvar a chave" };
   try { r = JSON.parse(await G.VozSalvar(v.nova.trim())); } catch (e) { }
   v.ocupado = false;
-  if (!r.ok) { v.status = { tipo: "erro", texto: "✗ " + r.erro }; pintaIA(); return; }
+  if (!r.ok) { v.status = { tipo: "erro", texto: "✗ " + fraseUI(r.erro) }; pintaIA(); return; }
   try { v.atual = JSON.parse(await G.VozAtual()); } catch (e) { }
   v.nova = ""; v.trocando = false;
-  v.status = { tipo: "ok", texto: "✓ Voz pronta: clique no microfone do chat e fale." };
+  v.status = { tipo: "ok", texto: "✓ Voz configurada. Clique no microfone do chat e fale." };
   pintaIA();
 }
 
 const notaModelosIA = (pv) => ia.modelos.length
-  ? ia.modelos.length + " modelos do " + escIA(pv.nome) : "a lista aparece quando a chave funciona";
+  ? ia.modelos.length + " modelos disponíveis · " + escIA(pv.nome) : "A lista de modelos aparece depois que a chave for validada.";
 
 async function buscaModelosIA() {
   const pv = provAtual();
@@ -200,13 +200,13 @@ async function buscaModelosIA() {
 async function testaIA() {
   const pv = provAtual();
   if (!pv) return;
-  ia.ocupado = true; ia.status = { tipo: "info", texto: "testando…" }; pintaIA();
-  let r = { ok: false, msg: "não consegui testar" };
+  ia.ocupado = true; ia.status = { tipo: "info", texto: "Testando…" }; pintaIA();
+  let r = { ok: false, msg: "não foi possível testar o acesso" };
   try { r = JSON.parse(await G.IATestar(pv.id, ia.chaveNova.trim())); } catch (e) { }
   ia.ocupado = false;
   ia.status = r.ok
-    ? { tipo: "ok", texto: "✓ " + r.msg + (r.saldo && /US\$/.test(r.saldo) ? " · saldo " + r.saldo.replace(".", ",") : "") }
-    : { tipo: "erro", texto: "✗ " + r.msg };
+    ? { tipo: "ok", texto: "✓ " + fraseUI(r.msg) + (r.saldo && /US\$/.test(r.saldo) ? " Saldo: " + r.saldo.replace(".", ",") + "." : "") }
+    : { tipo: "erro", texto: "✗ " + fraseUI(r.msg) };
   pintaIA();
   if (r.ok) buscaModelosIA();
 }
@@ -218,14 +218,14 @@ async function salvaIA() {
   ia.ocupado = true;
   // provedor que exige complemento do Hermes (ex.: Anthropic): o Go instala antes de gravar
   ia.status = { tipo: "info", texto: pv.complemento
-    ? "Instalando no Hermes o complemento do " + pv.nome + "… na primeira vez leva cerca de 1 min."
-    : "salvando…" };
+    ? "Instalando o complemento do " + pv.nome + " no Hermes. Na primeira vez, isso leva cerca de 1 minuto."
+    : "Salvando…" };
   pintaIA();
-  let r = { ok: false, erro: "não consegui salvar" };
+  let r = { ok: false, erro: "não foi possível salvar a configuração" };
   try {
     r = JSON.parse(await G.IASalvar(JSON.stringify({ modo: ia.modo, provedor: pv.id, modelo: ia.modelo.trim(), chave: ia.chaveNova.trim() })));
   } catch (e) { }
-  if (!r.ok) { ia.ocupado = false; ia.status = { tipo: "erro", texto: "✗ " + r.erro }; pintaIA(); return; }
+  if (!r.ok) { ia.ocupado = false; ia.status = { tipo: "erro", texto: "✗ " + fraseUI(r.erro) }; pintaIA(); return; }
   ia.boasVindas = false;
   ia.status = { tipo: "info", texto: "Salvo. Reiniciando o agente…" };
   pintaIA();
@@ -240,10 +240,10 @@ async function salvaIA() {
       ia.ocupado = false;
       // complemento instalado agora: o Telegram/terminal do Hermes já abertos só o veem ao reiniciar
       const avisoHermes = r.instalou && ia.atual && ia.atual.modo === "hermes"
-        ? " Instalei o complemento do " + pv.nome + " no Hermes: se o Telegram estiver aberto, reinicie o gateway." : "";
+        ? " O complemento do " + pv.nome + " foi instalado no Hermes. Se o Telegram estiver aberto, reinicie o gateway." : "";
       ia.status = pronta
-        ? { tipo: "ok", texto: "✓ Pronto: " + ((ia.atual && ia.atual.efetivo.modelo) || ia.modelo) + "." + avisoHermes }
-        : { tipo: "erro", texto: "O agente não voltou em 90 s. Vou responder pelo modo lento enquanto isso." };
+        ? { tipo: "ok", texto: "✓ Configuração salva. Modelo em uso: " + ((ia.atual && ia.atual.efetivo.modelo) || ia.modelo) + "." + avisoHermes }
+        : { tipo: "erro", texto: "✗ O agente não respondeu em 90 s. Enquanto isso, as respostas usarão o modo lento." };
       pintaIA();
     }
   }, 2000);

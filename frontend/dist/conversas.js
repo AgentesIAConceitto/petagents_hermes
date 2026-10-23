@@ -66,18 +66,18 @@ function salvaVisivel() {
 }
 
 const espereResposta = () =>
-  toast("relogio", "Espere a resposta", nomeDoPet() + " ainda está respondendo — depois dá para trocar de conversa.", 5000, true);
+  toast("relogio", "Aguarde a resposta", nomeDoPet() + " ainda está respondendo. Depois disso, você pode trocar de conversa.", 5000, true);
 
 /* ───────── falar com o Go ───────── */
 
 async function chamaConv(fn, ...args) {
-  if (!G || !G[fn]) return { ok: false, erro: "fora do app" };
+  if (!G || !G[fn]) return { ok: false, erro: "esta função só está disponível dentro do aplicativo" };
   try { return JSON.parse(await G[fn](...args)); } catch (e) { return { ok: false, erro: String(e) }; }
 }
 
 function avisaErroConv(r, titulo) {
   if (r.erro === "ocupado") return espereResposta();
-  const txt = /pronto|não respondeu/.test(r.erro || "") ? "O agente ainda está ligando — tente em instantes." : (r.erro || "");
+  const txt = /pronto|não respondeu/.test(r.erro || "") ? "O agente ainda está iniciando. Tente novamente em instantes." : fraseUI(r.erro || "");
   toast("alerta", titulo, txt, 7000, true);
 }
 
@@ -110,7 +110,7 @@ function horaDe(seg) {
 
 async function carregaMensagens(id) {
   const r = await chamaConv("ConversaAbrir", id);
-  if (!r.ok) { avisaErroConv(r, "Não abri a conversa"); return false; }
+  if (!r.ok) { avisaErroConv(r, "Não foi possível abrir a conversa"); return false; }
   conversa.length = 0;  // ⚠️ conversa é const no main.js: esvazia, não reatribui
   for (const m of r.mensagens || []) {
     conversa.push(Object.assign({ quem: m.quem, texto: m.texto },
@@ -139,7 +139,7 @@ async function abrirConversa(id) {
 async function novaConversa() {
   if (ocupado) return espereResposta();
   const r = await chamaConv("ConversaNova");
-  if (!r.ok) return avisaErroConv(r, "Não criei a conversa");
+  if (!r.ok) return avisaErroConv(r, "Não foi possível criar a conversa");
   guardaAtual(r.atual);
   conversa.length = 0;
   salvaVisivel();
@@ -175,7 +175,7 @@ function dataCurta(seg) {
   const dia = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const dif = Math.round((dia(hoje) - dia(d)) / 86400000);
   if (dif === 0) return horaDe(seg);
-  if (dif === 1) return "ontem";
+  if (dif === 1) return "Ontem";
   if (dif < 7) return d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
@@ -296,8 +296,8 @@ function pintaLista() {
   if (!itens.length) {
     const v = document.createElement("p");
     v.className = "lado-vazio";
-    v.textContent = !conv.pronta && !conv.lista.length ? "Ligando o agente…"
-      : conv.lista.length ? "Nada encontrado." : "Nenhuma conversa ainda.";
+    v.textContent = !conv.pronta && !conv.lista.length ? "Iniciando o agente…"
+      : conv.lista.length ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda.";
     box.appendChild(v);
     return;
   }
@@ -349,7 +349,7 @@ function itemLado(c) {
   const mais = document.createElement("button");
   mais.className = "lado-mais botao-x";
   mais.innerHTML = icone("reticencias", 16);
-  mais.title = "Renomear, pasta, etiquetas, excluir";
+  mais.title = "Renomear, mover para uma pasta, editar etiquetas ou excluir";
   mais.setAttribute("aria-label", "Opções de " + tituloDe(c));
   mais.onclick = (ev) => {
     ev.stopPropagation();
@@ -414,7 +414,7 @@ function abreModalExcluir(c) {
     m.innerHTML = `<div class="cmod-caixa" role="alertdialog" aria-modal="true" aria-labelledby="cmod-tit" aria-describedby="cmod-txt">
       <div class="cmod-ic">${icone("lixeira", 22)}</div>
       <b id="cmod-tit"></b>
-      <span id="cmod-txt">A conversa e os anexos dela somem do PetAgent e do histórico da IA. Não dá para desfazer.</span>
+      <span id="cmod-txt">A conversa e os anexos serão removidos do PetAgent e do histórico da IA. Essa ação não pode ser desfeita.</span>
       <div class="cmod-acoes"><button class="cm-bt" id="cmod-nao">Cancelar</button><button class="cm-bt perigo" id="cmod-sim">Excluir</button></div>
     </div>`;
     cg.appendChild(m);
@@ -440,14 +440,14 @@ function pintaMenuConv() {
   menuConvEl.innerHTML = `
     <label class="cm-rot" for="cm-nome">Nome da conversa</label>
     <input id="cm-nome" type="text" maxlength="80" autocomplete="off" />
-    <span class="cm-dica">Enter salva · o nome vem sozinho depois da 1ª resposta</span>
+    <span class="cm-dica">Pressione Enter para salvar. O nome é sugerido automaticamente após a primeira resposta.</span>
     <hr />
     <span class="cm-rot">Pasta</span>
     <div class="cm-pastas" id="cm-pastas"></div>
     <hr />
     <span class="cm-rot">Etiquetas</span>
     <div class="cm-tags" id="cm-tags"></div>
-    <input id="cm-tag" type="text" placeholder="adicionar etiqueta… (Enter)" autocomplete="off" aria-label="Adicionar etiqueta" />
+    <input id="cm-tag" type="text" placeholder="Adicionar etiqueta (Enter)" autocomplete="off" aria-label="Adicionar etiqueta" />
     <div class="cm-sug" id="cm-sug"></div>
     <hr />
     <button class="cm-excluir" id="cm-excluir">${icone("lixeira", 16)}Excluir conversa</button>`;
@@ -457,7 +457,7 @@ function pintaMenuConv() {
     const v = nome.value.trim();
     if (!v || v === (c.titulo || tituloDe(c))) return;
     const r = await chamaConv("ConversaRenomear", c.id, v);
-    if (!r.ok) return avisaErroConv(r, "Não renomeei");
+    if (!r.ok) return avisaErroConv(r, "Não foi possível renomear a conversa");
     c.titulo = r.titulo;
     pintaLado();
     pintaCabecalhoChat();
@@ -481,7 +481,7 @@ function pintaMenuConv() {
       const x = document.createElement("button");
       x.className = "cm-pasta-x botao-x mini";
       x.innerHTML = icone("fechar", 13);
-      x.title = "Apagar a pasta (as conversas dela vão para Sem pasta)";
+      x.title = "Apagar a pasta (as conversas vão para “Sem pasta”)";
       x.setAttribute("aria-label", "Apagar a pasta " + p);
       x.onclick = async () => {
         const r = await chamaConv("PastaExcluir", p);
@@ -497,7 +497,7 @@ function pintaMenuConv() {
   if (conv.novaPasta) {
     const campo = document.createElement("input");
     campo.type = "text";
-    campo.placeholder = "nome da pasta (Enter)";
+    campo.placeholder = "Nome da pasta (Enter)";
     campo.className = "cm-nova-pasta";
     campo.setAttribute("aria-label", "Nome da pasta nova");
     campo.onkeydown = (e) => {
@@ -522,7 +522,7 @@ function pintaMenuConv() {
     chip.textContent = "#" + e;
     const x = document.createElement("button");
     x.innerHTML = icone("fechar", 12);
-    x.setAttribute("aria-label", "Tirar a etiqueta " + e);
+    x.setAttribute("aria-label", "Remover a etiqueta " + e);
     x.onclick = () => organiza(c, c.pasta || "", et.filter((t) => t !== e));
     chip.appendChild(x);
     boxT.appendChild(chip);
@@ -532,7 +532,7 @@ function pintaMenuConv() {
   const pintaSug = () => {
     const termo = campoTag.value.trim().toLowerCase().replace(/^#/, "");
     const opc = todasEtiquetas().filter((t) => !et.includes(t) && (!termo || t.includes(termo))).slice(0, 8);
-    sug.innerHTML = opc.length ? '<span class="cm-dica">já usadas:</span>' : "";
+    sug.innerHTML = opc.length ? '<span class="cm-dica">Já usadas:</span>' : "";
     for (const t of opc) {
       const b = document.createElement("button");
       b.className = "cm-sug-bt";
@@ -553,7 +553,7 @@ function pintaMenuConv() {
 
 async function organiza(c, pasta, etiquetas) {
   const r = await chamaConv("ConversaOrganizar", c.id, pasta, JSON.stringify(etiquetas));
-  if (!r.ok) return avisaErroConv(r, "Não salvei");
+  if (!r.ok) return avisaErroConv(r, "Não foi possível salvar as alterações");
   c.pasta = r.pasta;
   c.etiquetas = r.etiquetas || [];
   if (r.pasta && !conv.pastas.includes(r.pasta)) conv.pastas = [...conv.pastas, r.pasta].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -567,7 +567,7 @@ async function organiza(c, pasta, etiquetas) {
 async function excluiConversa(id) {
   if (ocupado) return espereResposta();
   const r = await chamaConv("ConversaExcluir", id);
-  if (!r.ok) return avisaErroConv(r, "Não excluí");
+  if (!r.ok) return avisaErroConv(r, "Não foi possível excluir a conversa");
   fechaMenuConv();
   conv.lista = conv.lista.filter((c) => c.id !== id);
   if (id === conv.atual) {   // apagou a aberta: a ponte já passou para uma nova

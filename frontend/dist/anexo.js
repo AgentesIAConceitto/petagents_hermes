@@ -40,11 +40,11 @@ function tokensLegivel(t) {
 async function adicionarArquivos(lista) {
   for (const f of Array.from(lista || [])) {
     if (filaAnexos.length >= ANEXO_MAX) {
-      avisoAnexo("erro", `No máximo ${ANEXO_MAX} arquivos por mensagem — <b>${escHtml(f.name)}</b> ficou de fora.`);
+      avisoAnexo("erro", `O limite é de ${ANEXO_MAX} arquivos por mensagem. <b>${escHtml(f.name)}</b> não foi anexado.`);
       break;
     }
     if (f.size > ANEXO_MAX_MB * 1048576 && !ehImagemNome(f.name)) {
-      avisoAnexo("erro", `<b>${escHtml(f.name)} não foi.</b> Tem ${tamanhoLegivel(f.size)} e o limite é ${ANEXO_MAX_MB} MB por arquivo.`);
+      avisoAnexo("erro", `<b>${escHtml(f.name)} não foi anexado.</b> O arquivo tem ${tamanhoLegivel(f.size)}, e o limite é de ${ANEXO_MAX_MB} MB por arquivo.`);
       continue;
     }
     const item = { chave: ++_chaveAnexo, nome: f.name || "anexo", tipo: ehImagemNome(f.name) ? "imagem" : /\.pdf$/i.test(f.name) ? "pdf" : "texto",
@@ -65,13 +65,13 @@ async function preparaAnexo(item, f) {
     }
     r = JSON.parse(await G.AnexoPreparar(nome, await blobBase64(blob)));
   } catch (e) {
-    r = { ok: false, erro: "não consegui ler " + item.nome + " (" + (e && e.message || e) + ")" };
+    r = { ok: false, erro: "não foi possível ler " + item.nome + " (" + (e && e.message || e) + ")" };
   }
   const i = filaAnexos.indexOf(item);
   if (i < 0) { if (r.ok && G) G.AnexoDescartar(r.id); return; } // tirado enquanto lia
   if (!r.ok) {
     filaAnexos.splice(i, 1);
-    avisoAnexo("erro", escHtml(r.erro || "não deu para anexar"));
+    avisoAnexo("erro", escHtml(fraseUI(r.erro || "não foi possível anexar o arquivo")));
     return pintaFilaAnexos();
   }
   Object.assign(item, { id: r.id, tipo: r.tipo, tokens: r.tokens, paginas: r.paginas, semVisao: !!r.semVisao,
@@ -145,11 +145,11 @@ function dispensaAviso(a) {
 function anexosDaMensagem() {
   if (!filaAnexos.length) return { ids: [], itens: [], custo: "" };
   if (filaAnexos.some((i) => i.estado === "lendo")) {
-    toast("relogio", "Ainda lendo os anexos", "Um instante — envio quando terminar de ler.", 4000, true);
+    toast("relogio", "Lendo os anexos", "Aguarde um instante e envie novamente quando a leitura terminar.", 4000, true);
     return false;
   }
   if (filaAnexos.some((i) => i.estado === "confirmar")) {
-    toast("alerta", "Confirme o arquivo grande", "Escolha “Mandar assim mesmo” ou tire o arquivo.", 5000, true);
+    toast("alerta", "Confirme o arquivo grande", "Escolha “Enviar mesmo assim” ou remova o arquivo.", 5000, true);
     return false;
   }
   const itens = filaAnexos.map((i) => ({ nome: i.nome, tipo: i.tipo, thumb: i.thumb || "" }));
@@ -171,18 +171,18 @@ function avisosDaFila() {
   const lista = [];
   const cegas = filaAnexos.filter((i) => i.semVisao && i.estado !== "lendo");
   if (cegas.length) {
-    const modelo = (typeof infoChat !== "undefined" && infoChat.modelo) || "o modelo atual";
+    const modelo = (typeof infoChat !== "undefined" && infoChat.modelo) || "O modelo atual";
     lista.push({ tom: "aviso",
-      html: `<b>${escHtml(modelo)} não enxerga imagens.</b> Para analisar ${cegas.length > 1 ? "as imagens" : "a imagem"}, troque para Claude, GPT ou Gemini, ou tire e mande só o texto.`,
+      html: `<b>${escHtml(modelo)} não lê imagens.</b> Para analisar ${cegas.length > 1 ? "as imagens" : "a imagem"}, troque para um modelo com visão (Claude, GPT ou Gemini) ou remova ${cegas.length > 1 ? "as imagens" : "a imagem"} e envie só o texto.`,
       acoes: [{ r: "Trocar o modelo", prim: true, fn: () => { if (typeof abrirInteligencia === "function") abrirInteligencia(false); } },
-        { r: cegas.length > 1 ? "Tirar as imagens" : "Tirar a imagem", fn: () => cegas.forEach(tiraAnexo) }] });
+        { r: cegas.length > 1 ? "Remover as imagens" : "Remover a imagem", fn: () => cegas.forEach(tiraAnexo) }] });
   }
   for (const i of filaAnexos.filter((x) => x.estado === "confirmar")) {
     lista.push({ tom: "aviso",
       html: `<b>${escHtml(i.nome)} é grande:</b> ${tokensLegivel(i.tokens)}${i.paginas ? " (" + i.paginas + " páginas)" : ""}. ` +
-        "Ele volta junto em cada mensagem desta conversa. Mandar assim mesmo?",
-      acoes: [{ r: "Mandar assim mesmo", prim: true, fn: () => { i.estado = "pronto"; pintaFilaAnexos(); } },
-        { r: "Tirar", fn: () => tiraAnexo(i) }] });
+        "Ele é reenviado a cada mensagem desta conversa. Enviar mesmo assim?",
+      acoes: [{ r: "Enviar mesmo assim", prim: true, fn: () => { i.estado = "pronto"; pintaFilaAnexos(); } },
+        { r: "Remover", fn: () => tiraAnexo(i) }] });
   }
   return [...lista, ...avisosAnexo];
 }
@@ -217,14 +217,14 @@ function chipAnexo(i) {
   n.textContent = i.nome;
   const s = document.createElement("span");
   const tipo = i.tipo === "imagem" ? "imagem" : i.tipo === "pdf" ? (i.paginas ? i.paginas + " pág. · texto" : "PDF") : "texto";
-  s.textContent = i.estado === "lendo" ? (i.tipo === "pdf" ? "lendo o PDF…" : "preparando…")
+  s.textContent = i.estado === "lendo" ? (i.tipo === "pdf" ? "Lendo o PDF…" : "Preparando…")
     : [tamanhoLegivel(i.bytes), tipo, tokensLegivel(i.tokens)].filter(Boolean).join(" · ");
   txt.append(n, s);
   c.appendChild(txt);
   const x = document.createElement("button");
   x.className = "anexo-x";
   x.innerHTML = icone("fechar", 13);
-  x.title = "Tirar " + i.nome;
+  x.title = "Remover " + i.nome;
   x.setAttribute("aria-label", "Remover " + i.nome);
   x.onclick = () => tiraAnexo(i);
   c.appendChild(x);
@@ -292,7 +292,7 @@ function camadaSolta(sup) {
   s = document.createElement("div");
   s.className = "solta oculto";
   s.innerHTML = `<div class="solta-ic">${icone("subir", 28)}</div><b>Solte para anexar</b><span class="solta-qtd"></span>
-    <span class="solta-tipos">Imagem · PDF · texto (TXT, CSV, MD, JSON, código) · até ${ANEXO_MAX_MB} MB cada</span>`;
+    <span class="solta-tipos">Imagem, PDF ou texto (TXT, CSV, MD, JSON, código) · Até ${ANEXO_MAX_MB} MB cada</span>`;
   sup.appendChild(s);
   return s;
 }
@@ -306,7 +306,7 @@ const temArquivo = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || [
     dentro++;
     const s = camadaSolta(sup);
     const n = e.dataTransfer.items ? e.dataTransfer.items.length : 0;
-    s.querySelector(".solta-qtd").textContent = n > 1 ? n + " arquivos — entram na próxima mensagem desta conversa" : "Entra na próxima mensagem desta conversa";
+    s.querySelector(".solta-qtd").textContent = n > 1 ? n + " arquivos serão anexados à próxima mensagem desta conversa." : "O arquivo será anexado à próxima mensagem desta conversa.";
     s.classList.remove("oculto");
   });
   sup.addEventListener("dragover", (e) => { if (temArquivo(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });

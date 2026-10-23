@@ -49,7 +49,7 @@ import time
 try:
     import websockets
 except ImportError:  # pragma: no cover
-    print(json.dumps({"ok": False, "erro": "websockets ausente no venv"}))
+    print(json.dumps({"ok": False, "erro": "o pacote websockets não está instalado no ambiente do Hermes"}))
     raise SystemExit(2)
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -656,7 +656,7 @@ class Backend:
             return await asyncio.wait_for(self._operacao_impl(op, pedido), timeout=90)
         except asyncio.TimeoutError:
             log(f"op {op} ESTOUROU 90s")
-            return {"erro": f"a operação {op} demorou demais"}
+            return {"erro": f"A operação ({op}) demorou demais. Tente novamente."}
 
     async def _operacao_impl(self, op: str, pedido: dict) -> dict:
         conversa = str(pedido.get("conversa") or "").strip()
@@ -675,7 +675,7 @@ class Backend:
 
         if op == "nova":
             if not await self._nova_sessao():
-                return {"erro": "não consegui criar a conversa nova"}
+                return {"erro": "Não foi possível criar uma nova conversa."}
             return {"atual": self.chave}
 
         if op == "abrir":
@@ -686,7 +686,7 @@ class Backend:
             dados = _dados_do_rpc(r) or {}
             sid = str(dados.get("session_id") or "")
             if not sid:
-                return {"erro": "não consegui abrir essa conversa"}
+                return {"erro": "Não foi possível abrir esta conversa."}
             self.vivas[conversa] = sid
             self.sessao, self.chave = sid, conversa
             msgs = []
@@ -703,7 +703,7 @@ class Backend:
         if op == "renomear":
             titulo = str(pedido.get("titulo") or "").strip()
             if not titulo:
-                return {"erro": "nome vazio"}
+                return {"erro": "Dê um nome para a conversa."}
             sid = self.vivas.get(conversa, "")
             if not sid:   # resume preguiçoso: só para ter o id de execução, sem montar agente
                 r = await self.rpc("session.resume", {"session_id": conversa, "lazy": True,
@@ -711,7 +711,7 @@ class Backend:
                                    timeout=60)
                 sid = str((_dados_do_rpc(r) or {}).get("session_id") or "")
                 if not sid:
-                    return {"erro": "não achei essa conversa"}
+                    return {"erro": "Esta conversa não foi encontrada."}
                 self.vivas[conversa] = sid
             r = await self.rpc("session.title", {"session_id": sid, "title": titulo}, timeout=30)
             if "error" in r:
@@ -720,11 +720,11 @@ class Backend:
 
         if op == "excluir":
             if not conversa:
-                return {"erro": "qual conversa?"}
+                return {"erro": "Nenhuma conversa foi indicada."}
             # o Hermes recusa apagar sessão viva: a atual dá lugar a uma nova, e a de execução
             # que já tenha sido aberta aqui é fechada antes
             if conversa == self.chave and not await self._nova_sessao():
-                return {"erro": "não consegui sair dessa conversa para apagá-la"}
+                return {"erro": "Não foi possível sair desta conversa para excluí-la."}
             sid = self.vivas.pop(conversa, "")
             if sid:
                 try:
@@ -739,7 +739,7 @@ class Backend:
                     return {"erro": msg[:200]}
             return {"atual": self.chave}
 
-        return {"erro": f"operação desconhecida: {op}"}
+        return {"erro": f"Operação desconhecida: {op}."}
 
     async def subir(self) -> bool:
         if not porta_aberta(self.porta):
@@ -853,19 +853,19 @@ class Backend:
             anterior = self.sessao
             ok = await self._nova_sessao()
             if not ok:
-                return "não consegui criar a sessão nova — veja o ponte.log", time.time() - t0
+                return "Não foi possível criar uma nova sessão. Veja os detalhes no ponte.log.", time.time() - t0
             # Pedido do dono (10/10/2026): `/clear` limpa o CHAT e o contexto; `/new` também
             # pode limpar o chat. A tela limpa sozinha ao ver estes comandos (main.js,
             # `enviarTexto`) — a ponte só avisa o que aconteceu com o contexto.
             if nome in ("/reset", "/clear", "/limpar"):
-                return ("chat LIMPO e contexto zerado.\n\n"
-                        "• sessão nova: `%s`\n• anterior: `%s`\n\n"
-                        "O agente começa sem lembrar desta conversa. Memórias e personalidade "
-                        "continuam — são do perfil, não da sessão."
+                return ("Chat limpo e contexto zerado.\n\n"
+                        "• Sessão nova: `%s`\n• Sessão anterior: `%s`\n\n"
+                        "O agente começa sem lembrar desta conversa. As memórias e a personalidade "
+                        "continuam, pois pertencem ao perfil, e não à sessão."
                         % (self.sessao[:8], str(anterior)[:8])), time.time() - t0
-            return ("sessão NOVA criada — e o chat foi limpo.\n\n"
-                    "• sessão: `%s`\n• anterior: `%s`\n\n"
-                    "A conversa anterior sai do contexto; memórias e personalidade continuam."
+            return ("Nova sessão criada e chat limpo.\n\n"
+                    "• Sessão: `%s`\n• Sessão anterior: `%s`\n\n"
+                    "A conversa anterior saiu do contexto; as memórias e a personalidade continuam."
                     % (self.sessao[:8], str(anterior)[:8])), time.time() - t0
 
         if nome in ("/help", "/ajuda", "/comandos"):
@@ -880,12 +880,12 @@ class Backend:
                                timeout=240)
             saida = _texto_do_rpc(r)
             if not saida:
-                saida = (f"o comando `{nome}` rodou, mas não devolveu texto.\n"
-                         "(Se era /compact, veja o ponte.log.)")
+                saida = (f"O comando `{nome}` foi executado, mas não devolveu nenhum texto.\n"
+                         "(Se era /compact, veja os detalhes no ponte.log.)")
             return saida, time.time() - t0
         except Exception as e:  # noqa: BLE001
-            return (f"não consegui executar `{nome}`: {type(e).__name__}: {e}\n\n"
-                    "Comandos tratados pela própria ponte: /new, /reset, /status."
+            return (f"Não foi possível executar `{nome}`: {type(e).__name__}: {e}\n\n"
+                    "Comandos tratados pela própria ponte: /new, /reset e /status."
                     ), time.time() - t0
 
     async def _ajuda(self) -> str:
@@ -899,13 +899,13 @@ class Backend:
         """
         base = """COMANDOS DO CHAT
 
-Deste chat (sempre funcionam):
-  /new      sessão nova — limpa o chat e o contexto
+Comandos deste chat (sempre disponíveis):
+  /new      cria uma sessão nova (limpa o chat e o contexto)
   /clear    limpa o chat e o contexto
   /reset    zera a sessão e o chat
-  /status   modelo em uso, sessão, chamadas e tamanho do contexto
+  /status   mostra o modelo em uso, a sessão, as chamadas e o tamanho do contexto
   /compact  compacta o contexto (resume o histórico)
-  /help     esta lista"""
+  /help     mostra esta lista"""
         try:
             r = await self.rpc("commands.catalog", {}, timeout=8)
             pares = _paresDoCatalogo(r)
@@ -913,20 +913,20 @@ Deste chat (sempre funcionam):
             log(f"catalogo do Hermes nao veio a tempo ({type(e).__name__})")
             pares = []
         if pares:
-            base += "\n\nDo Hermes (o boneco executa os mesmos):"
+            base += "\n\nComandos do Hermes (o boneco também os executa):"
             base += "".join(f"\n  /{n.lstrip('/')}" + (f"  {d}" if d else "")
                             for n, d in pares[:60])
         else:
-            base += ("\n\nDo Hermes: o boneco executa os mesmos comandos do CLI/Telegram "
-                     "(/new, /clear, /compact, /history, /save, /retry, …). Digitar um comando "
-                     "desconhecido mostra a lista do próprio Hermes.")
+            base += ("\n\nComandos do Hermes: o boneco executa os mesmos comandos do CLI e do Telegram "
+                     "(/new, /clear, /compact, /history, /save, /retry, …). Ao digitar um comando "
+                     "desconhecido, o próprio Hermes mostra a lista completa.")
         return base
 
     async def _status(self) -> str:
         """O que o dono pediu no /status: TAMANHO DO CONTEXTO e a LLM em uso."""
         linhas = ["STATUS DA SESSÃO", ""]
-        linhas.append(f"• modelo: {self.modelo or '(não informado)'}")
-        linhas.append(f"• sessão: {self.sessao[:8] or '(sem sessão)'}")
+        linhas.append(f"• Modelo: {self.modelo or '(não informado)'}")
+        linhas.append(f"• Sessão: {self.sessao[:8] or '(sem sessão)'}")
         try:
             u = await self.rpc("session.usage", {"session_id": self.sessao}, timeout=30)
             uso = _dados_do_rpc(u) or {}
@@ -934,13 +934,13 @@ Deste chat (sempre funcionam):
             sai = uso.get("output") or 0
             tot = uso.get("total") or (ent + sai)
             chamadas = uso.get("calls") or 0
-            linhas.append(f"• chamadas nesta sessão: {chamadas}")
-            linhas.append(f"• tokens: entrada {ent:,} · saída {sai:,} · total {tot:,}".replace(",", "."))
+            linhas.append(f"• Chamadas nesta sessão: {chamadas}")
+            linhas.append(f"• Tokens: entrada {ent:,} · saída {sai:,} · total {tot:,}".replace(",", "."))
             if ent:
                 linhas.append("")
                 linhas.append(_barraDeContexto(ent))
         except Exception as e:  # noqa: BLE001
-            linhas.append(f"• uso: não consegui medir ({type(e).__name__})")
+            linhas.append(f"• Uso: não foi possível medir ({type(e).__name__})")
         linhas.append("")
         linhas.append("Comandos: /new (sessão nova) · /reset (zerar) · /compact (compactar) · /status")
         return "\n".join(linhas)
@@ -983,7 +983,7 @@ Deste chat (sempre funcionam):
                 continue
             nome = str(a.get("nome") or "anexo")
             b64 = str(a.get("base64") or "")
-            _progresso("passo", f"anexando {nome}")
+            _progresso("passo", f"Anexando {nome}")
             if a.get("tipo") == "imagem":
                 r = await self.rpc("image.attach_bytes", {"session_id": self.sessao,
                                                           "content_base64": b64, "filename": nome},
@@ -1008,14 +1008,14 @@ Deste chat (sempre funcionam):
         # AVISO IMEDIATO (10/10/2026): medido — o modelo passa o tempo PENSANDO e o texto sai
         # em rajada no fim, então só transmitir o texto deixaria o balão parado de novo. Este
         # primeiro aviso garante que a tela mostra movimento desde o primeiro instante.
-        _progresso("passo", "pensando")
+        _progresso("passo", "Pensando")
         if anexos:
             refs, erro = await self._anexar(anexos)
             if erro:
                 return erro, time.time() - t0
             if refs:
                 texto = texto + "\n\n" + "\n".join(refs)
-            _progresso("passo", "pensando")
+            _progresso("passo", "Pensando")
         await self.ws.send(json.dumps({"jsonrpc": "2.0", "id": f"p{self.seq + 1}",
                                        "method": "prompt.submit",
                                        "params": {"session_id": self.sessao, "text": texto}}))
@@ -1101,7 +1101,7 @@ async def servico(bk: "Backend", args) -> int:
     t0 = time.time()
     if not await bk.subir():
         log("não consegui subir o backend próprio")
-        print(json.dumps({"ok": False, "pronto": False, "erro": "backend não subiu"}), flush=True)
+        print(json.dumps({"ok": False, "pronto": False, "erro": "o backend do Hermes não iniciou"}), flush=True)
         return 3
     log(f"pronto em {time.time() - t0:.1f}s (porta {bk.porta})")
 
@@ -1144,7 +1144,7 @@ async def servico(bk: "Backend", args) -> int:
         try:
             if pedido.get("conversa") and not await bk.usar_conversa(str(pedido["conversa"])):
                 print(json.dumps({"ok": True, "id": _pedido_atual, "conversa": bk.chave,
-                                  "resposta": "não consegui abrir essa conversa — veja o ponte.log"},
+                                  "resposta": "Não foi possível abrir esta conversa. Veja os detalhes no ponte.log."},
                                  ensure_ascii=False), flush=True)
                 continue
             resp, seg = await bk.perguntar(p, anexos=anexos)
@@ -1183,7 +1183,7 @@ def _erro_legivel(msg: str) -> str:
     msg = re.sub(r"^Hermes could not start the assistant for this session\.\s*(Details:\s*)?", "", msg.strip())
     if len(msg) > 400:
         msg = msg[:400] + "…"
-    return f"Não consegui responder — o Hermes avisou um erro:\n\n{msg}\n\n(Detalhe no ponte.log.)"
+    return f"Não consegui responder, pois o Hermes informou um erro:\n\n{msg}\n\n(Detalhes no ponte.log.)"
 
 
 def _sem_contexto_anexado(t: str) -> str:

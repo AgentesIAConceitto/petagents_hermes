@@ -435,6 +435,17 @@ select.ia-campo { cursor: pointer; }
 .ia-status.ok { color: #1f9d55; background: rgba(53,208,127,.12); }
 .ia-status.erro { color: var(--perigo); background: rgba(255,82,82,.10); }
 :root[data-tema="escuro"] .ia-status.ok { color: #5fe39a; }
+
+/* Contas de e-mail (email-contas.js) — mesmo visual da Inteligência */
+.aparencia.ec { width: 360px; }
+.ec-conta { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--raio-interno); background: var(--sup); }
+.ec-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ec-info b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-info > span { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-estado.ok { color: #1f9d55; }
+.ec-estado.erro { color: var(--perigo); }
+:root[data-tema="escuro"] .ec-estado.ok { color: #5fe39a; }
+.ec-2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 8px; }
 .ap-amostra {
   display: flex; justify-content: space-between; padding: 10px 14px;
   background: var(--sup); border-radius: var(--raio-botao); color: var(--icone);
@@ -464,6 +475,7 @@ select.ia-campo { cursor: pointer; }
 .pn-sec span { font-size: 12px; color: var(--sub); }
 .pn-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
 .pn-aviso { padding: 10px 12px; border-radius: var(--raio-interno); background: rgba(242,179,61,.14); font-size: 12.5px; }
+.pn-numeros .pn-aviso { grid-column: 1 / -1; }
 .pn-rodape { display: flex; align-items: center; gap: 8px; }
 .pn-rodape .pn-nota { flex: 1; }
 :where(.painel-n, .toast, .col, .premio) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
@@ -979,6 +991,19 @@ select.ia-campo { cursor: pointer; }
 .painel-n .email-item .bt.lixo { background: rgba(255,82,82,.10); color: var(--perigo); }
 :root[data-tema="escuro"] .painel-n .email-item .bt.imp { color: #5FE39A; }
 .painel-n .email-item .bt:hover { filter: brightness(1.15); }
+.email [hidden] { display: none !important; }
+.pn-numeros .email-vazio { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.email-vazio b { font-size: 14px; font-weight: 600; color: var(--texto); }
+.email-vazio .pn-bt { margin-top: 6px; }
+/* importantes + resumo (23/10/2026) */
+.email-lista.email-imp { max-height: 260px; }
+.email-lista:not(.email-imp) { max-height: 200px; }
+.email-item .txt[title] { cursor: pointer; }
+.email-res { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--texto); white-space: normal; }
+.email-res:empty { display: none; }
+.painel-n .email-item .bt.res { background: var(--sup); color: var(--texto); }
+.painel-n .email-item .bt.abrir { background: var(--acento); color: #fff; }
+.painel-n .email-item .bt:disabled { opacity: .55; cursor: default; }
 .email-vazio { padding: 18px; border-radius: var(--raio-interno); background: var(--sup); text-align: center; font-size: 13px; color: var(--sub); }
 
 /* ── PRESENTE ACHADO (22/10/2026): nasce em cima do boneco; clicar abre a Coleção ── */

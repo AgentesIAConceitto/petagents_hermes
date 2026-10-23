@@ -135,11 +135,11 @@ func TestAnexoSaiDaEsperaUmaVez(t *testing.T) {
 
 func TestModeloSemVisao(t *testing.T) {
 	casos := map[[2]string]bool{
-		{"deepseek", "deepseek-chat"}:              true,
-		{"openrouter", "deepseek/deepseek-r1"}:     true,
+		{"deepseek", "deepseek-chat"}:             true,
+		{"openrouter", "deepseek/deepseek-r1"}:    true,
 		{"openrouter", "anthropic/claude-sonnet"}: false,
-		{"openai-api", "gpt-5"}:                    false,
-		{"openai-api", "o3-mini"}:                  true,
+		{"openai-api", "gpt-5"}:                   false,
+		{"openai-api", "o3-mini"}:                 true,
 	}
 	for c, quer := range casos {
 		if got := modeloSemVisao(c[0], c[1]); got != quer {

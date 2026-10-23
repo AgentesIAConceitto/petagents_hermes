@@ -86,10 +86,21 @@ bicho que *também* cuida de você é útil.
   galeria 💎.
 
 **E-mail (opcional)**
-- Lê a caixa do Outlook por COM **não-elevado**, avisa só o que é importante e
-  **aprende** com você (marca como importante/lixo pelo painel).
-- Desenhado para nunca atrapalhar o Outlook do dono: se o Outlook estiver fechado, ele
-  **adia** a leitura em vez de abrir uma instância invisível.
+- Lê **uma ou várias contas** direto do servidor (IMAP): Gmail / Google Workspace,
+  Hotmail / Outlook.com, Microsoft 365, Yahoo ou qualquer e-mail empresarial com IMAP.
+  Não precisa de programa de e-mail instalado.
+- Avisa só o que é importante e **aprende** com você (marca como importante/lixo pelo
+  painel). As regras valem para todas as contas.
+- **Resumo**: os e-mails importantes que chegam são resumidos sozinhos (2 a 4 frases: do
+  que se trata, o que pedem, prazos e valores). O resumo aparece no balão e no painel,
+  com o botão **Abrir** para responder no webmail da conta. Nos outros e-mails, clique
+  para resumir. O texto do e-mail vai para a IA do painel **Inteligência**, numa chamada
+  direta à API do modelo, sem passar pelo agente do Hermes (que tem ferramentas): um
+  e-mail malicioso não vira comando.
+- **Só leitura**: abre a caixa em modo só leitura (`EXAMINE`); o texto, quando é preciso
+  resumir, vem com `BODY.PEEK[]`. Nada é apagado, movido ou marcado como lido.
+- Senhas e tokens ficam cifrados com DPAPI em `%LOCALAPPDATA%\petagent\email_contas.json`
+  e nunca voltam para a tela.
 
 ### Arquitetura
 
@@ -124,7 +135,7 @@ bicho que *também* cuida de você é útil.
 |---|---|
 | Rodar | Windows 10/11 (x64), WebView2 (já vem no Windows 11 e no Edge), **Hermes** instalado |
 | Compilar | Go 1.22+, [Wails v2](https://wails.io), Node só para checagem de sintaxe |
-| E-mail (opcional) | Outlook desktop + os scripts em `mail/` rodando **não-elevados** |
+| E-mail (opcional) | Uma conta com IMAP (Gmail e Yahoo pedem senha de app; Hotmail e Microsoft 365 entram pelo navegador) |
 
 ### Instalação
 
@@ -143,10 +154,38 @@ hermes petagent parar
 hermes petagent instalar --origem "caminho/para/petagent.exe"
 ```
 
-E-mail (opcional): copie `mail/poll.ps1` e `mail/poll_silencioso.vbs` para
-`C:\petagent_mail\`, ajuste a conta no topo do `poll.ps1` e o app cuida do resto.
-**O leitor de e-mail roda não-elevado de propósito** — o COM do Outlook não enxerga a
-instância do usuário quando o processo é elevado.
+E-mail (opcional): menu do boneco › **E-mail** › **Contas** › escolha o provedor.
+
+| Provedor | Como entra |
+|---|---|
+| Gmail / Google Workspace | e-mail + **senha de app** (precisa da verificação em 2 etapas; crie em myaccount.google.com/apppasswords) |
+| Hotmail / Outlook.com e Microsoft 365 | botão **Entrar com a Microsoft** (login no navegador; a senha não passa pelo boneco) |
+| Yahoo | e-mail + senha de app |
+| Outro / empresarial | servidor IMAP, porta (993) e senha |
+
+A conta só é salva depois que o login e a primeira leitura funcionam. Depois disso o
+boneco lê as contas a cada 10 minutos (ou no **Verificar agora**).
+
+Quem usava a versão antiga (leitor pelo Outlook instalado) pode apagar a pasta
+`C:\petagent_mail`: ela não é mais usada.
+
+#### Ativar o login da Microsoft (uma vez, para quem distribui o app)
+
+A Microsoft não aceita mais senha em programas de terceiros, só login pelo navegador
+(OAuth). Para isso o app precisa estar registrado no Entra ID (gratuito):
+
+1. [portal.azure.com](https://portal.azure.com) › **Microsoft Entra ID** › **App registrations** › **New registration**.
+2. *Supported account types*: **Accounts in any organizational directory and personal Microsoft accounts**.
+3. *Redirect URI*: plataforma **Public client/native (mobile & desktop)**, endereço `http://localhost`.
+4. Em **Authentication**, ligue **Allow public client flows**.
+5. Em **API permissions** › *Add a permission* › **APIs my organization uses** ›
+   *Office 365 Exchange Online* › **Delegated** › `IMAP.AccessAsUser.All`. Acrescente
+   também `offline_access`, `openid`, `email` e `profile` (Microsoft Graph).
+6. Copie o **Application (client) ID** para `msClientID` em `email_oauth.go` e compile.
+
+Sem o client ID, Gmail, Yahoo e "Outro" funcionam normalmente; as opções da Microsoft
+aparecem como "em breve". Em contas de empresa, o TI pode ter bloqueado o IMAP ou o
+consentimento de apps; a tela mostra a mensagem da Microsoft nesses casos.
 
 ### Compilar do código
 
@@ -201,8 +240,9 @@ powershell -ExecutionPolicy Bypass -File atalhos\criar-atalhos.ps1
 Cria dois atalhos "PetAgent": um na **área de trabalho** e outro na pasta
 **Inicialização** (sobe o boneco sozinho no login). O lançador
 (`atalhos/lancar.vbs`) é **idempotente** (não abre um segundo boneco se já houver um
-na tela), sobe o app **pelo `explorer.exe`** — contexto **não-elevado**, que o COM do
-Outlook exige — e registra o que fez em `%LOCALAPPDATA%\petagent\atalho.log`.
+na tela), sobe o app **pelo `explorer.exe`** — contexto **não-elevado**, sem o qual o
+Windows bloqueia arrastar arquivos do Explorer para o chat — e registra o que fez em
+`%LOCALAPPDATA%\petagent\atalho.log`.
 Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
 
 ### Decisões de projeto (o porquê das regras)
@@ -224,8 +264,10 @@ Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
   esbarrar no timeout de keepalive. A migração para `/api/ws` direto está no roadmap.
 - O áudio do WebView2 só é liberado depois do primeiro clique/tecla na página: o
   primeiro recado após subir o app pode sair mudo.
-- O leitor de e-mail depende do Outlook desktop e de um caminho fixo
-  (`C:\petagent_mail`) — parametrizar está no roadmap.
+- E-mail: lê só a **Caixa de Entrada** (as últimas 50 mensagens de cada conta). O login
+  pelo navegador do Google não está disponível (exigiria a revisão de segurança do
+  Google); o Gmail entra com senha de app. O resumo usa a IA configurada no painel
+  Inteligência: sem chave lá, os balões saem só com remetente e assunto.
 - **Anexos**: Word, Excel e PowerPoint ainda não vão direto (salve como PDF/CSV); vídeo e
   áudio anexado não são aceitos. O PDF vai só como texto: gráfico e foto de dentro dele a IA
   não vê. Com o agente rápido fora do ar, a mensagem com anexo não vai pelo modo lento.
@@ -309,10 +351,21 @@ human biology, because a pet that only asks for things is annoying, and a pet th
   gallery 💎.
 
 **E-mail (optional)**
-- Reads the Outlook mailbox over COM **non-elevated**, notifies only about what matters
-  and **learns** from you (mark things important/junk in the panel).
-- Built to never disturb the owner's Outlook: if Outlook is closed, it **defers** the
-  read instead of launching an invisible instance.
+- Reads **one or more accounts** straight from the server (IMAP): Gmail / Google
+  Workspace, Hotmail / Outlook.com, Microsoft 365, Yahoo or any business mailbox with
+  IMAP. No mail client needed.
+- Notifies only about what matters and **learns** from you (mark things important/junk
+  in the panel). Rules apply to every account.
+- **Summary**: important incoming e-mails are summarized automatically (2–4 sentences:
+  what it is about, what is asked, deadlines and amounts). The summary shows in the
+  toast and in the panel, with an **Abrir** button to reply in the account's webmail.
+  Other e-mails are summarized on click. The e-mail text goes to the AI set in the
+  **Inteligência** panel through a direct model API call, never through the Hermes
+  agent (which has tools): a malicious e-mail cannot become a command.
+- **Read-only**: the mailbox is opened read-only (`EXAMINE`); the text, when a summary
+  is needed, is fetched with `BODY.PEEK[]`. Nothing is deleted, moved or marked as read.
+- Passwords and tokens are DPAPI-encrypted in `%LOCALAPPDATA%\petagent\email_contas.json`
+  and never sent back to the UI.
 
 ### Architecture
 
@@ -347,7 +400,7 @@ human biology, because a pet that only asks for things is annoying, and a pet th
 |---|---|
 | Running | Windows 10/11 (x64), WebView2 (bundled with Windows 11 and Edge), **Hermes** installed |
 | Building | Go 1.22+, [Wails v2](https://wails.io), Node only for syntax checks |
-| E-mail (optional) | Outlook desktop + the scripts in `mail/` running **non-elevated** |
+| E-mail (optional) | An account with IMAP (Gmail and Yahoo need an app password; Hotmail and Microsoft 365 sign in through the browser) |
 
 ### Install
 
@@ -366,10 +419,36 @@ hermes petagent parar
 hermes petagent instalar --origem "path/to/petagent.exe"
 ```
 
-E-mail (optional): copy `mail/poll.ps1` and `mail/poll_silencioso.vbs` to
-`C:\petagent_mail\`, set your account at the top of `poll.ps1`, and the app does the
-rest. **The mail reader runs non-elevated on purpose** — Outlook's COM cannot see the
-user's instance when the caller is elevated.
+E-mail (optional): pet menu › **E-mail** › **Contas** › pick the provider.
+
+| Provider | How it signs in |
+|---|---|
+| Gmail / Google Workspace | address + **app password** (needs 2-Step Verification; create it at myaccount.google.com/apppasswords) |
+| Hotmail / Outlook.com and Microsoft 365 | **Entrar com a Microsoft** button (browser sign-in; the password never goes through the pet) |
+| Yahoo | address + app password |
+| Other / business | IMAP server, port (993) and password |
+
+An account is saved only after sign-in and the first read succeed. From then on the
+pet reads every account every 10 minutes (or on **Verificar agora**). Users of the old
+version (Outlook-installed reader) can delete `C:\petagent_mail`: it is no longer used.
+
+#### Enabling Microsoft sign-in (once, for whoever distributes the app)
+
+Microsoft no longer accepts passwords from third-party apps, only browser sign-in
+(OAuth), so the app must be registered in Entra ID (free):
+
+1. [portal.azure.com](https://portal.azure.com) › **Microsoft Entra ID** › **App registrations** › **New registration**.
+2. *Supported account types*: **Accounts in any organizational directory and personal Microsoft accounts**.
+3. *Redirect URI*: platform **Public client/native (mobile & desktop)**, address `http://localhost`.
+4. Under **Authentication**, turn on **Allow public client flows**.
+5. **API permissions** › *Add a permission* › **APIs my organization uses** ›
+   *Office 365 Exchange Online* › **Delegated** › `IMAP.AccessAsUser.All`. Also add
+   `offline_access`, `openid`, `email` and `profile` (Microsoft Graph).
+6. Copy the **Application (client) ID** into `msClientID` in `email_oauth.go` and build.
+
+Without the client ID, Gmail, Yahoo and "Other" still work; the Microsoft options show
+as "em breve" (coming soon). On business accounts IT may have blocked IMAP or app
+consent; the panel shows Microsoft's message in that case.
 
 ### Build from source
 
@@ -424,7 +503,8 @@ It creates two "PetAgent" shortcuts: one on the **desktop** and one in the
 **Startup** folder (so the pet comes back by itself at logon). The launcher
 (`atalhos/lancar.vbs`) is **idempotent** (it will not open a second pet if one is
 already on screen), starts the app **through `explorer.exe`** — a **non-elevated**
-context, which Outlook's COM requires — and records what it did in
+context, without which Windows blocks dragging files from Explorer into the chat — and
+records what it did in
 `%LOCALAPPDATA%\petagent\atalho.log`. To undo, delete both `.lnk` files; the app and
 the launcher stay where they are.
 
@@ -447,8 +527,10 @@ the launcher stay where they are.
   keepalive timeout. Migrating to `/api/ws` directly is on the roadmap.
 - WebView2 only unlocks audio after the first click/keypress on the page: the very
   first message after startup may be silent.
-- The e-mail reader depends on Outlook desktop and a fixed path
-  (`C:\petagent_mail`) — making it configurable is on the roadmap.
+- E-mail: only the **Inbox** is read (the latest 50 messages of each account). Google
+  browser sign-in is not available (it would require Google's security review); Gmail
+  uses an app password. Summaries use the AI set in the Inteligência panel: without a
+  key there, toasts show only sender and subject.
 - **Attachments**: Word/Excel/PowerPoint must be saved as PDF/CSV first; video and audio
   files are not accepted; PDFs go as text only (charts and photos inside them are not seen).
 - Sprites come from PetDex at runtime; the artwork belongs to its original authors.
