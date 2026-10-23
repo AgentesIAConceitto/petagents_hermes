@@ -73,7 +73,7 @@ const ctx = vm.createContext({
   reportarHit: () => {},
   marcarEmail: () => {},
 });
-for (const nome of ["escHtml", "dominioDe", "itemEmail", "renderEmail"]) {
+for (const nome of ["escHtml", "fraseUI", "dominioDe", "itemEmail", "renderEmail"]) {
   const src = extrai(nome);
   if (src) vm.runInContext(src, ctx);
 }
@@ -96,12 +96,12 @@ for (const nome of ["escHtml", "dominioDe", "itemEmail", "renderEmail"]) {
   // sem conta nenhuma: o painel oferece "Adicionar conta" (e nao quebra)
   ctx.G = { EmailResumo: async () => JSON.stringify({ sem_contas: true, erro: ATAQUE }) };
   criados.length = 0;
-  fixos["email-lista"].filhos = [];
+  fixos["email-resumo"].filhos = [];
   await vm.runInContext("renderEmail()", ctx);
   const html2 = [fixos["email-lista"], fixos["email-resumo"], ...criados].map((e) => e.innerHTML).join("\n");
   if (/<img|<script/i.test(html2)) falhas.push("sem contas: o erro virou tag de verdade");
-  if (!html2.includes("&lt;img")) falhas.push("sem contas: o texto do erro sumiu");
-  if (!fixos["email-lista"].filhos.some((b) => b.textContent === "Adicionar conta"))
+  if (!html2.includes("Nenhuma conta conectada")) falhas.push("sem contas: faltou o estado vazio");
+  if (!fixos["email-resumo"].filhos.some((b) => b.textContent === "Adicionar conta"))
     falhas.push("sem contas: faltou o botao Adicionar conta");
   if (falhas.length) {
     console.log("FALHOU:\n  - " + falhas.join("\n  - ") + "\n\nHTML gerado:\n" + html2);

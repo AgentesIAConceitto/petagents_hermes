@@ -36,10 +36,10 @@ async function carregaEC() {
 }
 
 function estadoContaEC(c) {
-  if (c.estado === "ok") return `<span class="ec-estado ok">lida às ${escEC(String(c.verificado_em || "").slice(11, 16))}</span>`;
-  if (c.estado === "precisa_entrar") return `<span class="ec-estado erro">precisa entrar de novo</span>`;
-  if (c.estado === "erro") return `<span class="ec-estado erro" title="${escEC(c.erro)}">não leu: ${escEC(c.erro)}</span>`;
-  return `<span class="ec-estado">ainda não lida</span>`;
+  if (c.estado === "ok") return `<span class="ec-estado ok">Atualizada às ${escEC(String(c.verificado_em || "").slice(11, 16))}</span>`;
+  if (c.estado === "precisa_entrar") return `<span class="ec-estado erro">É preciso entrar novamente</span>`;
+  if (c.estado === "erro") return `<span class="ec-estado erro" title="${escEC(fraseUI(c.erro))}">Falha na leitura: ${escEC(fraseUI(c.erro))}</span>`;
+  return `<span class="ec-estado">Aguardando a primeira leitura</span>`;
 }
 
 function pintaEC() {
@@ -55,21 +55,21 @@ function pintaEC() {
           ? `<button class="ia-bt" data-reentrar="${escEC(c.id)}" ${ec.esperandoMS ? "disabled" : ""}>Entrar de novo</button>` : ""}
         <button class="ia-bt sec" data-remover="${escEC(c.id)}">${ec.confirmaRemover === c.id ? "Confirmar" : "Remover"}</button>
       </div>`).join("")
-    : `<p class="ia-nota">Nenhuma conta ainda.</p>`;
+    : `<p class="ia-nota">Nenhuma conta conectada.</p>`;
 
   let campos = "";
   if (pv && pv.auth === "senha") {
     campos = `
       <input class="ia-campo" data-usuario type="email" autocomplete="off" spellcheck="false"
-        placeholder="seu e-mail" value="${escEC(ec.usuario)}">
+        placeholder="Endereço de e-mail" value="${escEC(ec.usuario)}">
       ${pv.id === "outro" ? `
       <div class="ec-2">
         <input class="ia-campo" data-host autocomplete="off" spellcheck="false"
-          placeholder="servidor IMAP (ex.: imap.suaempresa.com.br)" value="${escEC(ec.host)}">
+          placeholder="Servidor IMAP (ex.: imap.suaempresa.com.br)" value="${escEC(ec.host)}">
         <input class="ia-campo" data-porta type="number" min="1" max="65535" value="${escEC(ec.porta)}" title="porta (993 = IMAP com TLS)">
       </div>` : ""}
       <input class="ia-campo" data-senha type="password" autocomplete="off" spellcheck="false"
-        placeholder="${pv.id === "outro" ? "senha" : "senha de app"}" value="${escEC(ec.senha)}">
+        placeholder="${pv.id === "outro" ? "Senha" : "Senha de app"}" value="${escEC(ec.senha)}">
       <div class="ia-acoes"><button class="ia-bt" data-salvar ${ec.ocupado ? "disabled" : ""}>Testar e salvar</button></div>`;
   } else if (pv && pv.auth === "microsoft") {
     campos = pv.disponivel
@@ -81,13 +81,13 @@ function pintaEC() {
   p.innerHTML = `
     <div class="ap-topo">${icone("email")}<b>Contas de e-mail</b>
       <button class="botao-x" data-fechar aria-label="Fechar">${icone("fechar", 18)}</button></div>
-    <p class="ap-dica">Só leitura: eu vejo o remetente e o assunto. Nunca apago, movo ou marco nada.</p>
+    <p class="ap-dica">Somente leitura: nenhuma mensagem é apagada, movida ou marcada como lida. Os e-mails importantes são resumidos pela IA configurada em Inteligência.</p>
     <div class="ap-sec"><span>Suas contas</span>${lista}</div>
     <div class="ap-sec"><span>Adicionar conta</span>
       <select class="ia-campo" data-prov>${provedoresEC.map((x) =>
-        `<option value="${escEC(x.id)}" ${x.id === ec.prov ? "selected" : ""}>${escEC(x.nome)}${x.disponivel ? "" : " (em breve)"}</option>`).join("")}</select>
+        `<option value="${escEC(x.id)}" ${x.id === ec.prov ? "selected" : ""}>${escEC(x.nome)}${x.disponivel ? "" : " (indisponível)"}</option>`).join("")}</select>
       ${pv ? `<p class="ia-nota">${escEC(pv.ajuda)}</p>` : ""}
-      ${pv && pv.link_ajuda ? `<a href="#" class="ia-link" data-ajuda>criar a senha de app ↗</a>` : ""}
+      ${pv && pv.link_ajuda ? `<a href="#" class="ia-link" data-ajuda>Como criar a senha de app ↗</a>` : ""}
       ${campos}
     </div>
     ${status}`;
@@ -115,7 +115,7 @@ function pintaEC() {
 async function salvaContaEC() {
   const pv = provEC();
   if (!pv || ec.ocupado) return;
-  ec.ocupado = true; ec.status = { tipo: "info", texto: "entrando na conta e lendo a caixa…" }; pintaEC();
+  ec.ocupado = true; ec.status = { tipo: "info", texto: "Conectando e lendo a caixa de entrada…" }; pintaEC();
   let r = { ok: false, erro: "não consegui salvar" };
   try {
     r = JSON.parse(await G.EmailAdicionarConta(JSON.stringify({
@@ -123,8 +123,8 @@ async function salvaContaEC() {
     })));
   } catch (e) { }
   ec.ocupado = false;
-  if (!r.ok) { ec.status = { tipo: "erro", texto: "✗ " + r.erro }; pintaEC(); return; }
-  ec.status = { tipo: "ok", texto: "✓ Conta adicionada: " + ec.usuario.trim() + " (" + r.mensagens + " mensagens lidas)." };
+  if (!r.ok) { ec.status = { tipo: "erro", texto: "✗ " + fraseUI(r.erro) }; pintaEC(); return; }
+  ec.status = { tipo: "ok", texto: "✓ Conta " + ec.usuario.trim() + " conectada. " + r.mensagens + " mensagens lidas." };
   ec.usuario = ""; ec.senha = ""; ec.host = "";
   await carregaEC();
   pintaEC();
@@ -134,11 +134,11 @@ async function salvaContaEC() {
 async function entrarMicrosoftEC(provedorID, contaID) {
   ligaOuvinteEC();
   ec.esperandoMS = true;
-  ec.status = { tipo: "info", texto: "Abri o login da Microsoft no navegador. Termine lá e volte aqui." };
+  ec.status = { tipo: "info", texto: "O login da Microsoft foi aberto no navegador. Conclua o acesso e volte para esta tela." };
   pintaEC();
   let r = { ok: false, erro: "não consegui abrir o login" };
   try { r = JSON.parse(await G.EmailEntrarMicrosoft(provedorID, contaID)); } catch (e) { }
-  if (!r.ok) { ec.esperandoMS = false; ec.status = { tipo: "erro", texto: "✗ " + r.erro }; pintaEC(); }
+  if (!r.ok) { ec.esperandoMS = false; ec.status = { tipo: "erro", texto: "✗ " + fraseUI(r.erro) }; pintaEC(); }
 }
 
 // o login da Microsoft termina no navegador: o Go avisa por evento
@@ -148,8 +148,8 @@ function ligaOuvinteEC() {
   window.runtime.EventsOn("email-oauth", async (d) => {
     ec.esperandoMS = false;
     ec.status = d && d.ok
-      ? { tipo: "ok", texto: "✓ Conta adicionada: " + d.conta + "." }
-      : { tipo: "erro", texto: "✗ " + ((d && d.erro) || "o login não foi concluído") };
+      ? { tipo: "ok", texto: "✓ Conta " + d.conta + " conectada." }
+      : { tipo: "erro", texto: "✗ " + fraseUI((d && d.erro) || "o login não foi concluído") };
     await carregaEC();
     pintaEC();
     if (d && d.ok) atualizaPainelEmailEC();
@@ -161,7 +161,7 @@ async function removeContaEC(id) {
   ec.confirmaRemover = "";
   let r = { ok: false, erro: "não consegui remover" };
   try { r = JSON.parse(await G.EmailRemoverConta(id)); } catch (e) { }
-  ec.status = r.ok ? { tipo: "ok", texto: "✓ Conta removida (a senha guardada foi apagada)." } : { tipo: "erro", texto: "✗ " + r.erro };
+  ec.status = r.ok ? { tipo: "ok", texto: "✓ Conta removida. A senha guardada também foi apagada." } : { tipo: "erro", texto: "✗ " + fraseUI(r.erro) };
   await carregaEC();
   pintaEC();
   atualizaPainelEmailEC();

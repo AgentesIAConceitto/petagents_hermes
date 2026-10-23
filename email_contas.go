@@ -31,24 +31,24 @@ type Provedor struct {
 
 var provedoresEmail = []Provedor{
 	{ID: "gmail", Nome: "Gmail / Google Workspace", Host: "imap.gmail.com", Porta: 993, Auth: "senha",
-		Ajuda:     "O Google não aceita a senha normal da conta. Crie uma \"senha de app\" (precisa da verificação em 2 etapas ligada) e cole aqui.",
+		Ajuda:     "O Google não aceita a senha normal da conta em outros aplicativos. Crie uma senha de app (é preciso ter a verificação em duas etapas ativada) e cole-a abaixo.",
 		LinkAjuda: "https://myaccount.google.com/apppasswords"},
 	{ID: "hotmail", Nome: "Hotmail / Outlook.com / Live", Host: "outlook.office365.com", Porta: 993, Auth: "microsoft",
-		Ajuda: "Você entra pelo site da Microsoft, no navegador. A sua senha não passa pelo boneco."},
+		Ajuda: "O acesso é feito no site da Microsoft, pelo navegador. A sua senha não passa pelo PetAgent."},
 	{ID: "m365", Nome: "Microsoft 365 (empresa)", Host: "outlook.office365.com", Porta: 993, Auth: "microsoft",
-		Ajuda: "Você entra pelo site da Microsoft, no navegador. Se a empresa bloquear, peça ao TI para liberar o IMAP."},
+		Ajuda: "O acesso é feito no site da Microsoft, pelo navegador. Se a empresa bloquear o acesso, peça à equipe de TI que libere o IMAP."},
 	{ID: "yahoo", Nome: "Yahoo", Host: "imap.mail.yahoo.com", Porta: 993, Auth: "senha",
-		Ajuda:     "O Yahoo pede uma \"senha de app\": gere nas configurações de segurança da conta e cole aqui.",
+		Ajuda:     "O Yahoo exige uma senha de app. Gere-a nas configurações de segurança da conta e cole-a abaixo.",
 		LinkAjuda: "https://login.yahoo.com/myaccount/security/app-password"},
 	{ID: "outro", Nome: "Outro / e-mail empresarial (IMAP)", Porta: 993, Auth: "senha",
-		Ajuda: "Use o servidor IMAP que o seu provedor ou o TI informa (ex.: imap.suaempresa.com.br, porta 993)."},
+		Ajuda: "Informe o servidor IMAP indicado pelo seu provedor ou pela equipe de TI (ex.: imap.suaempresa.com.br, porta 993)."},
 }
 
 func provedorEmail(id string) (Provedor, bool) {
 	for _, p := range provedoresEmail {
 		if p.ID == id {
 			if p.Auth == "microsoft" && msClientID == "" {
-				p.Motivo = "Ainda não disponível nesta versão: falta registrar o app na Microsoft (veja o README)."
+				p.Motivo = "Indisponível nesta versão: o aplicativo ainda não foi registrado na Microsoft (veja o README)."
 			} else {
 				p.Disponivel = true
 			}

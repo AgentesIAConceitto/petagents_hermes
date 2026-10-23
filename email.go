@@ -285,7 +285,7 @@ func impressao(m CabecalhoEmail) string {
 func (a *App) EmailVerificarAgora() string {
 	tem, erros := leTodasContas()
 	if !tem {
-		return "e-mail não configurado: adicione uma conta no painel 📧 (botão Contas)"
+		return "Nenhuma conta de e-mail conectada. Adicione uma pelo botão Contas, no painel E-mail."
 	}
 	if len(erros) > 0 {
 		return strings.Join(erros, " · ")
@@ -304,13 +304,13 @@ func (a *App) EmailResumo() string {
 	out := map[string]interface{}{"regras": r, "contas": telaContas}
 	if len(contas) == 0 {
 		out["sem_contas"] = true
-		out["erro"] = "nenhuma conta de e-mail ainda — clique em Contas para adicionar"
+		out["erro"] = "Nenhuma conta conectada."
 		b, _ := json.Marshal(out)
 		return string(b)
 	}
 	cxs := caixasAtuais(contas)
 	if len(cxs) == 0 {
-		out["erro"] = "sem leitura ainda — clique em Verificar agora"
+		out["erro"] = "Nenhuma leitura ainda."
 		b, _ := json.Marshal(out)
 		return string(b)
 	}
@@ -498,8 +498,8 @@ func (a *App) processaEmail() {
 		limite := 3
 		for i, m := range novos {
 			if i >= limite {
-				a.aviso("📧", fmt.Sprintf("+%d e-mails importantes", len(novos)-limite),
-					"abre o painel 📧 no menu do boneco")
+				a.aviso("📧", fmt.Sprintf("Mais %d e-mails importantes", len(novos)-limite),
+					"Veja todos no painel E-mail.")
 				break
 			}
 			nome := m.DeNome

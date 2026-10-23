@@ -736,6 +736,15 @@ function aplicarEstado(s) {
 const conversa = [];
 let ocupado = false; // true enquanto o agente está pensando
 
+// fraseUI — mensagem que vem do Go ("senha recusada (…)") vira frase de tela:
+// primeira letra maiúscula e ponto final.
+function fraseUI(t) {
+  t = String(t ?? "").trim();
+  if (!t) return "";
+  t = t[0].toUpperCase() + t.slice(1);
+  return /[.!?…]$/.test(t) ? t : t + ".";
+}
+
 // escHtml — texto de FORA (e-mail, rede) entra no innerHTML só por aqui.
 // Sem isto, um remetente "<img onerror=...>" roda JS no overlay, que alcança
 // window.go.main.App.SendChat (o agente com terminal). Ver teste-painel-email.js.
@@ -1595,60 +1604,67 @@ async function renderEmail() {
   if (faltamEl) faltamEl.textContent = "";
   let d = {};
   try { d = JSON.parse((G ? await G.EmailResumo() : "{}") || "{}"); } catch (e) {}
+  // sem conta ou sem leitura: um estado vazio só, e as seções ficam escondidas
+  ["email-sec-imp", "email-importantes", "email-sec-rem", "email-lista"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !!d.erro;
+  });
   if (d.erro) {
-    res.innerHTML = '<div class="pn-aviso">' + escHtml(d.erro) + "</div>";
+    if (contaEl) contaEl.textContent = "Avisos dos e-mails importantes";
+    res.innerHTML = d.sem_contas
+      ? '<div class="email-vazio"><b>Nenhuma conta conectada</b><span>Conecte o Gmail, o Outlook ou o e-mail da empresa para receber avisos dos e-mails importantes.</span></div>'
+      : '<div class="email-vazio"><b>Nenhuma leitura ainda</b><span>Clique em Verificar agora para ler as suas contas.</span></div>';
     if (d.sem_contas) {
-      box.innerHTML = '<div class="email-vazio">Nenhuma conta ainda. Adicione o seu Gmail, Hotmail ou o e-mail da empresa.</div>';
       const ba = document.createElement("button");
       ba.className = "pn-bt"; ba.textContent = "Adicionar conta";
       ba.onclick = () => abrirContasEmail();
-      box.appendChild(ba);
-    } else {
-      box.innerHTML = '<div class="email-vazio">Clique em "Verificar agora" para ler as suas contas.</div>';
+      res.appendChild(ba);
     }
+    reportarHit();
     return;
   }
   const imp = d.importantes || [], des = d.desconhecidos || [];
   const contas = d.contas || [], varias = contas.length > 1;
   // conta que não leu: o motivo aparece em cima (o endereço e o erro vêm de fora: escapados)
   const problemas = contas.filter((c) => c.estado === "erro" || c.estado === "precisa_entrar")
-    .map((c) => escHtml(c.usuario) + ": " + (c.estado === "precisa_entrar" ? "entre de novo em Contas" : escHtml(c.erro)));
+    .map((c) => "<b>" + escHtml(c.usuario) + "</b>: " +
+      (c.estado === "precisa_entrar" ? "é preciso entrar novamente pelo botão Contas." : escHtml(fraseUI(c.erro))));
   // agrupa por domínio: 1 linha por domínio, com contagem
   const porDom = {};
   des.forEach((m) => { const k = dominioDe(m.de_email); (porDom[k] = porDom[k] || []).push(m); });
   const doms = Object.keys(porDom);
-  if (contaEl) contaEl.textContent = (d.conta || "?") + " · lido às " + String(d.verificado_em || "").slice(11, 16);
+  if (contaEl) contaEl.textContent = "Atualizado às " + String(d.verificado_em || "").slice(11, 16) + " · " + (d.conta || "");
   const num = (n, r, cls) => '<div class="pn-num ' + cls + '"><b>' + Number(n || 0) + "</b><span>" + r + "</span></div>";
-  res.innerHTML = num(imp.length, "importantes", "ok") + num(doms.length, "para decidir", "acento") +
-    num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "") +
+  res.innerHTML = num(imp.length, "Importantes", "ok") + num(doms.length, "A classificar", "acento") +
+    num(d.spam_n, "Lixo", "erro") + num(d.nao_lidas, "Não lidos", "") +
     (problemas.length ? '<div class="pn-aviso">' + problemas.join("<br>") + "</div>" : "");
   // importantes: com o resumo (automático) e o "Abrir" (onde responder)
   const impBox = document.getElementById("email-importantes"), impN = document.getElementById("email-imp-n");
   if (impBox) {
     impBox.innerHTML = "";
-    if (impN) impN.textContent = imp.length ? (imp.length > 8 ? "8 mais recentes de " + imp.length : String(imp.length)) : "";
+    if (impN) impN.textContent = imp.length > 8 ? "8 mais recentes de " + imp.length : "";
     if (!imp.length) impBox.innerHTML = '<div class="email-vazio">Nenhum e-mail importante na última leitura.</div>';
     imp.slice(0, 8).forEach((m) => {
       const it = itemEmail(m, escHtml(m.de_nome || m.de_email || "?") + " <i>· " + escHtml(String(m.quando || "").slice(11, 16)) + "</i>",
         escHtml(String(m.assunto || "(sem assunto)").slice(0, 90)), varias);
       if (!m.resumo) {
         const br = document.createElement("button");
-        br.className = "bt res"; br.textContent = "Resumir"; br.title = "ler o texto e resumir (vai para a sua IA)";
+        br.className = "bt res"; br.textContent = "Resumir"; br.title = "Resumir com a IA configurada em Inteligência";
         br.onclick = () => resumirEmail(m, it.res, br);
         it.el.appendChild(br);
       }
       if (/^https:\/\//.test(m.link || "")) {
         const ba = document.createElement("button");
-        ba.className = "bt abrir"; ba.textContent = "Abrir"; ba.title = "abrir no webmail para responder";
+        ba.className = "bt abrir"; ba.textContent = "Abrir"; ba.title = "Abrir no webmail para responder";
         ba.onclick = () => abrirLinkEmail(m.link);
         it.el.appendChild(ba);
       }
       impBox.appendChild(it.el);
     });
   }
-  if (faltamEl && doms.length) faltamEl.textContent = doms.length + " para decidir";
+  if (faltamEl && doms.length) faltamEl.textContent = doms.length > 14 ? "14 de " + doms.length : "";
   if (!doms.length) {
-    box.innerHTML = '<div class="email-vazio">Tudo ensinado. Na próxima leitura eu já sei separar sozinha.</div>';
+    box.innerHTML = '<div class="email-vazio">Todos os remetentes já estão classificados.</div>';
     reportarHit();
     return;
   }
@@ -1657,13 +1673,13 @@ async function renderEmail() {
     const it = itemEmail(m, escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i>",
       escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)), varias);
     const el = it.el;
-    it.txt.title = "clique para resumir o mais recente";
+    it.txt.title = "Clique para resumir o e-mail mais recente";
     it.txt.onclick = () => { if (!m.resumo) resumirEmail(m, it.res, null); };
     const bi = document.createElement("button");
-    bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "sempre importante: " + k;
+    bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "Sempre avisar e-mails de " + k;
     bi.onclick = () => marcarEmail(k, "importante");
     const bs = document.createElement("button");
-    bs.className = "bt lixo"; bs.textContent = "Lixo"; bs.title = "sempre lixo: " + k;
+    bs.className = "bt lixo"; bs.textContent = "Lixo"; bs.title = "Nunca avisar e-mails de " + k;
     bs.onclick = () => marcarEmail(k, "spam");
     el.appendChild(bi); el.appendChild(bs);
     box.appendChild(el);
@@ -1678,7 +1694,7 @@ function itemEmail(m, titulo, sub, varias) {
   el.className = "email-item";
   const ponto = document.createElement("span");
   ponto.className = "ponto" + (m.nao_lida ? " on" : "");
-  ponto.title = m.nao_lida ? "não lido" : "lido";
+  ponto.title = m.nao_lida ? "Não lido" : "Lido";
   const txt = document.createElement("div");
   txt.className = "txt";
   txt.innerHTML = "<b>" + titulo + "</b><span>" + sub + (varias ? " <i>· " + escHtml(m.conta || "") + "</i>" : "") + "</span>";
@@ -1693,9 +1709,9 @@ function itemEmail(m, titulo, sub, varias) {
 async function resumirEmail(m, alvo, bt) {
   if (!G || !G.EmailResumir || m.resumindo) return;
   m.resumindo = true;
-  alvo.textContent = "resumindo…";
+  alvo.textContent = "Resumindo…";
   if (bt) bt.disabled = true;
-  let r = { ok: false, erro: "não consegui resumir" };
+  let r = { ok: false, erro: "Não foi possível resumir." };
   try { r = JSON.parse(await G.EmailResumir(m.conta_id, m.uid)); } catch (e) {}
   m.resumindo = false;
   if (bt) bt.disabled = false;
@@ -1705,7 +1721,7 @@ async function resumirEmail(m, alvo, bt) {
     if (bt) bt.remove();
   } else {
     alvo.textContent = "";
-    toast("📧", "O resumo não saiu", r.erro, 8000, true);
+    toast("📧", "Não foi possível resumir", fraseUI(r.erro), 8000, true);
   }
   reportarHit();
 }
@@ -1718,8 +1734,9 @@ function abrirLinkEmail(link) {
 async function marcarEmail(alvo, tipo) {
   try { G && await G.EmailMarcar(alvo, tipo); } catch (e) {}
   toast(tipo === "importante" ? "✅" : "🚫",
-        tipo === "importante" ? "Importante" : "Lixo",
-        alvo + " → " + (tipo === "importante" ? "sempre me avise" : "silêncio total"), 2500, true);
+        tipo === "importante" ? "Marcado como importante" : "Marcado como lixo",
+        tipo === "importante" ? "Os e-mails de " + alvo + " passam a gerar aviso." : "Os e-mails de " + alvo + " não geram mais avisos.",
+        3000, true);
   await renderEmail();
 }
 
@@ -1930,12 +1947,12 @@ document.getElementById("email-contas-bt").onclick = () => abrirContasEmail();
 document.getElementById("email-verificar").onclick = async (ev) => {
   const bt = ev.currentTarget;
   bt.disabled = true;
-  toast("📧", "Lendo as suas contas…", "leva alguns segundos", 3000, true);
+  toast("📧", "Lendo as suas contas", "Isso leva alguns segundos.", 3000, true);
   let r = "ok";
   try { if (G) r = await G.EmailVerificarAgora(); } catch (e) {}
   bt.disabled = false;
   await renderEmail();
-  if (r !== "ok") toast("📧", "E-mail não lido", r, 7000, true); // ex.: sem conta, senha recusada
+  if (r !== "ok") toast("📧", "Não foi possível ler os e-mails", fraseUI(r), 8000, true); // ex.: sem conta, senha recusada
 };
 document.getElementById("balao-min").onclick = fecharBalao;
 txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
