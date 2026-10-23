@@ -177,7 +177,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.hitTestLoop()
 	go a.stateLoop()
 	go a.escondeDuranteCaptura() // some enquanto a Ferramenta de Captura está aberta
-	go a.emailLoop() // triagem de e-mail (le Outlook local, só leitura)
+	go a.emailLoop() // triagem de e-mail (lê as contas por IMAP, só leitura)
 	go a.warmBalance()
 }
 

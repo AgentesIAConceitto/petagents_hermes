@@ -3,8 +3,9 @@
 ' Faz o mesmo que o plugin faz em  hermes petagent iniciar :
 '   1) se o boneco JA esta na tela, nao abre um segundo (idempotente)
 '   2) sobe pelo explorer.exe -> contexto NAO-ELEVADO do usuario. Isso nao e detalhe:
-'      o leitor de e-mail usa COM do Outlook e o COM falha quando quem chama esta
-'      elevado (foi assim que aprendemos)
+'      o Windows bloqueia arrastar arquivos do Explorer (nao-elevado) para uma
+'      janela elevada, e o anexo do chat depende disso; e o boneco nao precisa
+'      de privilegio de administrador para nada
 '   3) sem janela de console
 ' E deixa rastro em %LOCALAPPDATA%\petagent\atalho.log — se um dia "nao subiu",
 ' a resposta esta la, nao na memoria de ninguem.

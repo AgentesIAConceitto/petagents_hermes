@@ -1597,10 +1597,22 @@ async function renderEmail() {
   try { d = JSON.parse((G ? await G.EmailResumo() : "{}") || "{}"); } catch (e) {}
   if (d.erro) {
     res.innerHTML = '<div class="pn-aviso">' + escHtml(d.erro) + "</div>";
-    box.innerHTML = '<div class="email-vazio">Clique em "Verificar agora" para ler o Outlook.</div>';
+    if (d.sem_contas) {
+      box.innerHTML = '<div class="email-vazio">Nenhuma conta ainda. Adicione o seu Gmail, Hotmail ou o e-mail da empresa.</div>';
+      const ba = document.createElement("button");
+      ba.className = "pn-bt"; ba.textContent = "Adicionar conta";
+      ba.onclick = () => abrirContasEmail();
+      box.appendChild(ba);
+    } else {
+      box.innerHTML = '<div class="email-vazio">Clique em "Verificar agora" para ler as suas contas.</div>';
+    }
     return;
   }
   const imp = d.importantes || [], des = d.desconhecidos || [];
+  const contas = d.contas || [], varias = contas.length > 1;
+  // conta que não leu: o motivo aparece em cima (o endereço e o erro vêm de fora: escapados)
+  const problemas = contas.filter((c) => c.estado === "erro" || c.estado === "precisa_entrar")
+    .map((c) => escHtml(c.usuario) + ": " + (c.estado === "precisa_entrar" ? "entre de novo em Contas" : escHtml(c.erro)));
   // agrupa por domínio: 1 linha por domínio, com contagem
   const porDom = {};
   des.forEach((m) => { const k = dominioDe(m.de_email); (porDom[k] = porDom[k] || []).push(m); });
@@ -1608,7 +1620,8 @@ async function renderEmail() {
   if (contaEl) contaEl.textContent = (d.conta || "?") + " · lido às " + String(d.verificado_em || "").slice(11, 16);
   const num = (n, r, cls) => '<div class="pn-num ' + cls + '"><b>' + Number(n || 0) + "</b><span>" + r + "</span></div>";
   res.innerHTML = num(imp.length, "importantes", "ok") + num(doms.length, "para decidir", "acento") +
-    num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "");
+    num(d.spam_n, "lixo", "erro") + num(d.nao_lidas, "não lidos", "") +
+    (problemas.length ? '<div class="pn-aviso">' + problemas.join("<br>") + "</div>" : "");
   if (faltamEl && doms.length) faltamEl.textContent = doms.length + " para decidir";
   if (!doms.length) {
     box.innerHTML = '<div class="email-vazio">Tudo ensinado. Na próxima leitura eu já sei separar sozinha.</div>';
@@ -1621,7 +1634,8 @@ async function renderEmail() {
     // remetente, endereço e assunto são escritos por QUEM MANDA o e-mail: só texto escapado
     el.innerHTML = '<span class="ponto' + (m.nao_lida ? " on" : "") + '" title="' + (m.nao_lida ? "não lido" : "lido") + '"></span>' +
       '<div class="txt"><b>' + escHtml(k) + " <i>· " + ms.length + (ms.length > 1 ? " e-mails" : " e-mail") + "</i></b><span>" +
-      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)) + "</span></div>";
+      escHtml(m.de_nome || "") + " — " + escHtml(String(m.assunto || "(sem assunto)").slice(0, 80)) +
+      (varias ? " <i>· " + escHtml(m.conta || "") + "</i>" : "") + "</span></div>";
     const bi = document.createElement("button");
     bi.className = "bt imp"; bi.textContent = "Importante"; bi.title = "sempre importante: " + k;
     bi.onclick = () => marcarEmail(k, "importante");
@@ -1840,17 +1854,21 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); if (typeof fecharContasEmail === "function") fecharContasEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;
 document.getElementById("email-fechar").onclick = fecharEmail;
-document.getElementById("email-verificar").onclick = async () => {
+document.getElementById("email-contas-bt").onclick = () => abrirContasEmail();
+document.getElementById("email-verificar").onclick = async (ev) => {
+  const bt = ev.currentTarget;
+  bt.disabled = true;
+  toast("📧", "Lendo as suas contas…", "leva alguns segundos", 3000, true);
   let r = "ok";
   try { if (G) r = await G.EmailVerificarAgora(); } catch (e) {}
-  if (r !== "ok") { toast("📧", "E-mail não lido", r, 7000, true); return; } // ex.: não configurado
-  toast("📧", "Lendo o Outlook…", "aguarde ~40 s (o JSON é regravado)", 4000, true);
-  setTimeout(() => renderEmail(), 45000);
+  bt.disabled = false;
+  await renderEmail();
+  if (r !== "ok") toast("📧", "E-mail não lido", r, 7000, true); // ex.: sem conta, senha recusada
 };
 document.getElementById("balao-min").onclick = fecharBalao;
 txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
