@@ -151,9 +151,11 @@ func campo(m map[string]any, k string) string {
 }
 
 // PetGaleria — lista para o painel.
-//   termo == ""  → os bonecos JÁ INSTALADOS na máquina (o "vetor" entra no front)
-//   termo == "*" → navega a galeria inteira, em páginas
-//   outro termo  → busca no catálogo por nome, slug ou tipo
+//
+//	termo == ""  → os bonecos JÁ INSTALADOS na máquina (o "vetor" entra no front)
+//	termo == "*" → navega a galeria inteira, em páginas
+//	outro termo  → busca no catálogo por nome, slug ou tipo
+//
 // `deslocamento` pagina os resultados (a galeria tem ~4.900 bonecos).
 func (a *App) PetGaleria(termo string, deslocamento int) string {
 	const porPagina = 24
@@ -201,7 +203,7 @@ func (a *App) PetGaleria(termo string, deslocamento int) string {
 
 	pets, err := catalogoPetdex()
 	if err != nil {
-		resp.Erro = "não consegui falar com o Petdex: " + err.Error()
+		resp.Erro = "Não foi possível conectar à galeria Petdex: " + err.Error()
 		b, _ := json.Marshal(resp)
 		return string(b)
 	}
@@ -249,7 +251,7 @@ func respostaErro(msg string) string {
 func (a *App) PetDexBaixar(slug string) string {
 	slug = strings.TrimSpace(slug)
 	if slug == "" || strings.ContainsAny(slug, "/\\.") {
-		return respostaErro("slug inválido")
+		return respostaErro("Nome de boneco inválido.")
 	}
 	if dir := filepath.Join(pastaPetsHermes(), slug); dir != "" {
 		if _, err := os.Stat(filepath.Join(dir, "spritesheet.webp")); err == nil {
@@ -258,7 +260,7 @@ func (a *App) PetDexBaixar(slug string) string {
 	}
 	pets, err := catalogoPetdex()
 	if err != nil {
-		return respostaErro(err.Error())
+		return respostaErro("Não foi possível conectar à galeria Petdex: " + err.Error())
 	}
 	var alvo map[string]any
 	for _, m := range pets {
@@ -268,16 +270,16 @@ func (a *App) PetDexBaixar(slug string) string {
 		}
 	}
 	if alvo == nil {
-		return respostaErro("boneco não encontrado na galeria")
+		return respostaErro("Este boneco não foi encontrado na galeria.")
 	}
 	destino := filepath.Join(pastaPetsHermes(), slug)
 	if err := os.MkdirAll(destino, 0o755); err != nil {
-		return respostaErro(err.Error())
+		return respostaErro("Não foi possível criar a pasta do boneco: " + err.Error())
 	}
 	cli := &http.Client{Timeout: 180 * time.Second}
 	baixa := func(url, nomeDestino string) error {
 		if url == "" {
-			return fmt.Errorf("sem url")
+			return fmt.Errorf("endereço de download ausente")
 		}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -290,7 +292,7 @@ func (a *App) PetDexBaixar(slug string) string {
 		}
 		defer r.Body.Close()
 		if r.StatusCode != 200 {
-			return fmt.Errorf("http %d", r.StatusCode)
+			return fmt.Errorf("o servidor respondeu com o código %d", r.StatusCode)
 		}
 		f, err := os.Create(filepath.Join(destino, nomeDestino))
 		if err != nil {
@@ -301,10 +303,10 @@ func (a *App) PetDexBaixar(slug string) string {
 		return err
 	}
 	if err := baixa(campo(alvo, "petJsonUrl"), "pet.json"); err != nil {
-		return respostaErro("pet.json: " + err.Error())
+		return respostaErro("Não foi possível baixar os dados do boneco (pet.json): " + err.Error())
 	}
 	if err := baixa(campo(alvo, "spritesheetUrl"), "spritesheet.webp"); err != nil {
-		return respostaErro("folha: " + err.Error())
+		return respostaErro("Não foi possível baixar a imagem do boneco: " + err.Error())
 	}
 	logMsg("galeria: baixado boneco " + slug)
 	return `{"ok":true}`
@@ -314,10 +316,10 @@ func (a *App) PetDexBaixar(slug string) string {
 func (a *App) PetDexEscolher(slug string) string {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
-		return respostaErro("slug vazio")
+		return respostaErro("Nenhum boneco foi escolhido.")
 	}
 	if err := os.WriteFile(filepath.Join(pastaPetAgente(), "petdex.txt"), []byte(slug), 0o644); err != nil {
-		return respostaErro(err.Error())
+		return respostaErro("Não foi possível salvar a escolha do boneco: " + err.Error())
 	}
 	logMsg("galeria: boneco escolhido = " + slug)
 	return `{"ok":true}`

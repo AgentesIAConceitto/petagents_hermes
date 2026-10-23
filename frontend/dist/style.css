@@ -435,6 +435,17 @@ select.ia-campo { cursor: pointer; }
 .ia-status.ok { color: #1f9d55; background: rgba(53,208,127,.12); }
 .ia-status.erro { color: var(--perigo); background: rgba(255,82,82,.10); }
 :root[data-tema="escuro"] .ia-status.ok { color: #5fe39a; }
+
+/* Contas de e-mail (email-contas.js) — mesmo visual da Inteligência */
+.aparencia.ec { width: 360px; }
+.ec-conta { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--raio-interno); background: var(--sup); }
+.ec-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ec-info b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-info > span { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-estado.ok { color: #1f9d55; }
+.ec-estado.erro { color: var(--perigo); }
+:root[data-tema="escuro"] .ec-estado.ok { color: #5fe39a; }
+.ec-2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 8px; }
 .ap-amostra {
   display: flex; justify-content: space-between; padding: 10px 14px;
   background: var(--sup); border-radius: var(--raio-botao); color: var(--icone);
@@ -464,6 +475,7 @@ select.ia-campo { cursor: pointer; }
 .pn-sec span { font-size: 12px; color: var(--sub); }
 .pn-nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--sub); }
 .pn-aviso { padding: 10px 12px; border-radius: var(--raio-interno); background: rgba(242,179,61,.14); font-size: 12.5px; }
+.pn-numeros .pn-aviso { grid-column: 1 / -1; }
 .pn-rodape { display: flex; align-items: center; gap: 8px; }
 .pn-rodape .pn-nota { flex: 1; }
 :where(.painel-n, .toast, .col, .premio) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
@@ -636,6 +648,239 @@ select.ia-campo { cursor: pointer; }
 }
 .cg-puxa:hover { opacity: 1; }
 
+/* ───────── CONVERSAS (22/10/2026, prancha "PetAgent — Conversas e Anexos") ─────────
+   Chat grande em duas colunas: a lista de conversas à esquerda (esconde pelo ☰) e a
+   conversa à direita. Tudo nas variáveis do tema — claro e escuro saem iguais à prancha. */
+.cg { flex-direction: row; }
+.cg-principal { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cg-lado {
+  width: 260px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  background: var(--sup); border-right: 1px solid var(--borda);
+}
+.cg.sem-lado .cg-lado { display: none; }
+.cg-lado.carregando { opacity: .6; pointer-events: none; }
+/* topo da lista enxuto (dona, 23/10/2026: "tá ocupando muito espaço"): filtros numa linha
+   só, curtos, e que somem enquanto não há pasta nem etiqueta para filtrar */
+.lado-topo { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 6px; }
+.lado-nova { justify-content: center; height: 36px; font-size: 13.5px; }
+.lado-busca {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; color: var(--sub);
+  background: var(--entrada); border: 1px solid var(--borda); border-radius: var(--raio-interno);
+}
+.lado-busca:focus-within { border-color: var(--acento); }
+.lado-busca input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--texto); font: inherit; font-size: 13px; }
+.lado-busca input::placeholder { color: var(--sub); }
+.lado-filtros { display: flex; gap: 6px; }
+.lado-filtros.oculto, .lado-chip.oculto { display: none; }
+.lado-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px 0 9px !important; min-width: 0; flex: 0 1 auto;
+  border-radius: 999px; border: 1px solid var(--borda) !important; color: var(--sub) !important; font-size: 12px; font-weight: 600;
+}
+.lado-chip span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lado-chip:hover, .lado-chip[aria-expanded="true"] { color: var(--texto) !important; box-shadow: inset 0 0 0 999px var(--hover); }
+.lado-chip[aria-expanded="true"] .ic:last-child { transform: rotate(180deg); }
+/* filtro em uso: aceso na cor de destaque */
+.lado-chip.ativa { border-color: var(--acento) !important; color: var(--texto) !important; background: var(--hover) !important; }
+/* o menu do filtro: do app (o <select> do Windows saía branco, fora do tema) */
+.lado-drop {
+  position: absolute; z-index: 4; min-width: 190px; max-width: calc(100% - 20px); max-height: 260px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 1px; padding: 5px;
+  background: var(--elev); border: 1px solid var(--borda); border-radius: var(--raio-botao); box-shadow: var(--sombra);
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
+}
+.lado-drop.oculto { display: none; }
+.lado-op {
+  display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 9px !important; width: 100%;
+  border-radius: var(--raio-interno); font-size: 13px; text-align: left; color: var(--texto);
+}
+.lado-op > .ic:first-child { color: var(--sub); }
+.lado-op span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lado-op em { font-style: normal; font-size: 11.5px; color: var(--sub); }
+.lado-op:hover, .lado-op:focus-visible { box-shadow: inset 0 0 0 999px var(--hover); outline: none !important; }
+.lado-op.sel { font-weight: 600; }
+.lado-op.sel > .ic:last-child { color: var(--acento); }
+.lado-lista {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 12px; display: flex; flex-direction: column; gap: 2px;
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
+}
+.lado-vazio { margin: 18px 8px; font-size: 12.5px; color: var(--sub); text-align: center; }
+.lado-grupo {
+  display: flex; align-items: center; gap: 6px; padding: 12px 8px 6px; width: 100%; text-align: left;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sub);
+}
+.lado-grupo span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lado-grupo em { font-style: normal; font-weight: 600; letter-spacing: 0; }
+.lado-grupo .ic { transition: transform .12s ease; }
+.lado-grupo.fechado .ic { transform: rotate(-90deg); }
+.lado-item { position: relative; border-radius: var(--raio-interno); }
+.lado-item:hover { background: var(--hover); }
+.lado-item.ativa { background: var(--hover); box-shadow: inset 0 0 0 1px var(--acento); }
+.lado-abre { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px 10px; text-align: left; border-radius: var(--raio-interno); }
+.li-topo { display: flex; align-items: center; gap: 8px; }
+.li-tit { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li-data { font-size: 11px; color: var(--sub); flex: none; }
+.li-previa { font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li-previa:empty, .li-tags:empty { display: none; }
+.li-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 1px; }
+.li-tags span { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--sup2); color: var(--sub); }
+.lado-mais {
+  position: absolute; top: 5px; right: 4px; width: 26px; height: 26px; opacity: 0;
+  background: var(--sup) !important;
+}
+.lado-item:hover .lado-mais, .lado-mais:focus-visible { opacity: 1; }
+.lado-item:hover .li-data { visibility: hidden; }
+
+/* cabeçalho do chat grande: ☰ · ● nome da conversa ✎ / pasta · #etiquetas · pet · modelo · ⋯ */
+.cg-titulo-linha { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cg-titulo-linha b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.botao-x.mini { width: 26px; height: 26px; }
+.botao-x.borda { border: 1px solid var(--borda); background: var(--sup2); color: var(--texto); }
+/* balãozinho: o nome da conversa é um botão (abre o chat grande, onde fica a lista) */
+.chat-quem-bt { text-align: left; border-radius: var(--raio-interno); padding: 2px 4px !important; margin: -2px -4px !important; cursor: pointer; }
+.chat-quem-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.chat-quem-bt b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* menu ⋯ da conversa: nome, pasta, etiquetas, excluir */
+.conv-menu {
+  position: absolute; top: 58px; right: 14px; z-index: 5; width: 300px; max-height: calc(100% - 72px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 14px;
+  background: var(--elev); border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
+  scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent;
+}
+.conv-menu.oculto { display: none; }
+.conv-menu hr { border: 0; height: 1px; background: var(--borda); margin: 4px 0; width: 100%; }
+.cm-rot { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sub); }
+.cm-dica { font-size: 11px; color: var(--sub); }
+.conv-menu input {
+  height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: var(--raio-interno); outline: none;
+  border: 1px solid var(--borda); background: var(--entrada); color: var(--texto); font: inherit; font-size: 13.5px;
+}
+.conv-menu input:focus { border-color: var(--acento); }
+.cm-pastas { display: flex; flex-direction: column; gap: 2px; }
+.cm-pasta { display: flex; align-items: center; border-radius: var(--raio-interno); }
+.cm-pasta.sel { background: var(--hover); }
+.cm-pasta-bt { flex: 1; min-width: 0; height: 34px; padding: 0 10px !important; display: flex; align-items: center; gap: 10px; border-radius: var(--raio-interno); font-size: 13.5px; text-align: left; }
+.cm-pasta-bt span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-pasta-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.cm-pasta-bt.sub { color: var(--sub); }
+.cm-pasta.sel .cm-pasta-bt .ic:last-child { color: var(--acento); }
+.cm-pasta-x { opacity: 0; }
+.cm-pasta:hover .cm-pasta-x, .cm-pasta-x:focus-visible { opacity: 1; }
+.cm-tags, .cm-sug { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cm-tags:empty { display: none; }
+.cm-chip {
+  display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 0 4px 0 10px; border-radius: 999px;
+  background: var(--hover); box-shadow: inset 0 0 0 1px var(--acento); font-size: 12px; font-weight: 600;
+}
+.cm-chip button { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--sub); }
+.cm-chip button:hover { color: var(--texto); }
+.cm-sug-bt { height: 26px; padding: 0 10px !important; border-radius: 999px; border: 1px solid var(--borda) !important; background: var(--sup2) !important; font-size: 12px; }
+.cm-sug-bt:hover { border-color: var(--acento) !important; }
+.cm-excluir { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px !important; border-radius: var(--raio-interno); color: var(--perigo) !important; font-weight: 600; font-size: 13.5px; }
+.cm-excluir:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+/* a conversa do menu aberto fica destacada (e o ⋯ dela, aceso), mesmo sem o mouse em cima */
+.lado-item.menu-de { background: var(--hover); box-shadow: inset 0 0 0 1.5px var(--acento); }
+.lado-item.menu-de .lado-mais { opacity: 1; color: var(--texto); }
+.lado-item.menu-de .li-data { visibility: hidden; }
+/* modal de excluir: no meio do chat grande, fundo escurecido (nada de caixa dentro do menu) */
+.conv-modal {
+  position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(10, 10, 16, .45); backdrop-filter: blur(2px);
+}
+.conv-modal.oculto { display: none; }
+.cmod-caixa {
+  width: 360px; max-width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px;
+  background: var(--elev); border: 1px solid var(--borda); border-radius: var(--raio-painel); box-shadow: var(--sombra);
+}
+.cmod-ic {
+  width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px;
+  color: var(--perigo); background: color-mix(in srgb, var(--perigo) 14%, transparent);
+}
+.cmod-caixa b { font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.cmod-caixa span { font-size: 13px; line-height: 1.5; color: var(--sub); }
+.cmod-acoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.cmod-acoes .cm-bt { height: 36px; }
+.cm-bt { height: 32px; padding: 0 14px !important; border-radius: var(--raio-interno); border: 1px solid var(--borda) !important; font-size: 13px; font-weight: 600; }
+/* Excluir: texto branco (pedido da dona, 23/10/2026) sobre o vermelho FORTE nos dois temas —
+   o --perigo do escuro (#FF8A7A, salmão) não dá contraste com branco */
+.cm-bt.perigo { background: #C2362A !important; border-color: transparent !important; color: #fff !important; }
+.cm-bt.perigo:hover { background: #A82C22 !important; }
+
+/* ───────── ANEXOS: 📎 no rodapé, chips antes de enviar, avisos, "Solte para anexar" ───────── */
+:where(.balao, .cg) .anexo-bt {
+  flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--raio-interno); border: 1px solid var(--borda); color: var(--texto);
+}
+:where(.balao, .cg) .anexo-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.anexos-fila {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 0; border-top: 1px solid var(--borda);
+  max-height: 45%; overflow-y: auto; scrollbar-width: thin;
+}
+.anexos-fila.oculto { display: none; }
+.anexos-fila + .balao-rodape, .anexos-fila + .cg-rodape { border-top: 0; }
+.anexos-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.anexo-chip {
+  display: inline-flex; align-items: center; gap: 8px; height: 42px; max-width: 100%; padding: 0 4px 0 4px;
+  border-radius: var(--raio-interno); background: var(--sup); border: 1px solid var(--borda);
+}
+.anexo-chip.confirmar { border-color: #F2C66B; }
+.anexo-chip.lendo .selo-anexo { animation: pulso 1s infinite; }
+.anexo-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.anexo-txt b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.anexo-txt span { font-size: 10.5px; color: var(--sub); white-space: nowrap; }
+.anexo-x { width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--raio-interno); color: var(--sub); }
+.anexo-x:hover { color: var(--texto); box-shadow: inset 0 0 0 999px var(--hover); }
+/* o selo do tipo: miniatura na imagem, sigla colorida no resto */
+.selo-anexo {
+  width: 32px; height: 32px; flex: none; border-radius: 7px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .02em; background: var(--sup2); color: var(--sub);
+}
+.selo-anexo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.selo-anexo.pdf { background: #D93A3F; color: #fff; }
+.selo-anexo.csv { background: #1F8A4C; color: #fff; }
+.selo-anexo.txt { background: #5D5F6A; color: #fff; }
+.anexo-aviso {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--raio-botao);
+  font-size: 12.5px; line-height: 1.45; background: var(--sup); border: 1px solid var(--borda);
+}
+.anexo-aviso > .ic { margin-top: 1px; }
+.anexo-aviso.aviso { border-color: rgba(242, 198, 107, .55); background: rgba(242, 198, 107, .10); }
+.anexo-aviso.aviso > .ic { color: #D9A030; }
+.anexo-aviso.erro { border-color: rgba(255, 138, 122, .55); background: rgba(255, 138, 122, .10); }
+.anexo-aviso.erro > .ic { color: var(--perigo); }
+.aa-corpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.aa-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.aa-bt { height: 30px; padding: 0 12px !important; border-radius: var(--raio-interno); border: 1px solid var(--borda) !important; font-size: 12.5px; font-weight: 600; }
+.aa-bt.prim { background: var(--acento) !important; color: var(--acento-txt) !important; border-color: transparent !important; }
+.aa-bt:hover { filter: brightness(1.08); }
+.cg-dica-anexo { padding: 0 12px 8px; margin-top: -4px; font-size: 11px; color: var(--sub); }
+/* anexos dentro da bolha enviada */
+.msgs .m.com-anexo { display: flex; flex-direction: column; gap: 6px; }
+.m-anexos { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; }
+.m-anexo {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 220px; padding: 4px 10px 4px 4px;
+  border-radius: var(--raio-interno); background: var(--fundo); color: var(--texto); border: 1px solid var(--borda);
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.m-anexo .selo-anexo { width: 26px; height: 26px; font-size: 8px; }
+.m-anexo-nome { overflow: hidden; text-overflow: ellipsis; }
+.m-anexo.foto { padding: 0; border-radius: var(--raio-interno); }
+.m-anexo.foto .selo-anexo { width: 120px; height: 84px; border-radius: var(--raio-interno); }
+.msgs .eu .rodape-msg { color: inherit; opacity: .8; }
+/* arrastando um arquivo por cima: a área toda vira o alvo */
+.solta {
+  position: absolute; inset: 10px; z-index: 6; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px;
+  border: 2px dashed var(--acento); border-radius: var(--raio-painel);
+  background: color-mix(in srgb, var(--fundo) 88%, var(--acento));
+}
+.solta.oculto { display: none; }
+.solta-ic { width: 60px; height: 60px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: var(--acento); color: var(--acento-txt); }
+.solta b { font-size: 17px; }
+.solta-qtd { font-size: 13px; color: var(--texto); }
+.solta-tipos { font-size: 11.5px; color: var(--sub); }
+
 /* ───────── BICHO (tamagotchi): painel, barras e movimento ───────── */
 .bicho {
   position: absolute; z-index: 66; width: 300px; display: flex; flex-direction: column;
@@ -746,6 +991,19 @@ select.ia-campo { cursor: pointer; }
 .painel-n .email-item .bt.lixo { background: rgba(255,82,82,.10); color: var(--perigo); }
 :root[data-tema="escuro"] .painel-n .email-item .bt.imp { color: #5FE39A; }
 .painel-n .email-item .bt:hover { filter: brightness(1.15); }
+.email [hidden] { display: none !important; }
+.pn-numeros .email-vazio { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.email-vazio b { font-size: 14px; font-weight: 600; color: var(--texto); }
+.email-vazio .pn-bt { margin-top: 6px; }
+/* importantes + resumo (23/10/2026) */
+.email-lista.email-imp { max-height: 260px; }
+.email-lista:not(.email-imp) { max-height: 200px; }
+.email-item .txt[title] { cursor: pointer; }
+.email-res { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--texto); white-space: normal; }
+.email-res:empty { display: none; }
+.painel-n .email-item .bt.res { background: var(--sup); color: var(--texto); }
+.painel-n .email-item .bt.abrir { background: var(--acento); color: #fff; }
+.painel-n .email-item .bt:disabled { opacity: .55; cursor: default; }
 .email-vazio { padding: 18px; border-radius: var(--raio-interno); background: var(--sup); text-align: center; font-size: 13px; color: var(--sub); }
 
 /* ── PRESENTE ACHADO (22/10/2026): nasce em cima do boneco; clicar abre a Coleção ── */

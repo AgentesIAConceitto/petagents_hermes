@@ -24,17 +24,17 @@ import (
 var (
 	user32 = syscall.NewLazyDLL("user32.dll")
 
-	procGetCursorPos      = user32.NewProc("GetCursorPos")
-	procGetAsyncKeyState  = user32.NewProc("GetAsyncKeyState")
-	procGetWindowLongPtr  = user32.NewProc("GetWindowLongPtrW")
-	procSetWindowLongPtr  = user32.NewProc("SetWindowLongPtrW")
-	procEnumWindows       = user32.NewProc("EnumWindows")
-	procGetWindowRect     = user32.NewProc("GetWindowRect")
-	procClientToScreen    = user32.NewProc("ClientToScreen")
-	procSetWindowPos      = user32.NewProc("SetWindowPos")
-	procGetClientRect     = user32.NewProc("GetClientRect")
+	procGetCursorPos       = user32.NewProc("GetCursorPos")
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procGetWindowLongPtr   = user32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtr   = user32.NewProc("SetWindowLongPtrW")
+	procEnumWindows        = user32.NewProc("EnumWindows")
+	procGetWindowRect      = user32.NewProc("GetWindowRect")
+	procClientToScreen     = user32.NewProc("ClientToScreen")
+	procSetWindowPos       = user32.NewProc("SetWindowPos")
+	procGetClientRect      = user32.NewProc("GetClientRect")
 	procGetWindowThreadPID = user32.NewProc("GetWindowThreadProcessId")
-	procIsWindowVisible   = user32.NewProc("IsWindowVisible")
+	procIsWindowVisible    = user32.NewProc("IsWindowVisible")
 )
 
 const (
@@ -72,16 +72,16 @@ func gwlpIndexStyle() uintptr {
 // SetWindowLongPtr, a transparência sobrevive.
 func tiraBarraTitulo(hwnd syscall.Handle) {
 	const (
-		wsCaption     = 0x00C00000
-		wsThickFrame  = 0x00040000
-		wsMinimizeBox = 0x00020000
-		wsMaximizeBox = 0x00010000
-		wsSysMenu     = 0x00080000
+		wsCaption       = 0x00C00000
+		wsThickFrame    = 0x00040000
+		wsMinimizeBox   = 0x00020000
+		wsMaximizeBox   = 0x00010000
+		wsSysMenu       = 0x00080000
 		swpFrameChanged = 0x0020
-		swpNoMove     = 0x0002
-		swpNoSize     = 0x0001
-		swpNoZOrder   = 0x0004
-		swpNoActivate = 0x0010
+		swpNoMove       = 0x0002
+		swpNoSize       = 0x0001
+		swpNoZOrder     = 0x0004
+		swpNoActivate   = 0x0010
 	)
 	st, _, _ := procGetWindowLongPtr.Call(uintptr(hwnd), gwlpIndexStyle())
 	novo := st &^ uintptr(wsCaption|wsThickFrame|wsMinimizeBox|wsMaximizeBox|wsSysMenu)
@@ -177,7 +177,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.hitTestLoop()
 	go a.stateLoop()
 	go a.escondeDuranteCaptura() // some enquanto a Ferramenta de Captura está aberta
-	go a.emailLoop() // triagem de e-mail (le Outlook local, só leitura)
+	go a.emailLoop()             // triagem de e-mail (lê as contas por IMAP, só leitura)
 	go a.warmBalance()
 }
 
@@ -246,7 +246,7 @@ func (a *App) acomodarJanela() {
 			// e fora de QUALQUER captura — sem isso a ferramenta do Windows não
 			// conseguia mais recortar uma janela (a nossa cobria a tela toda)
 			foraDoPrint(h)
-			a.alinhaCliente() // mede barra/borda p/ alinhar o cliente na área útil
+			a.alinhaCliente()     // mede barra/borda p/ alinhar o cliente na área útil
 			go sobeServidorPets() // miniaturas dos bonecos p/ o painel de escolha
 			go a.sobePonte()      // chat QUENTE (hermes acp): resposta em segundos
 			logMsg(fmt.Sprintf("janela acomodada: hwnd=%x (%d tentativas)", h, i+1))
@@ -423,7 +423,7 @@ func balanceText(_ int) string {
 	if e := iaAgora(); e.Chave != "" {
 		if p, ok := provedorPorID(e.Provedor); ok {
 			if !p.Saldo {
-				return "saldo: não informado pelo " + p.Nome
+				return "Saldo não informado pelo " + p.Nome
 			}
 			return saldoDoProvedor(p.ID, e.Chave)
 		}
@@ -433,18 +433,18 @@ func balanceText(_ int) string {
 	if key := envKey(env, "DEEPSEEK_API_KEY"); key != "" {
 		body, err := pedeSaldo("https://api.deepseek.com/user/balance", key)
 		if err != nil {
-			return "saldo indisponível (rede)"
+			return "Saldo indisponível (sem conexão)"
 		}
 		return lerSaldoDeepSeek(body)
 	}
 	if key := envKey(env, "OPENROUTER_API_KEY"); key != "" {
 		body, err := pedeSaldo(urlCreditosOpenRouter, key)
 		if err != nil {
-			return "saldo indisponível (rede)"
+			return "Saldo indisponível (sem conexão)"
 		}
 		return lerSaldoOpenRouter(body)
 	}
-	return "saldo indisponível (chave não encontrada)"
+	return "Saldo indisponível (chave não encontrada)"
 }
 
 // saldoDoProvedor — US$ do provedor (só os que informam: OpenRouter e DeepSeek).
@@ -455,7 +455,7 @@ func saldoDoProvedor(id, key string) string {
 	}
 	body, err := pedeSaldo(url, key)
 	if err != nil {
-		return "saldo indisponível (rede)"
+		return "Saldo indisponível (sem conexão)"
 	}
 	return ler(body)
 }
@@ -488,7 +488,7 @@ func lerSaldoDeepSeek(body []byte) string {
 		} `json:"balance_infos"`
 	}
 	if json.Unmarshal(body, &d) != nil || len(d.Infos) == 0 {
-		return "saldo indisponível (formato)"
+		return "Saldo indisponível (resposta inesperada do provedor)"
 	}
 	for _, i := range d.Infos {
 		if i.Currency == "USD" {
@@ -507,9 +507,18 @@ func lerSaldoOpenRouter(body []byte) string {
 		} `json:"data"`
 	}
 	if json.Unmarshal(body, &d) != nil || d.Data == nil || d.Data.Total == nil || d.Data.Usado == nil {
-		return "saldo indisponível (formato)"
+		return "Saldo indisponível (resposta inesperada do provedor)"
 	}
 	return fmt.Sprintf("US$ %.2f", *d.Data.Total-*d.Data.Usado)
+}
+
+// saldoSemRotulo — o saldo para vir depois de um rótulo "Saldo: ": "US$ 4.82" fica como
+// está; "Saldo indisponível (...)" vira "indisponível (...)", sem repetir a palavra.
+func saldoSemRotulo(b string) string {
+	if r := strings.TrimPrefix(b, "Saldo "); r != b {
+		return r
+	}
+	return b
 }
 
 func (a *App) warmBalance() {
@@ -539,17 +548,17 @@ func (a *App) stateLoop() {
 		}
 		switch {
 		case age < 0:
-			st.State, st.Detail = "erro", "sem arquivo de heartbeat"
+			st.State, st.Detail = "erro", "Arquivo de heartbeat do gateway não encontrado"
 		case age < 120:
-			st.State, st.Detail = "idle", fmt.Sprintf("gateway ativo (%ds)", age)
+			st.State, st.Detail = "idle", fmt.Sprintf("Gateway ativo (último sinal há %d s)", age)
 		case age < 600:
-			st.State, st.Detail = "pensando", fmt.Sprintf("gateway quieto há %ds", age)
+			st.State, st.Detail = "pensando", fmt.Sprintf("Gateway sem sinal há %d s", age)
 		default:
-			st.State, st.Detail = "dormindo", fmt.Sprintf("gateway MUDO há %d min", age/60)
+			st.State, st.Detail = "dormindo", fmt.Sprintf("Gateway sem resposta há %d min", age/60)
 		}
 		if num := strings.TrimPrefix(bal, "US$ "); strings.HasPrefix(bal, "US$ ") {
 			if f, err := parseFloat(num); err == nil && f < 3.0 {
-				st.State, st.Detail = "erro", "saldo abaixo de US$ 3"
+				st.State, st.Detail = "erro", "Saldo abaixo de US$ 3"
 			}
 		}
 		if a.ctx != nil {
@@ -564,11 +573,11 @@ func (a *App) stateLoop() {
 		if ant != "" && ant != st.State {
 			switch {
 			case ant == "dormindo" && st.State == "idle":
-				a.aviso("✅", "Gateway voltou", "Estava mudo e voltou a responder (heartbeat "+fmt.Sprint(age)+"s).")
+				a.aviso("✅", "Gateway restabelecido", "O gateway estava sem resposta e voltou a funcionar (último sinal há "+fmt.Sprint(age)+" s).")
 			case st.State == "erro":
-				a.aviso("⚠️", "Atenção", st.Detail)
+				a.aviso("⚠️", "Atenção", st.Detail+".")
 			case st.State == "dormindo":
-				a.aviso("🔌", "Gateway mudo", st.Detail)
+				a.aviso("🔌", "Gateway sem resposta", st.Detail+".")
 			}
 		}
 		time.Sleep(15 * time.Second)
@@ -617,28 +626,51 @@ func (a *App) SetHitRects(js string) {
 // SendChat — conversa de verdade com o Hermes.
 //
 // Híbrido de propósito:
-//   * "saldo" e "status" (a palavra sozinha) respondem NA HORA, local (zero token);
-//   * todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
+//   - "saldo" e "status" (a palavra sozinha) respondem NA HORA, local (zero token);
+//   - todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
 //     leva ~30 s e consome tokens da conta compartilhada.
 func (a *App) SendChat(text string) string {
-	switch comandoLocal(text) {
+	return a.enviaChat("", text, nil)
+}
+
+// SendChatEm — o envio do chat com conversas e anexos (22/10/2026): `conversa` é o id
+// guardado da conversa aberta na tela ("" = a atual da ponte) e `idsJSON` os anexos já
+// preparados por AnexoPreparar. Devolve {resposta, conversa}: uma conversa nova ganha o id
+// só agora, e a tela precisa dele.
+func (a *App) SendChatEm(conversa, texto, idsJSON string) string {
+	var ids []string
+	_ = json.Unmarshal([]byte(idsJSON), &ids)
+	anexos, err := pegaAnexos(ids)
+	if err != nil {
+		return respostaJSON(map[string]any{"resposta": "A mensagem não foi enviada. " + err.Error(), "conversa": conversa})
+	}
+	resp := a.enviaChat(conversa, texto, anexos)
+	return respostaJSON(map[string]any{"resposta": resp, "conversa": conversaAtual()})
+}
+
+func (a *App) enviaChat(conversa, text string, anexos []map[string]any) string {
+	cmd := comandoLocal(text)
+	if len(anexos) > 0 {
+		cmd = "" // com anexo, "saldo" é pergunta sobre o arquivo — vai para o agente
+	}
+	switch cmd {
 	case "saldo":
 		a.warmBalance()
 		a.mu.Lock()
 		b := a.balance
 		a.mu.Unlock()
-		return "Saldo: " + b + " (conta compartilhada)"
+		return "Saldo da conta compartilhada: " + saldoSemRotulo(b) + "."
 	case "status":
 		age := heartbeatAge()
 		if age < 0 {
-			return "Não achei o heartbeat do gateway."
+			return "Não encontrei o sinal (heartbeat) do gateway."
 		}
 		if age < 120 {
-			return fmt.Sprintf("Gateway ok — heartbeat há %ds. Estou de olho.", age)
+			return fmt.Sprintf("O gateway está funcionando (último sinal há %d s). Sigo acompanhando.", age)
 		}
-		return fmt.Sprintf("Atenção: gateway sem heartbeat há %d min.", age/60)
+		return fmt.Sprintf("Atenção: o gateway está sem sinal há %d min.", age/60)
 	}
-	resp := a.chamarHermes(text)
+	resp := a.chamarHermes(conversa, text, anexos)
 	// a resposta gastou crédito: relê o saldo (no máximo 1x/min) para o "gasto de hoje"
 	// do cabeçalho do chat acompanhar — o pet-state leva o valor novo em até 15 s
 	a.mu.Lock()
@@ -757,7 +789,11 @@ func (a *App) ShowStatus() {
 	a.mu.Lock()
 	b := a.balance
 	a.mu.Unlock()
-	msg := fmt.Sprintf("PetAgent MVP\nGateway: %ds\nSaldo: %s\nBonecos: 1 (Hermes)", age, b)
+	gw := fmt.Sprintf("último sinal há %d s", age)
+	if age < 0 {
+		gw = "sem sinal (heartbeat não encontrado)"
+	}
+	msg := fmt.Sprintf("Status do PetAgent\nGateway: %s\nSaldo: %s\nBonecos: 1 (Hermes)", gw, saldoSemRotulo(b))
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "status-panel", msg)
 	}

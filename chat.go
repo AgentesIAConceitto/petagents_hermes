@@ -67,11 +67,23 @@ func caminhoHermes() string {
 // Caminho normal: a PONTE QUENTE (hermes acp via chat_bridge.py) — o agente fica
 // vivo e responde no tempo do modelo (~3-8 s; medido 02/10/2026).
 // Reserva: `hermes chat -Q`, que sobe um agente novo do zero a cada mensagem (~30 s).
-func (a *App) chamarHermes(texto string) string {
-	if resp, ok := a.perguntaPonte(texto); ok {
-		return resp
+func (a *App) chamarHermes(conversa, texto string, anexos []map[string]any) string {
+	pedido := map[string]any{"prompt": texto}
+	if conversa != "" {
+		pedido["conversa"] = conversa
 	}
-	return a.chamarHermesFrio(texto)
+	if len(anexos) > 0 {
+		pedido["anexos"] = anexos
+	}
+	if r, ok := a.pedidoPonte(pedido, true); ok {
+		return r.Resposta
+	}
+	// a reserva só leva texto pela linha de comando: anexo nenhum chega por ela
+	if len(anexos) > 0 {
+		return "Para enviar anexos, é preciso o agente rápido, que está indisponível no momento. Tente " +
+			"novamente em instantes (mensagens sem anexo podem seguir pelo modo lento)."
+	}
+	return a.chamarHermesFrio(conversa, texto)
 }
 
 // argsReserva — argumentos do `hermes` na reserva lenta, com o teto de iterações.
@@ -82,19 +94,30 @@ func argsReserva(texto string) []string {
 		"--continue", sessaoChat, "--create-if-missing"}
 }
 
+// argsReservaEm — a reserva na MESMA conversa que está na tela. Só faz sentido no home do
+// boneco: é o state.db dele que tem essa conversa (no home do dono ela não existe).
+func argsReservaEm(texto, conversa string, homeDoBoneco bool) []string {
+	if conversa == "" || !homeDoBoneco {
+		return argsReserva(texto)
+	}
+	return []string{"chat", "-Q", "--query=" + texto,
+		"--max-turns", strconv.Itoa(maxIteracoesIA), "--resume", conversa}
+}
+
 // chamarHermesFrio — reserva (lenta). Só usada com a ponte fora do ar: se a ponte só
 // demorou, ela segue trabalhando e a reserva repetiria a pergunta (ver perguntaPonte).
-func (a *App) chamarHermesFrio(texto string) string {
+func (a *App) chamarHermesFrio(conversa, texto string) string {
 	exe := caminhoHermes()
 	if exe == "" {
-		return "Não encontrei o Hermes nesta máquina — sem ele eu não consigo conversar de verdade."
+		return "Não encontrei o Hermes nesta máquina. Sem ele, não consigo conversar de verdade."
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, argsReserva(texto)...)
+	boneco := iaAgora().Modo == "boneco"
+	cmd := exec.CommandContext(ctx, exe, argsReservaEm(texto, conversa, boneco)...)
 	// IA só do boneco: a reserva usa o home espelhado (que a ponte monta com o modelo e a
 	// chave do boneco) — senão responderia com a IA do Hermes do dono
-	if iaAgora().Modo == "boneco" {
+	if boneco {
 		if base := os.Getenv("LOCALAPPDATA"); base != "" {
 			cmd.Env = append(os.Environ(), "HERMES_HOME="+filepath.Join(base, "petagent", "hermes-home"))
 		}
@@ -112,7 +135,7 @@ func (a *App) chamarHermesFrio(texto string) string {
 	logMsg(fmt.Sprintf("chat: reserva (hermes chat -Q) respondeu %d chars (err=%v)", len(resp), err != nil))
 	if err != nil && resp == "" {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "O Hermes demorou demais para responder (mais de 5 min) — tente de novo."
+			return "O Hermes demorou demais para responder (mais de 5 minutos). Tente novamente."
 		}
 		detalhe := strings.TrimSpace(erros.String())
 		if len(detalhe) > 300 {
@@ -124,7 +147,7 @@ func (a *App) chamarHermesFrio(texto string) string {
 		return "Não consegui falar com o Hermes: " + detalhe
 	}
 	if resp == "" {
-		return "(o Hermes não devolveu texto)"
+		return "(O Hermes não devolveu nenhum texto.)"
 	}
 	return resp
 }
@@ -156,6 +179,6 @@ func (a *App) ChatIntegrado() string {
 	exe := caminhoHermes()
 	ok := exe != ""
 	b, _ := json.Marshal(map[string]any{"ok": ok, "hermes": exe, "sessao": sessaoChat,
-		"erro": map[bool]string{true: "", false: "hermes não encontrado"}[ok]})
+		"erro": map[bool]string{true: "", false: "Hermes não encontrado nesta máquina."}[ok]})
 	return string(b)
 }

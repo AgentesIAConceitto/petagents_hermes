@@ -110,16 +110,16 @@ def _pega_exe(origem):
         if src.is_dir():
             src = src / EXE
         if not src.exists():
-            return False, f"não achei o executável em {src}"
+            return False, f"Executável não encontrado em {src}."
         shutil.copy2(src, destino)
         # a ponte do chat (agente quente via hermes acp) vai junto: sem ela o chat
         # do boneco cai na reserva lenta (~30 s por mensagem)
         ponte = src.parent / "chat_bridge.py"
         if ponte.exists():
             shutil.copy2(ponte, _pasta() / "chat_bridge.py")
-        return True, f"app copiado de {src}"
+        return True, f"Aplicativo copiado de {src}."
     if destino.exists():
-        return True, f"app já estava instalado ({destino})"
+        return True, f"O aplicativo já estava instalado ({destino})."
     if REPO_GITHUB:
         try:
             api = f"https://api.github.com/repos/{REPO_GITHUB}/releases/latest"
@@ -131,13 +131,13 @@ def _pega_exe(origem):
                     url = a.get("browser_download_url", "")
                     break
             if not url:
-                return False, "o último release não tem um .exe anexado"
+                return False, "A versão mais recente publicada no GitHub não tem um arquivo .exe anexado."
             with urllib.request.urlopen(url, timeout=180) as r, destino.open("wb") as f:
                 shutil.copyfileobj(r, f)
-            return True, f"app baixado do GitHub ({release.get('tag_name', '?')})"
+            return True, f"Aplicativo baixado do GitHub ({release.get('tag_name', '?')})."
         except Exception as e:  # rede, 404, rate-limit...
-            return False, f"falha ao baixar do GitHub: {e}"
-    return False, ("o app ainda não está publicado (REPO_GITHUB vazio). "
+            return False, f"Não foi possível baixar do GitHub: {e}"
+    return False, ("O aplicativo ainda não foi publicado (REPO_GITHUB vazio). "
                    "Use --origem CAMINHO_PARA_petagent.exe (build local).")
 
 
@@ -169,38 +169,39 @@ def instalar(args) -> int:
     (_pasta() / "plugin.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     _log(f"instalar ok: boneco={boneco}")
-    print(f"[ok] boneco definido: {boneco}   (troque com --boneco <slug>)")
-    print(f"[ok] configurado em: {_pasta()}")
-    print("  para colocar o boneco na tela:  hermes petagent iniciar")
-    print("  para tirar:                     hermes petagent parar")
+    print(f"[ok] Boneco definido: {boneco}   (para trocar, use --boneco <slug>)")
+    print(f"[ok] Configuração salva em: {_pasta()}")
+    print("  Para colocar o boneco na tela:  hermes petagent iniciar")
+    print("  Para tirar o boneco da tela:    hermes petagent parar")
     return 0
 
 
 def iniciar(args=None) -> int:
     exe = _pasta() / EXE
     if not exe.exists():
-        print("✗ o app não está instalado — rode antes: hermes petagent instalar")
+        print("✗ O aplicativo não está instalado. Rode antes: hermes petagent instalar")
         return 1
     if _rodando():
-        print("• o boneco já está na tela")
+        print("• O boneco já está na tela.")
         return 0
-    # explorer.exe: sobe o app no contexto NÃO-elevado do usuário (senão o acesso
-    # ao Outlook por COM falha, e nada quebra silenciosamente) e desanexa limpo.
+    # explorer.exe: sobe o app no contexto NÃO-elevado do usuário (janela elevada
+    # não recebe arquivo arrastado do Explorer, e o anexo do chat depende disso)
+    # e desanexa limpo.
     subprocess.Popen(["explorer.exe", str(exe)], creationflags=DETACHED)
     _log("iniciar")
-    print("[ok] boneco subindo...")
-    print("  sair: Ctrl+Alt+Q, menu DESLIGAR, hermes petagent parar")
+    print("[ok] Abrindo o boneco na tela...")
+    print("  Para encerrar: Ctrl+Alt+Q, opção DESLIGAR do menu ou hermes petagent parar")
     return 0
 
 
 def parar(args=None) -> int:
     if not _rodando():
-        print("• o boneco não está na tela")
+        print("• O boneco não está na tela.")
         return 0
     subprocess.run(["taskkill", "/IM", EXE, "/F"],
                    capture_output=True, creationflags=NO_WINDOW, timeout=30)
     _log("parar")
-    print("[ok] boneco saiu da tela")
+    print("[ok] O boneco saiu da tela.")
     return 0
 
 
@@ -211,11 +212,11 @@ def status(args=None) -> int:
         pet = (_pasta() / "petdex.txt").read_text(encoding="utf-8").strip()
     except OSError:
         pass
-    print(f"pasta:    {_pasta()}")
-    print(f"app:      {'instalado' if exe.exists() else 'NÃO instalado'}")
-    print(f"na tela:  {'sim' if _rodando() else 'não'}")
-    print(f"boneco:   {pet or '(nenhum definido)'}")
-    print(f"pet do Hermes: {_boneco_do_hermes() or '(não configurado)'}")
+    print(f"Pasta:          {_pasta()}")
+    print(f"Aplicativo:     {'instalado' if exe.exists() else 'NÃO instalado'}")
+    print(f"Na tela:        {'sim' if _rodando() else 'não'}")
+    print(f"Boneco:         {pet or '(nenhum definido)'}")
+    print(f"Pet do Hermes:  {_boneco_do_hermes() or '(não configurado)'}")
     return 0
 
 
@@ -224,13 +225,13 @@ def status(args=None) -> int:
 def configura_subcomandos(sub) -> None:
     """Monta `hermes petagent <ação>`."""
     acoes = sub.add_subparsers(dest="acao")
-    p = acoes.add_parser("instalar", help="baixa/copia o app, define o boneco e grava a config")
-    p.add_argument("--origem", help="caminho do petagent.exe (ou da pasta) — build local")
+    p = acoes.add_parser("instalar", help="baixa ou copia o aplicativo, define o boneco e salva a configuração")
+    p.add_argument("--origem", help="caminho do petagent.exe (ou da pasta dele), para usar um build local")
     p.add_argument("--boneco", help="slug do boneco no Petdex (ex.: paperclip)")
     p.set_defaults(func=instalar)
     acoes.add_parser("iniciar", help="coloca o boneco na tela").set_defaults(func=iniciar)
     acoes.add_parser("parar", help="tira o boneco da tela").set_defaults(func=parar)
-    acoes.add_parser("status", help="mostra se o app está instalado/na tela").set_defaults(func=status)
+    acoes.add_parser("status", help="mostra se o aplicativo está instalado e se o boneco está na tela").set_defaults(func=status)
 
 
 def comando_chat(raw_args: str):
@@ -242,11 +243,11 @@ def comando_chat(raw_args: str):
         return "Uso: /petagent instalar | iniciar | parar | status"
     args = type("A", (), {"origem": None, "boneco": None})()
     if fn is instalar:
-        return "No chat eu não instalo (preciso de caminho de arquivo). No terminal:\n" \
+        return "A instalação não pode ser feita pelo chat, pois precisa do caminho do arquivo. No terminal, use:\n" \
                "  hermes petagent instalar --origem CAMINHO\\petagent.exe"
     fn(args)
-    return {"iniciar": "Boneco subindo na tela", "parar": "Boneco saiu da tela",
-            "status": "Veja o painel do terminal para o status completo."}[acao]
+    return {"iniciar": "Abrindo o boneco na tela.", "parar": "O boneco saiu da tela.",
+            "status": "O status completo foi exibido no terminal."}[acao]
 
 
 def ao_usar_ferramenta(**kw) -> None:
@@ -260,7 +261,7 @@ def ao_encerrar_sessao(**kw) -> None:
 def register(ctx) -> None:
     ctx.register_cli_command(
         name="petagent",
-        help="PetAgent: boneco vivo no desktop (instalar, iniciar, parar, status)",
+        help="PetAgent: boneco animado na área de trabalho (instalar, iniciar, parar, status)",
         setup_fn=configura_subcomandos,
         handler_fn=lambda a: (a.func(a) if getattr(a, "func", None) else 0),
         description="Instala, configura e controla o boneco do PetAgent na tela.",

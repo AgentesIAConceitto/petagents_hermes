@@ -261,15 +261,15 @@
       document.body.appendChild(c);
     }
     const selo = res.novo
-      ? '<span class="pc-selo novo">novo na coleção</span>'
-      : '<span class="pc-selo rep">repetido · +' + res.moedas + " moeda" + (res.moedas > 1 ? "s" : "") + "</span>";
+      ? '<span class="pc-selo novo">Novo na coleção</span>'
+      : '<span class="pc-selo rep">Repetido · +' + res.moedas + " moeda" + (res.moedas > 1 ? "s" : "") + "</span>";
     c.className = "premio " + it.raridade + (bom ? " brilha" : "");
     c.style.setProperty("--cor", r.cor);
     c.innerHTML =
       '<span class="pc-fita">' + r.nome + "</span>" +
       '<span class="pc-ico">' + it.ico + "</span>" +
-      '<span class="pc-nome">' + it.nome + "</span>" + selo +
-      '<span class="pc-rodape">' + res.total + " moedas · coleção " + resumo().qtd + " de " + CATALOGO.length.toLocaleString("pt-BR") + "</span>";
+      '<span class="pc-nome">' + maiuscula(it.nome) + "</span>" + selo +
+      '<span class="pc-rodape">' + res.total + (res.total === 1 ? " moeda" : " moedas") + " · Coleção: " + resumo().qtd + " de " + CATALOGO.length.toLocaleString("pt-BR") + "</span>";
     c.classList.remove("oculto");
     if (typeof posicionaPertoDoPet === "function") posicionaPertoDoPet(c);
     // tira a classe e repõe: reinicia a animação mesmo em achados seguidos
@@ -318,32 +318,32 @@
       '<i></i>' + rotulo + " <span>" + n + "</span></button>";
     const chips = chip("todos", "Todos", "var(--acento)", s.qtd) +
       ORDEM.slice().reverse().filter((r) => s.porRar[r]).map((r) => chip(r, RAR[r].nome, RAR[r].cor, s.porRar[r])).join("");
-    const item = (it) => '<span class="col-item ' + it.raridade + '" title="' + it.nome + " — " + RAR[it.raridade].nome +
+    const item = (it) => '<span class="col-item ' + it.raridade + '" title="' + maiuscula(it.nome) + " (" + RAR[it.raridade].nome + ")" +
       '" style="--cor:' + RAR[it.raridade].cor + '">' + it.ico + "</span>";
     const raros = s.raros.slice(0, 8).map(item).join("");
     const ids = Object.keys(s.dono).sort((a, b) => (s.dono[b] || 0) - (s.dono[a] || 0));
     const itens = ids.map((id) => CATALOGO.find((x) => x.id === id))
       .filter((it) => it && (filtroRar === "todos" || it.raridade === filtroRar));
-    const titulo = filtroRar === "todos" ? "Tudo o que " + nome + " já ganhou" : "Só " + RAR[filtroRar].nome.toLowerCase();
+    const titulo = filtroRar === "todos" ? "Tudo o que " + nome + " já ganhou" : "Itens da categoria " + RAR[filtroRar].nome;
     p.innerHTML =
-      '<div class="pp-topo"><span class="pp-quem"><b>Coleção da ' + nome + "</b><span>presentes que ela achou nos baús</span></span>" +
-      '<span class="col-moedas" title="moedas">' + (typeof icone === "function" ? icone("moeda", 15) : "") + s.moedas + " moedas</span>" +
+      '<div class="pp-topo"><span class="pp-quem"><b>Coleção de ' + nome + "</b><span>Presentes encontrados nos baús</span></span>" +
+      '<span class="col-moedas" title="Moedas">' + (typeof icone === "function" ? icone("moeda", 15) : "") + s.moedas + " moedas</span>" +
       '<button class="botao-x" id="col-x" aria-label="Fechar">' + (typeof icone === "function" ? icone("fechar", 18) : "✕") + "</button></div>" +
       '<div class="col-prog"><span><span>Coleção</span><span><b>' + s.qtd + "</b> de " + s.total.toLocaleString("pt-BR") + " · " +
       pct.toFixed(1).replace(".", ",") + '%</span></span><i><b style="width:' + Math.max(1.5, pct) + '%"></b></i></div>' +
       '<div class="col-chips">' + chips + "</div>" +
-      (raros ? '<div class="col-raros"><span>Em destaque — os raros</span><div>' + raros + "</div></div>" : "") +
+      (raros ? '<div class="col-raros"><span>Raros em destaque</span><div>' + raros + "</div></div>" : "") +
       '<div class="col-sec">' + titulo + "</div>" +
       '<div class="col-grade">' + (itens.slice(0, 160).map(item).join("") ||
-        '<span class="pn-nota">Ainda não ganhou nada… os baús aparecem de vez em quando (até 4 por dia).</span>') + "</div>" +
-      '<div class="col-rodape"><span>' + achadosHoje + " de 4 baús hoje · repetido vira moeda</span>" +
+        '<span class="pn-nota">Nenhum presente ainda. Os baús aparecem de vez em quando, até 4 por dia.</span>') + "</div>" +
+      '<div class="col-rodape"><span>Baús hoje: ' + achadosHoje + " de 4 · Repetidos viram moedas</span>" +
       '<button class="pn-bt" id="col-achar">Procurar um baú</button></div>';
     p.classList.remove("oculto");
     p.querySelector("#col-x").onclick = () => { p.classList.add("oculto"); reportarHit(); };
     p.querySelectorAll("[data-rar]").forEach((b) => { b.onclick = () => { filtroRar = b.dataset.rar; galeria(); }; });
     p.querySelector("#col-achar").onclick = () => {
       const r = achar(false);
-      if (!r) toast("colecao", "Já achei 4 hoje!", "volto a procurar amanhã", 3000, true);
+      if (!r) toast("colecao", "Já achei 4 baús hoje!", "Volto a procurar amanhã.", 3000, true);
       galeria();
     };
     if (typeof posicionaPertoDoPet === "function") {
@@ -356,6 +356,8 @@
     try { reportarHit(); } catch (e) { }
   }
 
+  // nome do item com inicial maiúscula para rótulos (o catálogo fica em minúsculas: ele também entra no meio das falas)
+  const maiuscula = (t) => { t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
   const cfgNome = () => (window.bicho && window.bicho.cfg && window.bicho.cfg.nome) || "Xodó";
 
   /* ── ponte com o bicho.js ────────────────────────────────────────────────── */
