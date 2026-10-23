@@ -49,16 +49,16 @@ var (
 		".kt": true, ".swift": true, ".vue": true, ".jsx": true, ".tsx": true, ".env.example": true, ".srt": true}
 	// formatos que a pessoa vai tentar e que ainda não vão: o recado diz o que fazer
 	extRecado = map[string]string{
-		".doc": "Word ainda não vai direto: salve como PDF e anexe de novo.",
-		".docx": "Word ainda não vai direto: salve como PDF e anexe de novo.",
-		".xls": "Excel ainda não vai direto: salve como CSV e anexe de novo.",
-		".xlsx": "Excel ainda não vai direto: salve como CSV e anexe de novo.",
-		".ppt": "PowerPoint ainda não vai direto: salve como PDF e anexe de novo.",
-		".pptx": "PowerPoint ainda não vai direto: salve como PDF e anexe de novo.",
-		".mp4": "Vídeo ainda não é aceito: mande um print ou o áudio.",
-		".mov": "Vídeo ainda não é aceito: mande um print ou o áudio.",
-		".mp3": "Áudio anexado ainda não é aceito: use o microfone do chat.",
-		".zip": "Arquivo compactado não vai: descompacte e anexe o que importa.",
+		".doc": "Arquivos do Word ainda não são aceitos. Salve como PDF e anexe novamente.",
+		".docx": "Arquivos do Word ainda não são aceitos. Salve como PDF e anexe novamente.",
+		".xls": "Planilhas do Excel ainda não são aceitas. Salve como CSV e anexe novamente.",
+		".xlsx": "Planilhas do Excel ainda não são aceitas. Salve como CSV e anexe novamente.",
+		".ppt": "Apresentações do PowerPoint ainda não são aceitas. Salve como PDF e anexe novamente.",
+		".pptx": "Apresentações do PowerPoint ainda não são aceitas. Salve como PDF e anexe novamente.",
+		".mp4": "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
+		".mov": "Vídeos ainda não são aceitos. Envie uma captura de tela ou grave um áudio pelo microfone do chat.",
+		".mp3": "Arquivos de áudio ainda não são aceitos. Use o microfone do chat.",
+		".zip": "Arquivos compactados não são aceitos. Descompacte e anexe somente o necessário.",
 	}
 )
 
@@ -84,7 +84,7 @@ var (
 func (a *App) AnexoPreparar(nome, b64 string) string {
 	dados, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		return respostaJSON(map[string]any{"ok": false, "erro": "não consegui ler " + nome})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Não foi possível ler o arquivo " + nome + "."})
 	}
 	p, err := preparaAnexo(nome, dados)
 	if err != nil {
@@ -112,7 +112,7 @@ func (a *App) AnexoDescartar(id string) {
 // pegaAnexos — os prontos destes ids, já saindo da espera (cada um vai uma vez só).
 func pegaAnexos(ids []string) ([]map[string]any, error) {
 	if len(ids) > maxAnexosMsg {
-		return nil, fmt.Errorf("no máximo %d arquivos por mensagem", maxAnexosMsg)
+		return nil, fmt.Errorf("Envie no máximo %d arquivos por mensagem.", maxAnexosMsg)
 	}
 	anexosMu.Lock()
 	defer anexosMu.Unlock()
@@ -120,7 +120,7 @@ func pegaAnexos(ids []string) ([]map[string]any, error) {
 	for _, id := range ids {
 		p, ok := anexosProntos[id]
 		if !ok {
-			return nil, fmt.Errorf("um dos anexos expirou — anexe de novo")
+			return nil, fmt.Errorf("Um dos anexos expirou. Anexe o arquivo novamente.")
 		}
 		saida = append(saida, map[string]any{"nome": p.envio, "tipo": map[bool]string{true: "imagem", false: "texto"}[p.Tipo == "imagem"], "base64": p.b64})
 	}
@@ -137,10 +137,10 @@ func preparaAnexo(nome string, dados []byte) (*anexoPronto, error) {
 		nome = "anexo"
 	}
 	if len(dados) == 0 {
-		return nil, fmt.Errorf("%s está vazio", nome)
+		return nil, fmt.Errorf("O arquivo %s está vazio.", nome)
 	}
 	if len(dados) > maxAnexoBytes {
-		return nil, fmt.Errorf("%s tem %.0f MB e o limite é %d MB por arquivo", nome,
+		return nil, fmt.Errorf("O arquivo %s tem %.0f MB, e o limite é de %d MB por arquivo.", nome,
 			float64(len(dados))/(1<<20), maxAnexoBytes>>20)
 	}
 	ext := strings.ToLower(filepath.Ext(nome))
@@ -153,10 +153,10 @@ func preparaAnexo(nome string, dados []byte) (*anexoPronto, error) {
 	case ext == ".pdf":
 		texto, paginas, err := textoDoPDF(dados)
 		if err != nil {
-			return nil, fmt.Errorf("não consegui ler o PDF %s (%v)", nome, err)
+			return nil, fmt.Errorf("Não foi possível ler o PDF %s (%v).", nome, err)
 		}
 		if len(strings.Join(strings.Fields(texto), "")) < 40 {
-			return nil, fmt.Errorf("%s não tem texto: é escaneado (foto das páginas). Mande prints das páginas que importam — a IA lê imagem", nome)
+			return nil, fmt.Errorf("O PDF %s não tem texto: é um documento escaneado (imagem das páginas). Envie capturas de tela das páginas importantes, pois a IA consegue ler imagens.", nome)
 		}
 		p.Tipo, p.Paginas = "pdf", paginas
 		corpo := fmt.Sprintf("Texto extraído do PDF %s (%d página(s)).\n\n%s", nome, paginas, texto)
@@ -164,14 +164,14 @@ func preparaAnexo(nome string, dados []byte) (*anexoPronto, error) {
 		p.envio = nome + ".txt"
 		p.b64 = base64.StdEncoding.EncodeToString([]byte(corpo))
 	case extRecado[ext] != "":
-		return nil, fmt.Errorf("%s: %s", nome, extRecado[ext])
+		return nil, fmt.Errorf("Não foi possível anexar %s. %s", nome, extRecado[ext])
 	case extTexto[ext] || pareceTexto(dados):
 		texto := comoUTF8(dados)
 		p.Tipo = "texto"
 		p.Tokens = tokensTexto(texto)
 		p.b64 = base64.StdEncoding.EncodeToString([]byte(texto))
 	default:
-		return nil, fmt.Errorf("%s: esse tipo de arquivo ainda não vai. Dá para mandar imagem, PDF ou texto", nome)
+		return nil, fmt.Errorf("Não foi possível anexar %s: este tipo de arquivo ainda não é aceito. Envie imagem, PDF ou texto.", nome)
 	}
 	return p, nil
 }

@@ -80,8 +80,8 @@ func (a *App) chamarHermes(conversa, texto string, anexos []map[string]any) stri
 	}
 	// a reserva só leva texto pela linha de comando: anexo nenhum chega por ela
 	if len(anexos) > 0 {
-		return "Os anexos precisam do agente rápido, que está fora do ar agora — tente de novo em " +
-			"instantes (o texto sem anexo também pode ir pelo modo lento)."
+		return "Para enviar anexos, é preciso o agente rápido, que está indisponível no momento. Tente " +
+			"novamente em instantes (mensagens sem anexo podem seguir pelo modo lento)."
 	}
 	return a.chamarHermesFrio(conversa, texto)
 }
@@ -109,7 +109,7 @@ func argsReservaEm(texto, conversa string, homeDoBoneco bool) []string {
 func (a *App) chamarHermesFrio(conversa, texto string) string {
 	exe := caminhoHermes()
 	if exe == "" {
-		return "Não encontrei o Hermes nesta máquina — sem ele eu não consigo conversar de verdade."
+		return "Não encontrei o Hermes nesta máquina. Sem ele, não consigo conversar de verdade."
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
@@ -135,7 +135,7 @@ func (a *App) chamarHermesFrio(conversa, texto string) string {
 	logMsg(fmt.Sprintf("chat: reserva (hermes chat -Q) respondeu %d chars (err=%v)", len(resp), err != nil))
 	if err != nil && resp == "" {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "O Hermes demorou demais para responder (mais de 5 min) — tente de novo."
+			return "O Hermes demorou demais para responder (mais de 5 minutos). Tente novamente."
 		}
 		detalhe := strings.TrimSpace(erros.String())
 		if len(detalhe) > 300 {
@@ -147,7 +147,7 @@ func (a *App) chamarHermesFrio(conversa, texto string) string {
 		return "Não consegui falar com o Hermes: " + detalhe
 	}
 	if resp == "" {
-		return "(o Hermes não devolveu texto)"
+		return "(O Hermes não devolveu nenhum texto.)"
 	}
 	return resp
 }
@@ -179,6 +179,6 @@ func (a *App) ChatIntegrado() string {
 	exe := caminhoHermes()
 	ok := exe != ""
 	b, _ := json.Marshal(map[string]any{"ok": ok, "hermes": exe, "sessao": sessaoChat,
-		"erro": map[bool]string{true: "", false: "hermes não encontrado"}[ok]})
+		"erro": map[bool]string{true: "", false: "Hermes não encontrado nesta máquina."}[ok]})
 	return string(b)
 }

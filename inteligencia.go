@@ -402,7 +402,7 @@ var complementoMu sync.Mutex // um `pm install` por vez (salvar + subir a ponte)
 var instalaComplemento = func(extra string) (instalou bool, err error) {
 	exe := caminhoHermes()
 	if exe == "" {
-		return false, errors.New("não encontrei o Hermes nesta máquina")
+		return false, errors.New("o Hermes não foi encontrado nesta máquina")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -421,7 +421,7 @@ var instalaComplemento = func(extra string) (instalou bool, err error) {
 	txt := strings.TrimSpace(string(saida))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return false, errors.New("a instalação passou de 5 min")
+			return false, errors.New("a instalação passou do limite de 5 minutos")
 		}
 		if len(txt) > 300 {
 			txt = "…" + txt[len(txt)-300:]
@@ -569,18 +569,18 @@ func (a *App) IAAtual() string {
 func (a *App) IAModelos(provedor, chave string) string {
 	p, ok := provedorPorID(provedor)
 	if !ok {
-		return respostaJSON(map[string]any{"ok": false, "erro": "provedor desconhecido"})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Provedor desconhecido."})
 	}
 	c := chaveParaTeste(p, chave)
 	if c == "" && p.ID != "openrouter" {
-		return respostaJSON(map[string]any{"ok": false, "erro": "informe a chave para ver os modelos"})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Informe a chave de acesso para ver a lista de modelos."})
 	}
 	st, corpo, err := pedidoIA(p, p.modelos, c)
 	if err != nil {
-		return respostaJSON(map[string]any{"ok": false, "erro": "sem rede"})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Sem conexão com a internet. Verifique a rede e tente novamente."})
 	}
 	if st != 200 {
-		return respostaJSON(map[string]any{"ok": false, "erro": fmt.Sprintf("o provedor respondeu %d", st)})
+		return respostaJSON(map[string]any{"ok": false, "erro": fmt.Sprintf("O provedor respondeu com erro (código %d).", st)})
 	}
 	return respostaJSON(map[string]any{"ok": true, "modelos": lerModelos(corpo)})
 }
@@ -589,11 +589,11 @@ func (a *App) IAModelos(provedor, chave string) string {
 func (a *App) IATestar(provedor, chave string) string {
 	p, ok := provedorPorID(provedor)
 	if !ok {
-		return respostaJSON(map[string]any{"ok": false, "msg": "provedor desconhecido"})
+		return respostaJSON(map[string]any{"ok": false, "msg": "Provedor desconhecido."})
 	}
 	c := chaveParaTeste(p, chave)
 	if c == "" {
-		return respostaJSON(map[string]any{"ok": false, "msg": "falta a chave"})
+		return respostaJSON(map[string]any{"ok": false, "msg": "Informe a chave de acesso."})
 	}
 	url := p.teste
 	if url == "" {
@@ -602,17 +602,17 @@ func (a *App) IATestar(provedor, chave string) string {
 	st, _, err := pedidoIA(p, url, c)
 	switch {
 	case err != nil:
-		return respostaJSON(map[string]any{"ok": false, "msg": "sem rede — confira a internet"})
+		return respostaJSON(map[string]any{"ok": false, "msg": "Sem conexão com a internet. Verifique a rede e tente novamente."})
 	case st == 401 || st == 403 || st == 400:
-		return respostaJSON(map[string]any{"ok": false, "msg": "chave recusada pelo " + p.Nome})
+		return respostaJSON(map[string]any{"ok": false, "msg": "A chave foi recusada pelo " + p.Nome + ". Confira se ela foi copiada corretamente."})
 	case st != 200:
-		return respostaJSON(map[string]any{"ok": false, "msg": fmt.Sprintf("o %s respondeu %d", p.Nome, st)})
+		return respostaJSON(map[string]any{"ok": false, "msg": fmt.Sprintf("O %s respondeu com erro (código %d).", p.Nome, st)})
 	}
 	saldo := ""
 	if p.Saldo {
 		saldo = saldoDoProvedor(p.ID, c)
 	}
-	return respostaJSON(map[string]any{"ok": true, "msg": "funcionando", "saldo": saldo})
+	return respostaJSON(map[string]any{"ok": true, "msg": "Acesso funcionando", "saldo": saldo})
 }
 
 // IASalvar — grava a escolha e reinicia a ponte. Chave vazia = manter a que já existe.
@@ -625,41 +625,41 @@ func (a *App) IASalvar(js string) string {
 	}
 	falha := func(m string) string { return respostaJSON(map[string]any{"ok": false, "erro": m}) }
 	if json.Unmarshal([]byte(js), &d) != nil {
-		return falha("pedido ilegível")
+		return falha("Não foi possível ler os dados do formulário. Tente novamente.")
 	}
 	p, ok := provedorPorID(d.Provedor)
 	if !ok {
-		return falha("escolha um provedor")
+		return falha("Escolha um provedor.")
 	}
 	d.Modelo = strings.TrimSpace(d.Modelo)
 	if d.Modelo == "" {
-		return falha("escolha um modelo")
+		return falha("Escolha um modelo.")
 	}
 	chave := chaveParaTeste(p, d.Chave)
 	if chave == "" {
-		return falha("falta a chave do " + p.Nome)
+		return falha("Informe a chave de acesso do " + p.Nome + ".")
 	}
 	// ANTES de gravar: se o complemento não instala, a IA que funciona hoje fica como está
 	instalou, err := garanteComplemento(p)
 	if err != nil {
-		return falha("não consegui instalar no Hermes o complemento que o " + p.Nome +
-			" exige (" + p.Complemento + "): " + err.Error())
+		return falha("Não foi possível instalar no Hermes o complemento exigido pelo " + p.Nome +
+			" (" + p.Complemento + "). Motivo: " + err.Error())
 	}
 	salvo := respostaJSON(map[string]any{"ok": true, "instalou": instalou})
 	if d.Modo == "boneco" {
 		c, err := cifra(chave)
 		if err != nil {
-			return falha("não consegui proteger a chave (DPAPI)")
+			return falha("Não foi possível proteger a chave com a criptografia do Windows (DPAPI).")
 		}
 		if err := gravaIA(iaSalva{Modo: "boneco", Provedor: p.ID, Modelo: d.Modelo, Chave: c}); err != nil {
-			return falha("não consegui gravar: " + err.Error())
+			return falha("Não foi possível salvar a configuração: " + err.Error())
 		}
 		logMsg(fmt.Sprintf("ia: só o boneco agora usa %s / %s", p.ID, d.Modelo))
 	} else {
 		cfgPath, envPath := filepath.Join(hermesDir(), "config.yaml"), filepath.Join(hermesDir(), ".env")
 		cfgTxt, err := os.ReadFile(cfgPath)
 		if err != nil {
-			return falha("não achei o config.yaml do Hermes")
+			return falha("O arquivo config.yaml do Hermes não foi encontrado.")
 		}
 		modeloH, provH := leModeloHermes(string(cfgTxt))
 		if modeloH == d.Modelo && provH == p.ID && strings.TrimSpace(d.Chave) == "" && envKey(envPath, p.Var) != "" {
@@ -670,12 +670,12 @@ func (a *App) IASalvar(js string) string {
 			return salvo
 		}
 		if err := gravaComBackup(cfgPath, trocaModeloNoConfig(string(cfgTxt), p.ID, d.Modelo, p.BaseURL)); err != nil {
-			return falha("não consegui gravar o config.yaml do Hermes: " + err.Error())
+			return falha("Não foi possível salvar o config.yaml do Hermes: " + err.Error())
 		}
 		// chave nova digitada — ou a do boneco, se o .env do Hermes ainda não tem a deste provedor
 		if strings.TrimSpace(d.Chave) != "" || envKey(envPath, p.Var) == "" {
 			if err := gravaComBackup(envPath, trocaChaveNoEnv(lerArquivo(envPath), p.Var, chave)); err != nil {
-				return falha("não consegui gravar a chave no .env do Hermes: " + err.Error())
+				return falha("Não foi possível salvar a chave no arquivo .env do Hermes: " + err.Error())
 			}
 		}
 		_ = gravaIA(iaSalva{Modo: "hermes"}) // a escolha só do boneco deixa de valer
