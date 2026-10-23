@@ -770,7 +770,10 @@ select.ia-campo { cursor: pointer; }
 .cmod-acoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 .cmod-acoes .cm-bt { height: 36px; }
 .cm-bt { height: 32px; padding: 0 14px !important; border-radius: var(--raio-interno); border: 1px solid var(--borda) !important; font-size: 13px; font-weight: 600; }
-.cm-bt.perigo { background: var(--perigo) !important; border-color: transparent !important; color: #15161A !important; }
+/* Excluir: texto branco (pedido da dona, 23/10/2026) sobre o vermelho FORTE nos dois temas —
+   o --perigo do escuro (#FF8A7A, salmão) não dá contraste com branco */
+.cm-bt.perigo { background: #C2362A !important; border-color: transparent !important; color: #fff !important; }
+.cm-bt.perigo:hover { background: #A82C22 !important; }
 
 /* ───────── ANEXOS: 📎 no rodapé, chips antes de enviar, avisos, "Solte para anexar" ───────── */
 :where(.balao, .cg) .anexo-bt {
