@@ -18,8 +18,7 @@ const conv = {
   pronta: false,      // a ponte respondeu a lista (antes disso o agente está ligando)
   busca: "", pasta: "*", etiqueta: "",
   fechadas: {},       // grupos recolhidos na lista
-  menuDe: "",         // conversa cujo menu ⋯ está aberto
-  confirmando: false, // menu mostrando "Excluir? Cancelar / Excluir"
+  menuDe: "",         // conversa cujo menu ⋯ está aberto (a linha dela fica destacada)
   novaPasta: false,   // menu mostrando o campo de pasta nova
 };
 try { conv.fechadas = JSON.parse(localStorage.getItem("conversas.fechadas") || "{}"); } catch (e) { }
@@ -41,8 +40,14 @@ function tituloDe(c) {
   return "Nova conversa";
 }
 
-// título do cabeçalho: vazio enquanto a lista não chegou (o main.js mostra o nome do pet)
-function tituloConversa() { return tituloDe(dadosDaAtual()); }
+// título do cabeçalho: vazio enquanto a lista não chegou (o main.js mostra o nome do pet).
+// Conversa nova SEM mensagem ainda não está na lista (o Hermes só grava a conversa na 1ª
+// resposta): é "Nova conversa", não o nome do pet (visto pela dona em 23/10/2026).
+function tituloConversa() {
+  const c = dadosDaAtual();
+  if (c) return tituloDe(c);
+  return conv.pronta && conv.atual ? "Nova conversa" : "";
+}
 
 // "Clientes · #orçamento #urgente" — a linha de baixo do cabeçalho do chat grande
 function rotuloOrganizacao() {
@@ -232,6 +237,7 @@ function pintaLista() {
     (conv.pasta === "*" || (c.pasta || "") === conv.pasta) &&
     (!conv.etiqueta || (c.etiquetas || []).includes(conv.etiqueta)) &&
     (!termo || [tituloDe(c), c.previa, ...(c.etiquetas || [])].join(" ").toLowerCase().includes(termo)));
+  const rolagem = box.scrollTop;   // redesenhar não pode jogar a lista para o topo
   box.innerHTML = "";
   if (!itens.length) {
     const v = document.createElement("p");
@@ -265,11 +271,13 @@ function pintaLista() {
     }
     for (const c of lista) box.appendChild(itemLado(c));
   }
+  box.scrollTop = rolagem;
 }
 
 function itemLado(c) {
   const linha = document.createElement("div");
-  linha.className = "lado-item" + (c.id === conv.atual ? " ativa" : "");
+  linha.className = "lado-item" + (c.id === conv.atual ? " ativa" : "") + (c.id === conv.menuDe ? " menu-de" : "");
+  linha.dataset.id = c.id;
   const bt = document.createElement("button");
   bt.className = "lado-abre";
   bt.innerHTML = `<span class="li-topo"><span class="li-tit"></span><span class="li-data"></span></span>
@@ -289,32 +297,88 @@ function itemLado(c) {
   mais.innerHTML = icone("reticencias", 16);
   mais.title = "Renomear, pasta, etiquetas, excluir";
   mais.setAttribute("aria-label", "Opções de " + tituloDe(c));
-  mais.onclick = (ev) => { ev.stopPropagation(); abreMenuConv(c.id); };
+  mais.onclick = (ev) => {
+    ev.stopPropagation();
+    if (conv.menuDe === c.id) return fechaMenuConv();
+    abreMenuConv(c.id, false, true);
+  };
   linha.append(bt, mais);
   return linha;
 }
 
 /* ───────── menu ⋯ da conversa ───────── */
 
-function abreMenuConv(id, focarNome) {
+// daLista=true: aberto pelo ⋯ de uma linha — o menu abre AO LADO dela (e não no canto do
+// cabeçalho, longe da conversa: pedido da dona, 23/10/2026), e a linha fica destacada
+function abreMenuConv(id, focarNome, daLista) {
   if (!menuConvEl || !id) return;
   if (cg && cg.classList.contains("oculto")) abrirChatGrande();
   conv.menuDe = id;
-  conv.confirmando = false;
   conv.novaPasta = false;
-  pintaMenuConv();
+  if (daLista) menuConvEl.dataset.daLista = "1";
+  else delete menuConvEl.dataset.daLista;
+  pintaLista();   // destaca a linha da conversa do menu
   menuConvEl.classList.remove("oculto");
+  pintaMenuConv(); // já visível: mede a altura e se posiciona
   const alvo = document.getElementById(focarNome ? "cm-nome" : "cm-tag");
   if (focarNome && alvo) { alvo.focus(); alvo.select(); }
   reportarHit();
 }
 
+function posicionaMenuConv() {
+  const s = menuConvEl.style;
+  s.left = s.top = s.right = "";
+  const linha = menuConvEl.dataset.daLista && ladoEl.querySelector('.lado-item[data-id="' + CSS.escape(conv.menuDe) + '"]');
+  if (!linha || !cg) return;           // do cabeçalho: o canto de cima (CSS)
+  const rc = cg.getBoundingClientRect(), rl = linha.getBoundingClientRect();
+  const alto = menuConvEl.offsetHeight;
+  s.right = "auto";
+  s.left = Math.round(rl.right - rc.left + 8) + "px";
+  // alinhado com a linha; se não couber para baixo, sobe o que faltar
+  s.top = Math.round(Math.max(8, Math.min(rl.top - rc.top - 6, cg.clientHeight - alto - 8))) + "px";
+}
+
 function fechaMenuConv() {
   if (!menuConvEl || menuConvEl.classList.contains("oculto")) return;
   menuConvEl.classList.add("oculto");
+  delete menuConvEl.dataset.daLista;
   conv.menuDe = "";
+  pintaLista();
   reportarHit();
 }
+
+/* ───────── modal de excluir ─────────
+   Era uma caixa DENTRO do menu, que crescia e criava rolagem (dona, 23/10/2026): agora é um
+   modal no meio do chat grande, com o fundo escurecido. */
+function abreModalExcluir(c) {
+  fechaMenuConv();
+  let m = document.getElementById("conv-modal");
+  if (!m) {
+    m = document.createElement("div");
+    m.id = "conv-modal";
+    m.className = "conv-modal oculto";
+    m.innerHTML = `<div class="cmod-caixa" role="alertdialog" aria-modal="true" aria-labelledby="cmod-tit" aria-describedby="cmod-txt">
+      <div class="cmod-ic">${icone("lixeira", 22)}</div>
+      <b id="cmod-tit"></b>
+      <span id="cmod-txt">A conversa e os anexos dela somem do PetAgent e do histórico da IA. Não dá para desfazer.</span>
+      <div class="cmod-acoes"><button class="cm-bt" id="cmod-nao">Cancelar</button><button class="cm-bt perigo" id="cmod-sim">Excluir</button></div>
+    </div>`;
+    cg.appendChild(m);
+    m.addEventListener("mousedown", (e) => { if (e.target === m) fechaModalExcluir(); }); // clicar no fundo
+    document.getElementById("cmod-nao").onclick = fechaModalExcluir;
+  }
+  document.getElementById("cmod-tit").textContent = "Excluir “" + tituloDe(c) + "”?";
+  document.getElementById("cmod-sim").onclick = () => { fechaModalExcluir(); excluiConversa(c.id); };
+  m.classList.remove("oculto");
+  document.getElementById("cmod-nao").focus();   // o padrão seguro: Enter cancela
+  reportarHit();
+}
+
+function fechaModalExcluir() {
+  const m = document.getElementById("conv-modal");
+  if (m && !m.classList.contains("oculto")) { m.classList.add("oculto"); reportarHit(); }
+}
+const modalAberto = () => { const m = document.getElementById("conv-modal"); return m && !m.classList.contains("oculto"); };
 
 function pintaMenuConv() {
   const c = conv.lista.find((x) => x.id === conv.menuDe) || { id: conv.menuDe, titulo: "", etiquetas: [], pasta: "" };
@@ -332,12 +396,7 @@ function pintaMenuConv() {
     <input id="cm-tag" type="text" placeholder="adicionar etiqueta… (Enter)" autocomplete="off" aria-label="Adicionar etiqueta" />
     <div class="cm-sug" id="cm-sug"></div>
     <hr />
-    <button class="cm-excluir" id="cm-excluir">${icone("lixeira", 16)}Excluir conversa</button>
-    <div class="cm-confirma oculto" id="cm-confirma" role="alertdialog" aria-label="Confirmar exclusão">
-      <b></b>
-      <span>A conversa e os anexos dela somem do PetAgent e do histórico da IA. Não dá para desfazer.</span>
-      <div><button class="cm-bt" id="cm-cancelar">Cancelar</button><button class="cm-bt perigo" id="cm-sim">Excluir</button></div>
-    </div>`;
+    <button class="cm-excluir" id="cm-excluir">${icone("lixeira", 16)}Excluir conversa</button>`;
   const nome = document.getElementById("cm-nome");
   nome.value = c.titulo || tituloDe(c);
   const salvaNome = async () => {
@@ -434,12 +493,8 @@ function pintaMenuConv() {
   };
   pintaSug();
 
-  const conf = document.getElementById("cm-confirma");
-  conf.querySelector("b").textContent = "Excluir “" + tituloDe(c) + "”?";
-  conf.classList.toggle("oculto", !conv.confirmando);
-  document.getElementById("cm-excluir").onclick = () => { conv.confirmando = true; conf.classList.remove("oculto"); };
-  document.getElementById("cm-cancelar").onclick = () => { conv.confirmando = false; conf.classList.add("oculto"); };
-  document.getElementById("cm-sim").onclick = () => excluiConversa(c.id);
+  document.getElementById("cm-excluir").onclick = () => abreModalExcluir(c);
+  if (!menuConvEl.classList.contains("oculto")) posicionaMenuConv(); // a altura pode ter mudado
 }
 
 async function organiza(c, pasta, etiquetas) {
@@ -489,12 +544,20 @@ document.addEventListener("mousedown", (e) => {
   if (menuConvEl.contains(e.target) || e.target.closest("#cg-conv-menu, .lado-mais, #cg-renomear")) return;
   fechaMenuConv();
 }, true);
-// Esc fecha o menu antes de fechar o chat (fase de captura: antes do Esc do main.js)
+// Esc fecha o modal ou o menu antes de fechar o chat (fase de captura: antes do Esc do main.js)
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && menuConvEl && !menuConvEl.classList.contains("oculto")) {
-    e.stopImmediatePropagation();
-    fechaMenuConv();
-  }
+  if (e.key !== "Escape") return;
+  if (modalAberto()) { e.stopImmediatePropagation(); fechaModalExcluir(); }
+  else if (menuConvEl && !menuConvEl.classList.contains("oculto")) { e.stopImmediatePropagation(); fechaMenuConv(); }
+}, true);
+// rolar a lista com o menu aberto ao lado de uma linha: o menu acompanha a linha; se ela
+// saiu da área visível da lista, ele fecha (apontaria para o nada)
+document.addEventListener("scroll", (e) => {
+  if (!e.target || e.target.id !== "lado-lista" || !menuConvEl.dataset.daLista) return;
+  const linha = ladoEl.querySelector('.lado-item[data-id="' + CSS.escape(conv.menuDe) + '"]');
+  const rb = e.target.getBoundingClientRect(), rl = linha && linha.getBoundingClientRect();
+  if (!rl || rl.bottom < rb.top || rl.top > rb.bottom) fechaMenuConv();
+  else posicionaMenuConv();
 }, true);
 
 pintaLado();
