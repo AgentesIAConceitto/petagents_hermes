@@ -955,7 +955,8 @@ function pintaConversa() {
    saem do texto. O PDF vai como "nome.pdf.txt": o chip mostra "nome.pdf". */
 function separaAnexosDoTexto(texto) {
   const anexos = [];
-  const nomeDe = (c) => String(c).split(/[\\/]/).pop().replace(/\.pdf\.txt$/i, ".pdf");
+  // o mesmo PDF anexado de novo o Hermes guarda como "nome.pdf-2.txt"
+  const nomeDe = (c) => String(c).split(/[\\/]/).pop().replace(/\.pdf(-\d+)?\.txt$/i, ".pdf");
   let t = String(texto || "")
     .replace(/\[User attached (image|PDF): ([^\]]+)\]/g, (_, tipo, n) => {
       anexos.push({ nome: nomeDe(n.replace(/\s*\(\d+ page\(s\)\)$/, "")), tipo: tipo === "image" ? "imagem" : "pdf" });
