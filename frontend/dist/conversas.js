@@ -189,27 +189,74 @@ function montaLado() {
       <label class="lado-busca">${icone("buscar", 15)}
         <input id="lado-busca" type="text" placeholder="Buscar conversas…" autocomplete="off" aria-label="Buscar conversas" /></label>
       <div class="lado-filtros" id="lado-filtros">
-        <label class="lado-chip" id="lado-pasta-rot">${icone("pasta", 13)}<select id="lado-pasta" aria-label="Filtrar por pasta"></select></label>
-        <label class="lado-chip" id="lado-tag-rot">${icone("etiqueta", 13)}<select id="lado-tag" aria-label="Filtrar por etiqueta"></select></label>
+        <button class="lado-chip" id="lado-pasta-bt" aria-haspopup="listbox" aria-expanded="false" title="Filtrar por pasta">
+          ${icone("pasta", 13)}<span></span>${icone("abaixo", 12)}</button>
+        <button class="lado-chip" id="lado-tag-bt" aria-haspopup="listbox" aria-expanded="false" title="Filtrar por etiqueta">
+          ${icone("etiqueta", 13)}<span></span>${icone("abaixo", 12)}</button>
       </div>
+      <div class="lado-drop oculto" id="lado-drop" role="listbox"></div>
     </div>
     <div class="lado-lista" id="lado-lista"></div>`;
   document.getElementById("lado-nova").onclick = () => novaConversa();
   const busca = document.getElementById("lado-busca");
   busca.oninput = () => { conv.busca = busca.value; pintaLista(); };
-  document.getElementById("lado-pasta").onchange = (e) => { conv.pasta = e.target.value; pintaLado(); };
-  document.getElementById("lado-tag").onchange = (e) => { conv.etiqueta = e.target.value; pintaLado(); };
+  document.getElementById("lado-pasta-bt").onclick = () => alternaDrop("pasta");
+  document.getElementById("lado-tag-bt").onclick = () => alternaDrop("tag");
 }
 
-function opcoes(sel, lista, valor) {
-  sel.innerHTML = "";
-  for (const [v, r] of lista) {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = r;
-    sel.appendChild(o);
+/* O filtro abre um MENU DO APP, não o <select> do Windows (dona, 23/10/2026: a lista nativa
+   saía branca, com fonte do sistema, fora do tema). Cada opção mostra quantas conversas tem. */
+let _drop = "";   // "pasta" | "tag" | "" (fechado)
+
+function alternaDrop(tipo) {
+  if (_drop === tipo) return fechaDrop();
+  _drop = tipo;
+  const drop = document.getElementById("lado-drop");
+  const bt = document.getElementById(tipo === "pasta" ? "lado-pasta-bt" : "lado-tag-bt");
+  const conta = (f) => conv.lista.filter(f).length;
+  const itens = tipo === "pasta"
+    ? [["*", "Todas as pastas", conv.lista.length, "lista"],
+       ...conv.pastas.map((p) => [p, p, conta((c) => c.pasta === p), "pasta"]),
+       ["", "Sem pasta", conta((c) => !c.pasta), "pasta"]]
+    : [["", "Todas as etiquetas", conv.lista.length, "lista"],
+       ...todasEtiquetas().map((t) => [t, "#" + t, conta((c) => (c.etiquetas || []).includes(t)), "etiqueta"])];
+  const atual = tipo === "pasta" ? conv.pasta : conv.etiqueta;
+  drop.innerHTML = "";
+  drop.setAttribute("aria-label", tipo === "pasta" ? "Filtrar por pasta" : "Filtrar por etiqueta");
+  for (const [valor, rotulo, qtd, ic] of itens) {
+    const o = document.createElement("button");
+    o.className = "lado-op" + (valor === atual ? " sel" : "");
+    o.setAttribute("role", "option");
+    o.setAttribute("aria-selected", String(valor === atual));
+    o.innerHTML = icone(ic, 14) + "<span></span><em></em>" + (valor === atual ? icone("ok", 14) : "");
+    o.querySelector("span").textContent = rotulo;
+    o.querySelector("em").textContent = qtd;
+    o.onclick = () => {
+      if (tipo === "pasta") conv.pasta = valor; else conv.etiqueta = valor;
+      fechaDrop();
+      pintaLado();
+    };
+    drop.appendChild(o);
   }
-  sel.value = lista.some(([v]) => v === valor) ? valor : lista[0][0];
+  // debaixo do botão que abriu, sem passar da borda direita da lista
+  drop.classList.remove("oculto");
+  const topo = bt.parentElement.parentElement;
+  drop.style.top = (bt.offsetTop + bt.offsetHeight + 4) + "px";
+  drop.style.left = Math.max(10, Math.min(bt.offsetLeft, topo.clientWidth - drop.offsetWidth - 10)) + "px";
+  bt.setAttribute("aria-expanded", "true");
+  const sel = drop.querySelector(".sel") || drop.firstChild;
+  if (sel) sel.focus();
+}
+
+function fechaDrop() {
+  if (!_drop) return;
+  _drop = "";
+  const drop = document.getElementById("lado-drop");
+  if (drop) drop.classList.add("oculto");
+  for (const id of ["lado-pasta-bt", "lado-tag-bt"]) {
+    const b = document.getElementById(id);
+    if (b) b.setAttribute("aria-expanded", "false");
+  }
 }
 
 function todasEtiquetas() {
@@ -219,19 +266,20 @@ function todasEtiquetas() {
 function pintaLado() {
   if (!ladoEl) return;
   montaLado();
-  // rótulos curtos ("Pastas", "Etiquetas" = todas) e, sem nada para filtrar, o filtro some
-  const pastas = [["*", "Pastas"], ...conv.pastas.map((p) => [p, p]), ["", "Sem pasta"]];
-  opcoes(document.getElementById("lado-pasta"), pastas, conv.pasta);
-  conv.pasta = document.getElementById("lado-pasta").value;
+  // rótulos curtos (a escolha atual, ou "Pastas"/"Etiquetas" = todas); sem nada para filtrar,
+  // o filtro some
+  if (conv.pasta !== "*" && conv.pasta !== "" && !conv.pastas.includes(conv.pasta)) conv.pasta = "*";
   const tags = todasEtiquetas();
   if (conv.etiqueta && !tags.includes(conv.etiqueta)) conv.etiqueta = "";
-  opcoes(document.getElementById("lado-tag"), [["", "Etiquetas"], ...tags.map((t) => [t, "#" + t])], conv.etiqueta);
+  const btP = document.getElementById("lado-pasta-bt"), btT = document.getElementById("lado-tag-bt");
+  btP.querySelector("span").textContent = conv.pasta === "*" ? "Pastas" : (conv.pasta || "Sem pasta");
+  btT.querySelector("span").textContent = conv.etiqueta ? "#" + conv.etiqueta : "Etiquetas";
   const temPasta = conv.pastas.length > 0 || conv.pasta !== "*", temTag = tags.length > 0;
-  document.getElementById("lado-pasta-rot").classList.toggle("oculto", !temPasta);
-  document.getElementById("lado-tag-rot").classList.toggle("oculto", !temTag);
+  btP.classList.toggle("oculto", !temPasta);
+  btT.classList.toggle("oculto", !temTag);
   document.getElementById("lado-filtros").classList.toggle("oculto", !temPasta && !temTag);
-  document.getElementById("lado-pasta-rot").classList.toggle("ativa", conv.pasta !== "*");
-  document.getElementById("lado-tag-rot").classList.toggle("ativa", !!conv.etiqueta);
+  btP.classList.toggle("ativa", conv.pasta !== "*");
+  btT.classList.toggle("ativa", !!conv.etiqueta);
   pintaLista();
 }
 
@@ -550,10 +598,28 @@ document.addEventListener("mousedown", (e) => {
   if (menuConvEl.contains(e.target) || e.target.closest("#cg-conv-menu, .lado-mais, #cg-renomear")) return;
   fechaMenuConv();
 }, true);
+// clicar fora fecha o menu do filtro (o botão do filtro tem o próprio clique: abre/fecha)
+document.addEventListener("mousedown", (e) => {
+  if (_drop && !e.target.closest("#lado-drop, #lado-pasta-bt, #lado-tag-bt")) fechaDrop();
+}, true);
+// menu do filtro: ↑ ↓ andam pelas opções (Enter escolhe: são botões)
+document.addEventListener("keydown", (e) => {
+  if (!_drop || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+  const ops = [...document.querySelectorAll("#lado-drop .lado-op")];
+  const i = ops.indexOf(document.activeElement);
+  if (!ops.length) return;
+  e.preventDefault();
+  ops[(i + (e.key === "ArrowDown" ? 1 : -1) + ops.length) % ops.length].focus();
+});
 // Esc fecha o modal ou o menu antes de fechar o chat (fase de captura: antes do Esc do main.js)
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (modalAberto()) { e.stopImmediatePropagation(); fechaModalExcluir(); }
+  if (_drop) {
+    e.stopImmediatePropagation();
+    const bt = document.getElementById(_drop === "pasta" ? "lado-pasta-bt" : "lado-tag-bt");
+    fechaDrop();
+    if (bt) bt.focus();
+  } else if (modalAberto()) { e.stopImmediatePropagation(); fechaModalExcluir(); }
   else if (menuConvEl && !menuConvEl.classList.contains("oculto")) { e.stopImmediatePropagation(); fechaMenuConv(); }
 }, true);
 // rolar a lista com o menu aberto ao lado de uma linha: o menu acompanha a linha; se ela
