@@ -621,7 +621,30 @@ func (a *App) SetHitRects(js string) {
 //   * todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
 //     leva ~30 s e consome tokens da conta compartilhada.
 func (a *App) SendChat(text string) string {
-	switch comandoLocal(text) {
+	return a.enviaChat("", text, nil)
+}
+
+// SendChatEm — o envio do chat com conversas e anexos (22/10/2026): `conversa` é o id
+// guardado da conversa aberta na tela ("" = a atual da ponte) e `idsJSON` os anexos já
+// preparados por AnexoPreparar. Devolve {resposta, conversa}: uma conversa nova ganha o id
+// só agora, e a tela precisa dele.
+func (a *App) SendChatEm(conversa, texto, idsJSON string) string {
+	var ids []string
+	_ = json.Unmarshal([]byte(idsJSON), &ids)
+	anexos, err := pegaAnexos(ids)
+	if err != nil {
+		return respostaJSON(map[string]any{"resposta": "Não enviei: " + err.Error() + ".", "conversa": conversa})
+	}
+	resp := a.enviaChat(conversa, texto, anexos)
+	return respostaJSON(map[string]any{"resposta": resp, "conversa": conversaAtual()})
+}
+
+func (a *App) enviaChat(conversa, text string, anexos []map[string]any) string {
+	cmd := comandoLocal(text)
+	if len(anexos) > 0 {
+		cmd = "" // com anexo, "saldo" é pergunta sobre o arquivo — vai para o agente
+	}
+	switch cmd {
 	case "saldo":
 		a.warmBalance()
 		a.mu.Lock()
@@ -638,7 +661,7 @@ func (a *App) SendChat(text string) string {
 		}
 		return fmt.Sprintf("Atenção: gateway sem heartbeat há %d min.", age/60)
 	}
-	resp := a.chamarHermes(text)
+	resp := a.chamarHermes(conversa, text, anexos)
 	// a resposta gastou crédito: relê o saldo (no máximo 1x/min) para o "gasto de hoje"
 	// do cabeçalho do chat acompanhar — o pet-state leva o valor novo em até 15 s
 	a.mu.Lock()

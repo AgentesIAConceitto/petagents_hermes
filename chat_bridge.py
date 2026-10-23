@@ -16,9 +16,22 @@ perfil (mesma memória/personalidade/skills), sem reiniciar nem editar nada do
 gateway que já está rodando.
 
 Protocolo com o app (1 JSON por linha):
-    app -> {"prompt": "texto"}
+    app -> {"id": 1, "prompt": "texto", "conversa": "<id guardado>"?, "anexos": [...]?}
+    app -> {"id": 2, "op": "listar" | "abrir" | "nova" | "renomear" | "excluir", ...}
     app <- {"ok": true, "pronto": true, ...}          (handshake)
-    app <- {"ok": true, "resposta": "...", "segundos": 3.2}
+    app <- {"ok": true, "resposta": "...", "segundos": 3.2, "conversa": "<id guardado>"}
+    app <- {"ok": true, "id": 2, "dados": {...}}      (resposta de uma "op")
+
+CONVERSAS (22/10/2026, pedido da dona: "criar chats como no Claude, e a anterior fica
+salva"). Cada conversa é uma SESSÃO do Hermes, no state.db do home espelhado (o do boneco,
+não o do dono). O Hermes tem dois ids: o GUARDADO (`stored_session_id`, a chave da linha no
+banco — é o que a lista mostra e o que o app guarda) e o de EXECUÇÃO (`session_id`, vale só
+enquanto o `hermes serve` vive). O app só conhece o guardado; aqui ele vira o de execução por
+`session.resume`. O título, o Hermes dá sozinho depois da primeira resposta.
+
+ANEXOS: imagem vai por `image.attach_bytes` (o modelo VÊ a imagem); texto e PDF (o app já
+extraiu o texto do PDF) vão por `file.attach`, que devolve uma referência `@file:` para pôr
+na mensagem. Os dois entram na fila da sessão e seguem com o próximo `prompt.submit`.
 """
 from __future__ import annotations
 
@@ -524,7 +537,9 @@ class Backend:
         self.token = os.environ.get("PETAGENT_TOKEN_BACKEND") or secrets.token_urlsafe(24)
         self.proc: subprocess.Popen | None = None
         self.ws = None
-        self.sessao = ""
+        self.sessao = ""      # id de EXECUÇÃO da conversa atual (vale enquanto o serve vive)
+        self.chave = ""       # id GUARDADO da conversa atual (o que o app conhece)
+        self.vivas: dict[str, str] = {}   # guardado -> execução, das conversas já abertas aqui
         self.modelo = ""
         self.seq = 0
 
@@ -589,16 +604,141 @@ class Backend:
     async def conectar(self) -> bool:
         url = f"ws://127.0.0.1:{self.porta}/api/ws?token={self.token}"
         self.ws = await websockets.connect(url, open_timeout=30, max_size=32 << 20)
-        r = await self.rpc("session.create", {"cwd": CWD_PADRAO}, timeout=240)
+        # a conversa a retomar: a que estava aberta antes da queda (reconexão) ou, na subida,
+        # a última que a dona usou (o app passa em PETAGENT_CONVERSA). Antes, toda subida
+        # criava sessão nova e o boneco esquecia a conversa ao reiniciar o app.
+        alvo = self.chave or os.environ.get("PETAGENT_CONVERSA", "").strip()
+        self.vivas = {}   # backend novo: nenhuma sessão de execução antiga vale mais
+        r = await self.rpc("session.create", {"cwd": CWD_PADRAO, "source": "petagent"}, timeout=240)
         res = r.get("result") if isinstance(r.get("result"), dict) else {}
         self.sessao = str(res.get("session_id") or "")
         if not self.sessao:
             log(f"session.create falhou: {json.dumps(r)[:200]}")
             return False
+        self.chave = str(res.get("stored_session_id") or "")
+        if self.chave:
+            self.vivas[self.chave] = self.sessao
         info = res.get("info") if isinstance(res.get("info"), dict) else {}
         self.modelo = str(info.get('model') or info.get('model_name') or "")
         log(f"sessão {self.sessao} criada · modelo={self.modelo} · cwd={info.get('cwd')}")
+        if alvo and alvo != self.chave:
+            try:
+                if await self.usar_conversa(alvo):
+                    log(f"conversa {alvo[:12]} retomada")
+            except Exception as e:  # noqa: BLE001
+                log(f"não consegui retomar a conversa {alvo[:12]} ({type(e).__name__}: {e}) — segue a nova")
         return True
+
+    # ---------- conversas ----------
+    async def usar_conversa(self, chave: str) -> bool:
+        """Passa a falar na conversa `chave` (id guardado). Vazio ou a atual: nada a fazer."""
+        chave = (chave or "").strip()
+        if not chave or chave == self.chave:
+            return True
+        sid = self.vivas.get(chave, "")
+        if not sid:
+            r = await self.rpc("session.resume", {"session_id": chave, "omit_messages": True,
+                                                  "source": "petagent"}, timeout=120)
+            dados = _dados_do_rpc(r) or {}
+            sid = str(dados.get("session_id") or "")
+            if not sid:
+                log(f"session.resume {chave[:12]} falhou: {json.dumps(r)[:200]}")
+                return False
+            self.vivas[chave] = sid
+        self.sessao, self.chave = sid, chave
+        return True
+
+    async def operacao(self, pedido: dict) -> dict:
+        """As operações de conversa do app ({"op": ...}). Teto de 90 s, como os comandos:
+        o laço da ponte é serial e uma operação pendurada seguraria o chat."""
+        op = str(pedido.get("op") or "")
+        try:
+            return await asyncio.wait_for(self._operacao_impl(op, pedido), timeout=90)
+        except asyncio.TimeoutError:
+            log(f"op {op} ESTOUROU 90s")
+            return {"erro": f"a operação {op} demorou demais"}
+
+    async def _operacao_impl(self, op: str, pedido: dict) -> dict:
+        conversa = str(pedido.get("conversa") or "").strip()
+        if op == "listar":
+            r = await self.rpc("session.list", {"limit": 300}, timeout=60)
+            linhas = (_dados_do_rpc(r) or {}).get("sessions") or []
+            lista = []
+            for s in linhas:
+                if not isinstance(s, dict) or not s.get("id"):
+                    continue
+                lista.append({"id": s.get("id"), "titulo": s.get("title") or "",
+                              "previa": s.get("preview") or "", "inicio": s.get("started_at") or 0,
+                              "mensagens": s.get("message_count") or 0})
+            return {"conversas": lista, "atual": self.chave}
+
+        if op == "nova":
+            if not await self._nova_sessao():
+                return {"erro": "não consegui criar a conversa nova"}
+            return {"atual": self.chave}
+
+        if op == "abrir":
+            # resume COM as mensagens e sem as imagens embutidas (senão cada foto antiga viria
+            # de volta em base64 — megabytes por conversa)
+            r = await self.rpc("session.resume", {"session_id": conversa, "inline_images": False,
+                                                  "source": "petagent"}, timeout=120)
+            dados = _dados_do_rpc(r) or {}
+            sid = str(dados.get("session_id") or "")
+            if not sid:
+                return {"erro": "não consegui abrir essa conversa"}
+            self.vivas[conversa] = sid
+            self.sessao, self.chave = sid, conversa
+            msgs = []
+            for m in dados.get("messages") or []:
+                if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
+                    continue
+                t = str(m.get("text") or "")
+                t = re.sub(r"data:image/[^\s)\"']+", "[imagem]", t)
+                if t.strip():
+                    msgs.append({"quem": "eu" if m["role"] == "user" else "ele", "texto": t,
+                                 "quando": m.get("timestamp") or 0})
+            return {"atual": self.chave, "mensagens": msgs}
+
+        if op == "renomear":
+            titulo = str(pedido.get("titulo") or "").strip()
+            if not titulo:
+                return {"erro": "nome vazio"}
+            sid = self.vivas.get(conversa, "")
+            if not sid:   # resume preguiçoso: só para ter o id de execução, sem montar agente
+                r = await self.rpc("session.resume", {"session_id": conversa, "lazy": True,
+                                                      "omit_messages": True, "source": "petagent"},
+                                   timeout=60)
+                sid = str((_dados_do_rpc(r) or {}).get("session_id") or "")
+                if not sid:
+                    return {"erro": "não achei essa conversa"}
+                self.vivas[conversa] = sid
+            r = await self.rpc("session.title", {"session_id": sid, "title": titulo}, timeout=30)
+            if "error" in r:
+                return {"erro": str((r.get("error") or {}).get("message") or r.get("error"))[:200]}
+            return {"titulo": titulo}
+
+        if op == "excluir":
+            if not conversa:
+                return {"erro": "qual conversa?"}
+            # o Hermes recusa apagar sessão viva: a atual dá lugar a uma nova, e a de execução
+            # que já tenha sido aberta aqui é fechada antes
+            if conversa == self.chave and not await self._nova_sessao():
+                return {"erro": "não consegui sair dessa conversa para apagá-la"}
+            sid = self.vivas.pop(conversa, "")
+            if sid:
+                try:
+                    await self.rpc("session.close", {"session_id": sid}, timeout=30)
+                except Exception as e:  # noqa: BLE001
+                    log(f"session.close {sid[:12]} falhou ({type(e).__name__})")
+            r = await self.rpc("session.delete", {"session_id": conversa}, timeout=30)
+            if "error" in r:
+                msg = str((r.get("error") or {}).get("message") or r.get("error"))
+                # nunca chegou a ter mensagem: não há linha no banco, e está tudo certo
+                if "not found" not in msg:
+                    return {"erro": msg[:200]}
+            return {"atual": self.chave}
+
+        return {"erro": f"operação desconhecida: {op}"}
 
     async def subir(self) -> bool:
         if not porta_aberta(self.porta):
@@ -655,14 +795,15 @@ class Backend:
         return True
 
     # ---------- perguntar ----------
-    async def perguntar(self, texto: str, timeout: float = 300) -> tuple[str, float]:
+    async def perguntar(self, texto: str, timeout: float = 300,
+                        anexos: list | None = None) -> tuple[str, float]:
         """Pergunta com uma rede de segurança: se o canal estiver morto, reconecta
         UMA vez e repete — em vez de devolver erro e o app cair na reserva lenta."""
         # COMANDOS DE BARRA (pedido do dono, 10/10/2026): o chat do boneco passa a aceitar
         # /new, /compact, /reset e /status — e, por encaminhamento ao `slash.exec`, todos os
         # demais comandos que o Hermes já tem. Sem isto, digitar "/new" ia como TEXTO para o
         # modelo, que respondia sobre a barra em vez de executar o comando.
-        if texto.strip().startswith("/"):
+        if texto.strip().startswith("/") and not anexos:
             return await self._comando(texto.strip())
 
         # INSTRUMENTAÇÃO (10/10/2026): o dono mediu 205 s numa pergunta simples e o log só
@@ -674,12 +815,12 @@ class Backend:
         t0 = time.time()
         try:
             try:
-                resp = await self._perguntar_uma(texto, timeout)
+                resp = await self._perguntar_uma(texto, timeout, anexos)
             except (websockets.exceptions.WebSocketException, OSError) as e:
                 log(f"pergunta falhou por canal morto ({type(e).__name__}: {e})")
                 if not await self.reconectar(type(e).__name__):
                     raise
-                resp = await self._perguntar_uma(texto, timeout)
+                resp = await self._perguntar_uma(texto, timeout, anexos)
             log(f"pergunta respondida em {time.time() - t0:.1f}s ({len(resp[0])} chars)")
             return resp
         finally:
@@ -817,6 +958,9 @@ Deste chat (sempre funcionam):
             log(f"session.create sem id: {json.dumps(r)[:200]}")
             return False
         self.sessao = sid
+        self.chave = str(dados.get("stored_session_id") or "")
+        if self.chave:
+            self.vivas[self.chave] = sid
         log(f"comando: sessão nova {sid}")
         return True
 
@@ -830,12 +974,47 @@ Deste chat (sempre funcionam):
         except asyncio.CancelledError:
             raise
 
-    async def _perguntar_uma(self, texto: str, timeout: float = 300) -> tuple[str, float]:
+    async def _anexar(self, anexos: list) -> tuple[list[str], str]:
+        """Põe os anexos na fila da sessão. Devolve (refs @file: para a mensagem, erro)."""
+        refs: list[str] = []
+        for a in anexos:
+            if not isinstance(a, dict):
+                continue
+            nome = str(a.get("nome") or "anexo")
+            b64 = str(a.get("base64") or "")
+            _progresso("passo", f"anexando {nome}")
+            if a.get("tipo") == "imagem":
+                r = await self.rpc("image.attach_bytes", {"session_id": self.sessao,
+                                                          "content_base64": b64, "filename": nome},
+                                   timeout=60)
+            else:
+                r = await self.rpc("file.attach", {"session_id": self.sessao, "name": nome,
+                                                   "data_url": "data:text/plain;base64," + b64},
+                                   timeout=60)
+            if "error" in r:
+                msg = str((r.get("error") or {}).get("message") or r.get("error"))
+                log(f"anexo {nome} recusado: {msg[:300]}")
+                return refs, f"o Hermes recusou o anexo {nome}: {msg[:200]}"
+            ref = str((_dados_do_rpc(r) or {}).get("ref_text") or "")
+            if ref:
+                refs.append(ref)
+            log(f"anexo {nome} na fila ({a.get('tipo')}, {len(b64) * 3 // 4} bytes)")
+        return refs, ""
+
+    async def _perguntar_uma(self, texto: str, timeout: float = 300,
+                             anexos: list | None = None) -> tuple[str, float]:
         t0 = time.time()
         # AVISO IMEDIATO (10/10/2026): medido — o modelo passa o tempo PENSANDO e o texto sai
         # em rajada no fim, então só transmitir o texto deixaria o balão parado de novo. Este
         # primeiro aviso garante que a tela mostra movimento desde o primeiro instante.
         _progresso("passo", "pensando")
+        if anexos:
+            refs, erro = await self._anexar(anexos)
+            if erro:
+                return erro, time.time() - t0
+            if refs:
+                texto = texto + "\n\n" + "\n".join(refs)
+            _progresso("passo", "pensando")
         await self.ws.send(json.dumps({"jsonrpc": "2.0", "id": f"p{self.seq + 1}",
                                        "method": "prompt.submit",
                                        "params": {"session_id": self.sessao, "text": texto}}))
@@ -934,7 +1113,8 @@ async def servico(bk: "Backend", args) -> int:
 
     # handshake: o app só pergunta depois disto
     # o modelo vai junto: o app mostra no cabeçalho do chat qual IA está respondendo
-    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao, "modelo": bk.modelo}), flush=True)
+    print(json.dumps({"ok": True, "pronto": True, "sessao": bk.sessao, "modelo": bk.modelo,
+                      "conversa": bk.chave}), flush=True)
     global _pedido_atual
     while True:
         linha = await asyncio.to_thread(sys.stdin.readline)
@@ -944,17 +1124,32 @@ async def servico(bk: "Backend", args) -> int:
             pedido = json.loads(linha)
         except json.JSONDecodeError:
             continue
-        p = str(pedido.get("prompt") or "").strip()
-        if not p:
-            continue
         # o id volta em toda linha desta pergunta: se o app já desistiu dela (prazo), a
         # resposta atrasada não pode ser lida como resposta da pergunta seguinte
         _pedido_atual = pedido.get("id")
+        if pedido.get("op"):
+            try:
+                dados = await bk.operacao(pedido)
+            except Exception as e:  # noqa: BLE001
+                log(f"op {pedido.get('op')} falhou: {type(e).__name__}: {e}")
+                dados = {"erro": f"{type(e).__name__}: {e}"}
+            print(json.dumps({"ok": "erro" not in dados, "id": _pedido_atual, "dados": dados,
+                              "erro": dados.get("erro", "")}, ensure_ascii=False), flush=True)
+            continue
+        p = str(pedido.get("prompt") or "").strip()
+        anexos = pedido.get("anexos") if isinstance(pedido.get("anexos"), list) else []
+        if not p and not anexos:
+            continue
         try:
-            resp, seg = await bk.perguntar(p)
+            if pedido.get("conversa") and not await bk.usar_conversa(str(pedido["conversa"])):
+                print(json.dumps({"ok": True, "id": _pedido_atual, "conversa": bk.chave,
+                                  "resposta": "não consegui abrir essa conversa — veja o ponte.log"},
+                                 ensure_ascii=False), flush=True)
+                continue
+            resp, seg = await bk.perguntar(p, anexos=anexos)
             print(json.dumps({"ok": True, "id": _pedido_atual, "resposta": resp,
-                              "segundos": round(seg, 1), "modelo": bk.modelo},
-                             ensure_ascii=False), flush=True)
+                              "segundos": round(seg, 1), "modelo": bk.modelo,
+                              "conversa": bk.chave}, ensure_ascii=False), flush=True)
         except Exception as e:  # noqa: BLE001
             print(json.dumps({"ok": False, "id": _pedido_atual,
                               "erro": f"{type(e).__name__}: {e}"}), flush=True)
