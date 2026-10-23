@@ -24,17 +24,17 @@ import (
 var (
 	user32 = syscall.NewLazyDLL("user32.dll")
 
-	procGetCursorPos      = user32.NewProc("GetCursorPos")
-	procGetAsyncKeyState  = user32.NewProc("GetAsyncKeyState")
-	procGetWindowLongPtr  = user32.NewProc("GetWindowLongPtrW")
-	procSetWindowLongPtr  = user32.NewProc("SetWindowLongPtrW")
-	procEnumWindows       = user32.NewProc("EnumWindows")
-	procGetWindowRect     = user32.NewProc("GetWindowRect")
-	procClientToScreen    = user32.NewProc("ClientToScreen")
-	procSetWindowPos      = user32.NewProc("SetWindowPos")
-	procGetClientRect     = user32.NewProc("GetClientRect")
+	procGetCursorPos       = user32.NewProc("GetCursorPos")
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procGetWindowLongPtr   = user32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtr   = user32.NewProc("SetWindowLongPtrW")
+	procEnumWindows        = user32.NewProc("EnumWindows")
+	procGetWindowRect      = user32.NewProc("GetWindowRect")
+	procClientToScreen     = user32.NewProc("ClientToScreen")
+	procSetWindowPos       = user32.NewProc("SetWindowPos")
+	procGetClientRect      = user32.NewProc("GetClientRect")
 	procGetWindowThreadPID = user32.NewProc("GetWindowThreadProcessId")
-	procIsWindowVisible   = user32.NewProc("IsWindowVisible")
+	procIsWindowVisible    = user32.NewProc("IsWindowVisible")
 )
 
 const (
@@ -72,16 +72,16 @@ func gwlpIndexStyle() uintptr {
 // SetWindowLongPtr, a transparência sobrevive.
 func tiraBarraTitulo(hwnd syscall.Handle) {
 	const (
-		wsCaption     = 0x00C00000
-		wsThickFrame  = 0x00040000
-		wsMinimizeBox = 0x00020000
-		wsMaximizeBox = 0x00010000
-		wsSysMenu     = 0x00080000
+		wsCaption       = 0x00C00000
+		wsThickFrame    = 0x00040000
+		wsMinimizeBox   = 0x00020000
+		wsMaximizeBox   = 0x00010000
+		wsSysMenu       = 0x00080000
 		swpFrameChanged = 0x0020
-		swpNoMove     = 0x0002
-		swpNoSize     = 0x0001
-		swpNoZOrder   = 0x0004
-		swpNoActivate = 0x0010
+		swpNoMove       = 0x0002
+		swpNoSize       = 0x0001
+		swpNoZOrder     = 0x0004
+		swpNoActivate   = 0x0010
 	)
 	st, _, _ := procGetWindowLongPtr.Call(uintptr(hwnd), gwlpIndexStyle())
 	novo := st &^ uintptr(wsCaption|wsThickFrame|wsMinimizeBox|wsMaximizeBox|wsSysMenu)
@@ -177,7 +177,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.hitTestLoop()
 	go a.stateLoop()
 	go a.escondeDuranteCaptura() // some enquanto a Ferramenta de Captura está aberta
-	go a.emailLoop() // triagem de e-mail (lê as contas por IMAP, só leitura)
+	go a.emailLoop()             // triagem de e-mail (lê as contas por IMAP, só leitura)
 	go a.warmBalance()
 }
 
@@ -246,7 +246,7 @@ func (a *App) acomodarJanela() {
 			// e fora de QUALQUER captura — sem isso a ferramenta do Windows não
 			// conseguia mais recortar uma janela (a nossa cobria a tela toda)
 			foraDoPrint(h)
-			a.alinhaCliente() // mede barra/borda p/ alinhar o cliente na área útil
+			a.alinhaCliente()     // mede barra/borda p/ alinhar o cliente na área útil
 			go sobeServidorPets() // miniaturas dos bonecos p/ o painel de escolha
 			go a.sobePonte()      // chat QUENTE (hermes acp): resposta em segundos
 			logMsg(fmt.Sprintf("janela acomodada: hwnd=%x (%d tentativas)", h, i+1))
@@ -626,8 +626,8 @@ func (a *App) SetHitRects(js string) {
 // SendChat — conversa de verdade com o Hermes.
 //
 // Híbrido de propósito:
-//   * "saldo" e "status" (a palavra sozinha) respondem NA HORA, local (zero token);
-//   * todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
+//   - "saldo" e "status" (a palavra sozinha) respondem NA HORA, local (zero token);
+//   - todo o resto vai para o agente completo (hermes -z, sessão contínua), o que
 //     leva ~30 s e consome tokens da conta compartilhada.
 func (a *App) SendChat(text string) string {
 	return a.enviaChat("", text, nil)
