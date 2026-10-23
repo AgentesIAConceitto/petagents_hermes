@@ -35,6 +35,17 @@ bicho que *também* cuida de você é útil.
   silêncio ele transcreve (Groq Whisper) e envia sozinho (a seta envia já; ✕ ou Esc cancelam). O 🔊
   no cabeçalho liga/desliga a leitura das respostas em voz alta, com as vozes pt-BR do
   próprio Windows. A chave do Groq (grátis) vai em Sistema › Inteligência › Voz.
+- **Várias conversas, salvas**: no Chat Estendido, à esquerda, **+ Nova conversa**, busca e
+  a lista agrupada por **pasta**, com **etiquetas** (#orçamento, #urgente…) e filtro pelas
+  duas. O ⋯ do cabeçalho renomeia, muda de pasta, põe/tira etiqueta e exclui. Cada conversa
+  é uma sessão do Hermes: voltar a uma antiga traz o **contexto** junto, e ao reabrir o app
+  o boneco continua na última conversa. O título vem sozinho depois da primeira resposta.
+- **Anexos**: 📎 no rodapé, arrastar o arquivo para o chat ou colar um print (Ctrl+V).
+  **Imagem** o modelo vê (~1.000 a 1.600 tokens cada); **PDF** vai como texto (~500 a 800
+  tokens por página — PDF escaneado avisa e pede print); **texto** (txt, csv, md, json,
+  código) vai como está. Até 5 por mensagem, 20 MB cada. O chip mostra a estimativa de
+  tokens antes de enviar, arquivo grande (>50 mil tokens) pede confirmação e modelo que não
+  enxerga imagem (DeepSeek, por exemplo) avisa antes de gastar.
 - Mas só o que é conversa abre o chat: **recado do bicho é balão**, nunca sequestra a
   conversa. Um clique no boneco é carinho; dois cliques abrem o chat.
 
@@ -215,6 +226,11 @@ Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
   primeiro recado após subir o app pode sair mudo.
 - O leitor de e-mail depende do Outlook desktop e de um caminho fixo
   (`C:\petagent_mail`) — parametrizar está no roadmap.
+- **Anexos**: Word, Excel e PowerPoint ainda não vão direto (salve como PDF/CSV); vídeo e
+  áudio anexado não são aceitos. O PDF vai só como texto: gráfico e foto de dentro dele a IA
+  não vê. Com o agente rápido fora do ar, a mensagem com anexo não vai pelo modo lento.
+- A imagem anexada fica no histórico da conversa e volta em cada mensagem seguinte dela
+  (o cache do provedor barateia): assunto novo, conversa nova.
 - O sprite vem do PetDex em tempo de execução; a arte é dos autores originais.
 
 ### Licença
@@ -245,6 +261,14 @@ human biology, because a pet that only asks for things is annoying, and a pet th
 - The agent answers **with its tools** — runs commands, reads files, inspects the
   system. The bridge spins up its **own** `hermes serve` (same profile as the owner,
   same memory), so the pet talks to the same agent you use everywhere else.
+- **Many saved conversations**: in the Extended Chat, on the left, **+ New conversation**,
+  search and the list grouped by **folder**, with **tags** and filters for both. The header's
+  ⋯ renames, moves, tags and deletes. Each conversation is a Hermes session: going back to an
+  old one brings its **context** back, and after a restart the pet resumes the last one.
+- **Attachments**: 📎 in the footer, drag a file onto the chat or paste a screenshot.
+  **Images** are seen by the model (~1,000–1,600 tokens each); **PDFs** go as text
+  (~500–800 tokens per page); **text files** go as-is. Up to 5 per message, 20 MB each, with
+  a token estimate before sending and a warning for large files and non-vision models.
 - Only real conversation opens the chat: **pet chatter is a bubble**, it never hijacks
   the conversation. One click pets it; two clicks open the chat.
 
@@ -425,6 +449,8 @@ the launcher stay where they are.
   first message after startup may be silent.
 - The e-mail reader depends on Outlook desktop and a fixed path
   (`C:\petagent_mail`) — making it configurable is on the roadmap.
+- **Attachments**: Word/Excel/PowerPoint must be saved as PDF/CSV first; video and audio
+  files are not accepted; PDFs go as text only (charts and photos inside them are not seen).
 - Sprites come from PetDex at runtime; the artwork belongs to its original authors.
 
 ### License
