@@ -51,6 +51,19 @@ const ICONES = (() => {
     microfone: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3",
     som: "M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14",
     mudo: "M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6",
+    // conversas e anexos (prancha "PetAgent — Conversas e Anexos", 22/10/2026)
+    adicionar: "M12 5v14M5 12h14",
+    lapis: "M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
+    reticencias: C(5, 12, 1) + C(12, 12, 1) + C(19, 12, 1),
+    clipe: "M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5",
+    pasta: "M3 6h6l2 2h10v11H3z",
+    etiqueta: "M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01",
+    lixeira: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+    imagem: "M3 4h18v16H3zM3 16l5-5 4 4 3-3 6 6" + C(15.5, 8.5, 1.5),
+    arquivo: "M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h4",
+    subir: "M12 15V3M7 8l5-5 5 5M4 15v6h16v-6",
+    lista: "M4 6h16M4 12h16M4 18h16",
+    abaixo: "M6 9l6 6 6-6",
   };
 })();
 

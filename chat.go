@@ -67,11 +67,23 @@ func caminhoHermes() string {
 // Caminho normal: a PONTE QUENTE (hermes acp via chat_bridge.py) — o agente fica
 // vivo e responde no tempo do modelo (~3-8 s; medido 02/10/2026).
 // Reserva: `hermes chat -Q`, que sobe um agente novo do zero a cada mensagem (~30 s).
-func (a *App) chamarHermes(texto string) string {
-	if resp, ok := a.perguntaPonte(texto); ok {
-		return resp
+func (a *App) chamarHermes(conversa, texto string, anexos []map[string]any) string {
+	pedido := map[string]any{"prompt": texto}
+	if conversa != "" {
+		pedido["conversa"] = conversa
 	}
-	return a.chamarHermesFrio(texto)
+	if len(anexos) > 0 {
+		pedido["anexos"] = anexos
+	}
+	if r, ok := a.pedidoPonte(pedido, true); ok {
+		return r.Resposta
+	}
+	// a reserva só leva texto pela linha de comando: anexo nenhum chega por ela
+	if len(anexos) > 0 {
+		return "Os anexos precisam do agente rápido, que está fora do ar agora — tente de novo em " +
+			"instantes (o texto sem anexo também pode ir pelo modo lento)."
+	}
+	return a.chamarHermesFrio(conversa, texto)
 }
 
 // argsReserva — argumentos do `hermes` na reserva lenta, com o teto de iterações.
@@ -82,19 +94,30 @@ func argsReserva(texto string) []string {
 		"--continue", sessaoChat, "--create-if-missing"}
 }
 
+// argsReservaEm — a reserva na MESMA conversa que está na tela. Só faz sentido no home do
+// boneco: é o state.db dele que tem essa conversa (no home do dono ela não existe).
+func argsReservaEm(texto, conversa string, homeDoBoneco bool) []string {
+	if conversa == "" || !homeDoBoneco {
+		return argsReserva(texto)
+	}
+	return []string{"chat", "-Q", "--query=" + texto,
+		"--max-turns", strconv.Itoa(maxIteracoesIA), "--resume", conversa}
+}
+
 // chamarHermesFrio — reserva (lenta). Só usada com a ponte fora do ar: se a ponte só
 // demorou, ela segue trabalhando e a reserva repetiria a pergunta (ver perguntaPonte).
-func (a *App) chamarHermesFrio(texto string) string {
+func (a *App) chamarHermesFrio(conversa, texto string) string {
 	exe := caminhoHermes()
 	if exe == "" {
 		return "Não encontrei o Hermes nesta máquina — sem ele eu não consigo conversar de verdade."
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), tempoResposta)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, argsReserva(texto)...)
+	boneco := iaAgora().Modo == "boneco"
+	cmd := exec.CommandContext(ctx, exe, argsReservaEm(texto, conversa, boneco)...)
 	// IA só do boneco: a reserva usa o home espelhado (que a ponte monta com o modelo e a
 	// chave do boneco) — senão responderia com a IA do Hermes do dono
-	if iaAgora().Modo == "boneco" {
+	if boneco {
 		if base := os.Getenv("LOCALAPPDATA"); base != "" {
 			cmd.Env = append(os.Environ(), "HERMES_HOME="+filepath.Join(base, "petagent", "hermes-home"))
 		}
