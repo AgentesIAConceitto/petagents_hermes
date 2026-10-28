@@ -64,11 +64,16 @@
     <!-- arquivos que vão na próxima mensagem + avisos deles (anexo.js) -->
     <div id="balao-anexos" class="anexos-fila oculto" aria-label="Arquivos que vão junto"></div>
     <div class="balao-rodape">
-      <button id="anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
-      <input id="txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
-      <!-- falar em vez de digitar: grava, transcreve e envia (voz.js) -->
-      <button id="voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
-      <button id="enviar" data-ic="enviar" aria-label="Enviar"></button>
+      <!-- o campo com a seta de enviar dentro; Enter também envia -->
+      <div class="campo-msg">
+        <textarea id="txt" rows="3" placeholder="Escreva ou fale pelo microfone…" autocomplete="off"></textarea>
+        <button id="enviar" class="enviar-dentro" data-ic="enviar" title="Enviar (Enter)" aria-label="Enviar"></button>
+      </div>
+      <div class="rodape-lado">
+        <!-- falar em vez de digitar: grava, transcreve e envia (voz.js) -->
+        <button id="voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
+        <button id="anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
+      </div>
     </div>
     <!-- redimensionar: canto de cima, do lado oposto ao rabinho (o balão cresce para cima) -->
     <div class="balao-puxa" id="balao-puxa" title="Arraste para redimensionar"></div>
@@ -108,10 +113,14 @@
       <div id="cg-msgs" class="msgs cg-msgs"></div>
       <div id="cg-anexos" class="anexos-fila oculto" aria-label="Arquivos que vão junto"></div>
       <div class="cg-rodape">
-        <button id="cg-anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
-        <input id="cg-txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
-        <button id="cg-voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
-        <button id="cg-enviar" class="cg-bt"><span data-ic="enviar"></span>Enviar</button>
+        <div class="campo-msg">
+          <textarea id="cg-txt" rows="3" placeholder="Escreva ou fale pelo microfone…" autocomplete="off"></textarea>
+          <button id="cg-enviar" class="enviar-dentro" data-ic="enviar" title="Enviar (Enter)" aria-label="Enviar"></button>
+        </div>
+        <div class="rodape-lado">
+          <button id="cg-voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
+          <button id="cg-anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
+        </div>
       </div>
       <span class="cg-dica-anexo">Imagem, PDF ou texto · até 5 por mensagem, 20 MB cada · arraste para o chat ou cole um print (Ctrl+V)</span>
     </div>

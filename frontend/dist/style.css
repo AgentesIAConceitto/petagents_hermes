@@ -153,32 +153,40 @@ body.parado .pet.idle svg { animation: none; }
 .msgs .ao-vivo .digitando i:nth-child(3) { animation-delay: .3s; }
 .msgs .ao-vivo .passo { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sub); white-space: normal; }
 
-.balao-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
+/* rodapé do chat (balão e estendido): o campo de 3 linhas (Shift+Enter quebra linha) com a seta
+   de enviar DENTRO (só o ícone, no meio da altura); à direita, 🎤 em cima e 📎 embaixo */
+.balao-rodape { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
 #txt { flex: 1; min-width: 0; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
-  border-radius: var(--raio-interno); padding: 9px 12px; font: inherit; font-size: 13.5px; outline: none; }
+  border-radius: var(--raio-interno); padding: 9px 44px 9px 12px; font: inherit; font-size: 13.5px; outline: none;
+  line-height: 1.4; resize: none; }
 #txt:focus { border-color: var(--acento); }
 #txt::placeholder { color: var(--sub); }
-#enviar { flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
-  background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno); }
-#enviar:hover { filter: brightness(1.08); }
+.campo-msg { position: relative; flex: 1; min-width: 0; display: flex; }
+.campo-msg .voz-barra { padding-right: 44px; } /* gravando, a seta segue visível: envia o áudio na hora */
+.enviar-dentro { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--acento); border-radius: var(--raio-interno); }
+.enviar-dentro:hover { box-shadow: inset 0 0 0 999px var(--hover); }
+.rodape-lado { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.rodape-lado > button { height: 36px; } /* os dois juntos têm a altura do campo de 3 linhas */
 
 /* 🎤 falar (voz.js): ao lado do enviar, no balão e no chat estendido. Gravando, o 🎤 vira ✕
    (cancelar) e o campo de texto dá lugar à barra "● Ouvindo 0:04 ▂▅▃ Pare de falar para
    enviar"; a seta de enviar manda o áudio na hora. */
 :where(.balao, .cg) .voz-mic {
-  flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  flex: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
   border-radius: var(--raio-interno); border: 1px solid var(--borda); color: var(--sub);
 }
 :where(.balao, .cg) .voz-mic:hover { color: var(--texto); box-shadow: inset 0 0 0 999px var(--hover); }
 :where(.balao, .cg) .voz-mic:disabled { opacity: .4; cursor: default; }
 
 .voz-barra {
-  display: none; flex: 1; min-width: 0; align-items: center; gap: 8px; padding: 0 12px;
+  display: none; flex: 1; min-width: 0; align-self: stretch; align-items: center; gap: 8px; padding: 0 12px;
   background: var(--entrada); border: 1px solid var(--borda); border-radius: var(--raio-interno);
   font-size: 13px; color: var(--texto); white-space: nowrap; overflow: hidden;
 }
 .voz-ouvindo .voz-barra, .voz-entendendo .voz-barra { display: flex; }
-.voz-ouvindo > input, .voz-entendendo > input { display: none; }
+.voz-ouvindo > textarea, .voz-entendendo > textarea { display: none; }
 .voz-ouvindo .voz-barra { border-color: rgba(255, 82, 82, .55); }
 .voz-ponto { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #ff5252; animation: gravando 1.2s ease-in-out infinite; }
 .voz-rotulo { font-weight: 600; }
@@ -610,13 +618,14 @@ select.ia-campo { cursor: pointer; }
 .cg.oculto { display: none; }
 .cg-topo { cursor: move; user-select: none; }
 .cg-msgs { flex: 1; overflow-y: auto; }
-.cg-rodape { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
-.cg-rodape input {
+.cg-rodape { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border-top: 1px solid var(--borda); }
+.cg-rodape textarea {
   flex: 1; background: var(--entrada); color: var(--texto); border: 1px solid var(--borda);
-  border-radius: var(--raio-interno); font-family: inherit; font-size: 13.5px; padding: 9px 12px; outline: none;
+  border-radius: var(--raio-interno); font-family: inherit; font-size: 13.5px; padding: 9px 44px 9px 12px; outline: none;
+  line-height: 1.4; resize: none;
 }
-.cg-rodape input:focus { border-color: var(--acento); }
-.cg-rodape input::placeholder { color: var(--sub); }
+.cg-rodape textarea:focus { border-color: var(--acento); }
+.cg-rodape textarea::placeholder { color: var(--sub); }
 .cg-bt {
   display: inline-flex; align-items: center; gap: 8px;
   background: var(--acento); color: var(--acento-txt); border-radius: var(--raio-interno);
@@ -808,7 +817,7 @@ select.ia-campo { cursor: pointer; }
 
 /* ───────── ANEXOS: 📎 no rodapé, chips antes de enviar, avisos, "Solte para anexar" ───────── */
 :where(.balao, .cg) .anexo-bt {
-  flex: none; width: 40px; display: flex; align-items: center; justify-content: center;
+  flex: none; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
   border-radius: var(--raio-interno); border: 1px solid var(--borda); color: var(--texto);
 }
 :where(.balao, .cg) .anexo-bt:hover { box-shadow: inset 0 0 0 999px var(--hover); }

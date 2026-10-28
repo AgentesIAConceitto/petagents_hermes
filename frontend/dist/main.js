@@ -1126,7 +1126,8 @@ async function enviarTexto(texto, input) {
   if (anx === false) return;
   const ids = anx ? anx.ids : [];
   if (!texto && !ids.length) return;
-  input.value = "";
+  txt.value = "";                       // o rascunho é um só (balão e chat estendido): some dos dois
+  document.getElementById("cg-txt").value = "";
   if (typeof pararFala === "function") pararFala(); // pergunta nova: a resposta antiga se cala
   msg(texto, "eu", ids.length ? { anexos: anx.itens, custo: anx.custo } : undefined);
   classePet("pensando");
@@ -1181,9 +1182,9 @@ async function enviarTexto(texto, input) {
     const ver = () => abrirBalao();
     toast("conversar", nomeDoPet() + " respondeu", String(resp).replace(/\s+/g, " ").slice(0, 110), 30000, false,
       { acoes: [{ r: "Ver resposta", prim: true, fn: ver }], clique: ver });
-  } else {
+  } else if (!cg || cg.classList.contains("oculto")) {
     abrirBalao(false);                  // garante o balão aberto para mostrar a resposta
-  }
+  }                                     // chat estendido aberto: a resposta aparece nele, o balão fica fechado
   atualizaInfoChat();                   // o modelo pode ter chegado agora, com a resposta
   // a lista de conversas: esta subiu para o topo (e o Hermes dá o título logo depois)
   if (typeof conversaRespondida === "function") conversaRespondida(conversaResp);
@@ -1192,6 +1193,19 @@ async function enviarTexto(texto, input) {
 }
 
 function enviar() { return enviarTexto(txt.value, txt); }
+
+// campo de texto: Enter envia, Shift+Enter quebra a linha (o textarea faz sozinho)
+function enterEnvia(e) {
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return false;
+  e.preventDefault();                   // sem isso o Enter também deixaria uma linha em branco
+  return true;
+}
+// o rascunho é UM só: o que se digita no balão está no chat estendido, e vice-versa —
+// trocar de tamanho não perde o que estava escrito
+(function rascunhoCompartilhado() {
+  const ambos = [txt, document.getElementById("cg-txt")];
+  ambos.forEach((c, i) => c.addEventListener("input", () => { ambos[1 - i].value = c.value; }));
+})();
 
 /* ───────── chat estendido (janela arrastável e redimensionável) ─────────
    Abre no centro da tela atual, arrasta pela barra de título e redimensiona pelo
@@ -1273,7 +1287,7 @@ document.getElementById("cg-x").onclick = () => fecharChatGrande();
 document.getElementById("cg-enviar").onclick = () =>
   enviarTexto(document.getElementById("cg-txt").value, document.getElementById("cg-txt"));
 document.getElementById("cg-txt").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") enviarTexto(e.target.value, e.target);
+  if (enterEnvia(e)) enviarTexto(e.target.value, e.target);
 });
 try { // recupera a conversa anterior (inclusive resposta que chegou com o balão fechado)
   const c = JSON.parse(localStorage.getItem("conversa") || "[]");
@@ -1955,7 +1969,7 @@ document.getElementById("email-verificar").onclick = async (ev) => {
   if (r !== "ok") toast("📧", "Não foi possível ler os e-mails", fraseUI(r), 8000, true); // ex.: sem conta, senha recusada
 };
 document.getElementById("balao-min").onclick = fecharBalao;
-txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
+txt.addEventListener("keydown", (e) => { if (enterEnvia(e)) enviar(); });
 ["mousemove", "keydown", "wheel"].forEach(ev => balao.addEventListener(ev, reiniciarAuto));
 
 function ligarEventos() {
