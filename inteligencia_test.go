@@ -191,7 +191,7 @@ func TestIASalvarIgualAoHermes(t *testing.T) {
 		t.Errorf("efetiva no modo hermes: %+v", e)
 	}
 	// sem chave nenhuma para o provedor: recusa
-	if r = a.IASalvar(`{"modo":"hermes","provedor":"xai","modelo":"grok-5","chave":""}`); !strings.Contains(r, "falta a chave") {
+	if r = a.IASalvar(`{"modo":"hermes","provedor":"xai","modelo":"grok-5","chave":""}`); !strings.Contains(r, "Informe a chave") {
 		t.Errorf("sem chave deveria recusar: %s", r)
 	}
 }

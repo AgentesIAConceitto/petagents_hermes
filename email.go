@@ -1,21 +1,27 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ── Agente de e-mail (triagem que aprende) ────────────────────────────
-// SÓ LEITURA: le cabecalhos de C:\petagent_mail\inbox.json (gerado fora daqui,
-// em contexto nao-elevado, lendo do Outlook local). Nunca escreve na caixa:
-// nao apaga, nao move, nao marca, nao responde.
+// SÓ LEITURA: lê os cabeçalhos das contas que a pessoa adicionou (email_contas.go),
+// direto do servidor por IMAP (email_imap.go). Nunca escreve na caixa: não apaga,
+// não move, não marca, não responde.
+//
+// 22/10/2026: antes lia o Outlook instalado no PC (COM, via C:\petagent_mail).
+// Quem não usava Outlook ficava sem o recurso; agora vale para qualquer conta.
 
 type RegrasEmail struct {
 	Importantes []string `json:"importantes"` // "@dominio.com.br" | "fulano@x.com" | "assunto:termo"
@@ -30,6 +36,12 @@ type CabecalhoEmail struct {
 	Assunto string `json:"assunto"`
 	NaoLida bool   `json:"nao_lida"`
 	Tamanho int    `json:"tamanho"`
+	Conta   string `json:"conta"` // de qual conta veio (várias contas ao mesmo tempo)
+	ContaID string `json:"conta_id"`
+	UID     uint32 `json:"uid"`    // para buscar o texto depois (resumo)
+	MsgID   string `json:"msg_id"` // Message-ID: o link "Abrir" do Gmail acha o e-mail por ele
+	Resumo  string `json:"resumo,omitempty"`
+	Link    string `json:"link,omitempty"` // onde responder (webmail da conta)
 }
 
 type CaixaEmail struct {
@@ -42,62 +54,101 @@ type CaixaEmail struct {
 	Mensagens    []CabecalhoEmail `json:"mensagens"`
 }
 
-const arquivoInbox = `C:\petagent_mail\inbox.json`
-const arquivoStatusPoll = `C:\petagent_mail\status.json`
+// estadoConta — o que aconteceu na última tentativa de leitura de uma conta:
+//
+//	ok             → leitura nova de verdade
+//	erro           → falhou (Erro diz por quê); a leitura anterior NÃO vira nova
+//	precisa_entrar → a Microsoft pediu login de novo (refresh token recusado)
+type estadoConta struct {
+	Estado       string
+	Erro         string
+	VerificadoEm string
+}
 
-// scriptPoll / disparaPoll — o lançador da leitura (variáveis para o teste trocar).
-var scriptPoll = `C:\petagent_mail\poll_silencioso.vbs`
+var (
+	leituraMu sync.Mutex // UMA leitura por vez: ciclo automático e "Verificar agora" nunca juntos
+	cacheMu   sync.Mutex
+	caixas    = map[string]CaixaEmail{}  // id da conta → última leitura que deu certo
+	estados   = map[string]estadoConta{} // id da conta → última tentativa
+)
 
-var disparaPoll = func(script string) error {
-	cmd := exec.Command("explorer.exe", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+func guardaLeitura(c ContaEmail, cx CaixaEmail, err error) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	agora := time.Now().Format("2006-01-02T15:04:05")
+	switch {
+	case err == nil:
+		caixas[c.ID] = cx
+		estados[c.ID] = estadoConta{Estado: "ok", VerificadoEm: cx.VerificadoEm}
+	case errors.Is(err, errPrecisaEntrar):
+		estados[c.ID] = estadoConta{Estado: "precisa_entrar", Erro: err.Error(), VerificadoEm: agora}
+	default:
+		estados[c.ID] = estadoConta{Estado: "erro", Erro: err.Error(), VerificadoEm: agora}
 	}
-	return cmd.Start()
 }
 
-// StatusPoll — o que o poll.ps1 relata de cada tentativa (04/10/2026).
-//
-// Antes disto o app dormia 40 s no escuro e lia o inbox.json que estivesse lá —
-// e reportava leitura VELHA como se fosse de agora (medido: 10:29:54 o poll falhou
-// com 0x90740111 e às 10:30:29 o app logou "40 mensagens, 0 novos importantes",
-// lendo o JSON do ciclo anterior). Agora o poll diz o que aconteceu:
-//
-//	ok          → leitura nova de verdade
-//	sem_outlook → Outlook fechado; leitura ADIADA (nada foi iniciado)
-//	ocupado     → já havia uma coleta rodando (mutex)
-//	erro        → falhou (detalhe manda)
-type StatusPoll struct {
-	Estado    string `json:"estado"`
-	Quando    string `json:"quando"`
-	Mensagens int    `json:"mensagens"`
-	Detalhe   string `json:"detalhe"`
+func esqueceLeitura(id string) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	delete(caixas, id)
+	delete(estados, id)
 }
 
-func leStatusPoll() StatusPoll {
-	var s StatusPoll
-	b, err := os.ReadFile(arquivoStatusPoll)
+func estadoDe(id string) estadoConta {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	return estados[id]
+}
+
+// leConta — uma conta, com a credencial certa (senha ou token renovado).
+func leConta(c ContaEmail) (CaixaEmail, error) {
+	cred, err := credencialDe(c)
 	if err != nil {
-		return s
+		return CaixaEmail{}, err
 	}
-	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
-	_ = json.Unmarshal(b, &s)
-	return s
+	return leCaixaIMAP(c, cred)
 }
 
-// esperaStatusPoll — espera o poll PUBLICAR um status novo (Quando diferente do
-// anterior). Devolve o status e se houve tempo hábil. Substitui o sleep cego de 40 s.
-func esperaStatusPoll(antes StatusPoll, limite time.Duration) (StatusPoll, bool) {
-	fim := time.Now().Add(limite)
-	for time.Now().Before(fim) {
-		s := leStatusPoll()
-		if s.Quando != "" && s.Quando != antes.Quando {
-			return s, true
-		}
-		time.Sleep(400 * time.Millisecond)
+// leTodasContas — lê todas em paralelo (cada uma com o seu limite de tempo) e
+// devolve os erros por conta. Sem contas, devolve ok=false.
+func leTodasContas() (temContas bool, erros []string) {
+	leituraMu.Lock()
+	defer leituraMu.Unlock()
+	contas := leContas()
+	if len(contas) == 0 {
+		return false, nil
 	}
-	return leStatusPoll(), false
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, c := range contas {
+		wg.Add(1)
+		go func(c ContaEmail) {
+			defer wg.Done()
+			type lida struct {
+				cx  CaixaEmail
+				err error
+			}
+			fim := make(chan lida, 1) // com folga: a leitura atrasada não fica presa
+			go func() { cx, err := leConta(c); fim <- lida{cx, err} }()
+			var cx CaixaEmail
+			var err error
+			select {
+			case l := <-fim:
+				cx, err = l.cx, l.err
+			case <-time.After(45 * time.Second):
+				err = errors.New("a leitura passou de 45 s e foi deixada para a próxima")
+			}
+			guardaLeitura(c, cx, err)
+			if err != nil {
+				mu.Lock()
+				erros = append(erros, c.Usuario+": "+err.Error())
+				mu.Unlock()
+				logMsg("email: " + c.Usuario + " — " + err.Error())
+			}
+		}(c)
+	}
+	wg.Wait()
+	return true, erros
 }
 
 func pastaPetAgente() string {
@@ -131,7 +182,7 @@ func leRegras() RegrasEmail {
 // ehNova — só o que é novo interessa: não lida OU chegou nos últimos 45 min.
 // (Evita avisar de e-mail velho que já estava na caixa antes do agente existir.)
 //
-// ⚠️ 05/10/2026: o carimbo vem do Outlook com .ToString("s") = hora LOCAL, SEM fuso.
+// ⚠️ 05/10/2026: o carimbo é hora LOCAL, SEM fuso (cabecalhoDe grava assim).
 // `time.Parse` num layout sem zona assume UTC — então a idade saía inflada pelo offset
 // local (3h no Brasil) e NADA era considerado novo. Tem de ser ParseInLocation(Local).
 func ehNova(m CabecalhoEmail) bool {
@@ -186,16 +237,17 @@ func classifica(r RegrasEmail, m CabecalhoEmail) string {
 	return "desconhecido"
 }
 
-func leCaixa() (CaixaEmail, error) {
-	var c CaixaEmail
-	b, err := os.ReadFile(arquivoInbox)
-	if err != nil {
-		return c, err
+// caixasAtuais — as leituras guardadas das contas que ainda existem.
+func caixasAtuais(contas []ContaEmail) []CaixaEmail {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	l := []CaixaEmail{}
+	for _, c := range contas {
+		if cx, ok := caixas[c.ID]; ok {
+			l = append(l, cx)
+		}
 	}
-	// ⚠️ o PowerShell grava UTF-8 COM BOM; json.Unmarshal falha no BOM (falha silenciosa!).
-	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
-	err = json.Unmarshal(b, &c)
-	return c, err
+	return l
 }
 
 // leVistos / gravaVistos — evita avisar duas vezes a mesma mensagem.
@@ -223,49 +275,68 @@ func gravaVistos(v map[string]bool) {
 }
 
 func impressao(m CabecalhoEmail) string {
-	return m.Quando + "|" + strings.ToLower(m.DeEmail) + "|" + strings.ToLower(m.Assunto)
+	return strings.ToLower(m.Conta) + "|" + m.Quando + "|" + strings.ToLower(m.DeEmail) + "|" + strings.ToLower(m.Assunto)
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
 
-// EmailVerificarAgora — dispara a leitura do Outlook AGORA, SEM JANELA.
-//
-// Duas exigências ao mesmo tempo:
-// 1) precisa rodar NÃO-elevado (o COM do Outlook recusa processo elevado) →
-//    por isso passa pelo shell do usuário (explorer.exe);
-// 2) precisa ser SILENCIOSO (nada de console piscando a cada varredura) →
-//    por isso o alvo é um .vbs (host sem console) que lança o PowerShell oculto.
-// Nunca voltar a chamar .cmd/.bat aqui: gera janela de terminal na tela do usuário.
-//
-// O e-mail é OPCIONAL: sem o script instalado (mail/LEIA-ME.md), não dispara nada.
-// Antes o explorer.exe era chamado com o caminho inexistente a cada ~10 min, e o
-// botão "Verificar agora" respondia "ok" sem que nada fosse lido.
+// EmailVerificarAgora — lê TODAS as contas agora e só responde quando terminar.
+// "ok" = todas leram; senão, o motivo (sem contas, ou o erro de cada uma).
 func (a *App) EmailVerificarAgora() string {
-	if _, err := os.Stat(scriptPoll); err != nil {
-		return "e-mail não configurado: falta " + scriptPoll + " (veja mail/LEIA-ME.md)"
+	tem, erros := leTodasContas()
+	if !tem {
+		return "Nenhuma conta de e-mail conectada. Adicione uma pelo botão Contas, no painel E-mail."
 	}
-	if err := disparaPoll(scriptPoll); err != nil {
-		logMsg("email: falha ao disparar leitura silenciosa: " + err.Error())
-		return "erro ao disparar leitura: " + err.Error()
+	if len(erros) > 0 {
+		return strings.Join(erros, " · ")
 	}
-	logMsg("email: leitura do Outlook disparada (silenciosa, sem janela)")
 	return "ok"
 }
 
 // EmailResumo — resumo + listas + desconhecidos (para o painel do boneco).
 func (a *App) EmailResumo() string {
 	r := leRegras()
-	out := map[string]interface{}{"regras": r}
-	c, err := leCaixa()
-	if err != nil {
-		out["erro"] = "sem leitura ainda — clique em Verificar agora"
+	contas := leContas()
+	telaContas := []map[string]any{}
+	for _, c := range contas {
+		telaContas = append(telaContas, contaParaTela(c))
+	}
+	out := map[string]interface{}{"regras": r, "contas": telaContas}
+	if len(contas) == 0 {
+		out["sem_contas"] = true
+		out["erro"] = "Nenhuma conta conectada."
+		b, _ := json.Marshal(out)
+		return string(b)
+	}
+	cxs := caixasAtuais(contas)
+	if len(cxs) == 0 {
+		out["erro"] = "Nenhuma leitura ainda."
 		b, _ := json.Marshal(out)
 		return string(b)
 	}
 	imp := []CabecalhoEmail{}
 	des := []CabecalhoEmail{}
-	spam := 0
-	for _, m := range c.Mensagens {
+	spam, total, naoLidas := 0, 0, 0
+	verificado := ""
+	todas := []CabecalhoEmail{}
+	for _, cx := range cxs {
+		todas = append(todas, cx.Mensagens...)
+		total += cx.TotalPasta
+		naoLidas += cx.NaoLidas
+		if cx.VerificadoEm > verificado {
+			verificado = cx.VerificadoEm
+		}
+	}
+	// mais novas primeiro, misturando as contas
+	sort.SliceStable(todas, func(i, j int) bool { return todas[i].Quando > todas[j].Quando })
+	porID := map[string]ContaEmail{}
+	for _, c := range contas {
+		porID[c.ID] = c
+	}
+	resumos := func() map[string]resumoSalvo { resumosMu.Lock(); defer resumosMu.Unlock(); return leResumos() }()
+	for _, m := range todas {
+		m.Resumo = resumos[impressao(m)].Resumo
+		m.Link = linkWebmail(porID[m.ContaID], m)
 		switch classifica(r, m) {
 		case "importante":
 			imp = append(imp, m)
@@ -275,11 +346,15 @@ func (a *App) EmailResumo() string {
 			des = append(des, m)
 		}
 	}
-	out["conta"] = c.Conta
-	out["verificado_em"] = c.VerificadoEm
-	out["contexto"] = c.Contexto
-	out["total_pasta"] = c.TotalPasta
-	out["nao_lidas"] = c.NaoLidas
+	if len(contas) == 1 {
+		out["conta"] = contas[0].Usuario
+	} else {
+		out["conta"] = strconv.Itoa(len(contas)) + " contas"
+	}
+	out["verificado_em"] = verificado
+	out["contexto"] = "imap"
+	out["total_pasta"] = total
+	out["nao_lidas"] = naoLidas
 	out["importantes"] = imp
 	out["desconhecidos"] = des
 	out["spam_n"] = spam
@@ -318,54 +393,45 @@ func (a *App) EmailMarcar(alvo, tipo string) string {
 	return "ok"
 }
 
-// emailLoop — a cada ~10 min: dispara a leitura e avisa o que for importante.
-//
-// 04/10/2026: era `Sleep(40s) + processaEmail()`, acontecesse o que acontecesse.
-// Agora espera o STATUS do poll e reage a ele — adiado não é leitura, falha não é
-// leitura, e dado velho nunca é apresentado como novo.
+// avisoEmail — o balão de e-mail importante: com o resumo e o botão "Abrir"
+// (link do webmail da conta, onde a pessoa responde).
+func (a *App) avisoEmail(titulo, texto, link string) {
+	logMsg("aviso: " + titulo + " | " + texto)
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "aviso", map[string]string{
+		"icone": "📧", "titulo": titulo, "texto": texto, "tipo": "email", "link": link,
+	})
+}
+
+// emailLoop — a cada ~10 min: lê as contas e avisa o que for importante.
+// Conta que falhou não entra no aviso (processaEmail ignora leitura velha).
 func (a *App) emailLoop() {
 	time.Sleep(25 * time.Second) // deixa a janela subir primeiro
 	desligado := false           // avisa no log uma vez, não a cada ciclo
 	for {
-		antes := leStatusPoll()
-		if r := a.EmailVerificarAgora(); r != "ok" {
-			// nada foi disparado: não há status para esperar
+		tem, _ := leTodasContas()
+		if !tem {
 			if !desligado {
-				logMsg("email: desligado — " + r)
+				logMsg("email: desligado — nenhuma conta adicionada")
 				desligado = true
 			}
-			time.Sleep(9 * time.Minute)
-			continue
-		}
-		desligado = false
-		s, aTempo := esperaStatusPoll(antes, 35*time.Second)
-		if !aTempo {
-			logMsg("email: poll nao publicou status em 35s — ciclo pulado (nada foi lido)")
 		} else {
-			switch s.Estado {
-			case "ok":
-				a.processaEmail()
-			case "sem_outlook":
-				logMsg("email: adiado — Outlook nao esta aberto (nada foi iniciado pelo agente)")
-			case "ocupado":
-				logMsg("email: ja havia uma coleta rodando — ciclo pulado (mutex)")
-			case "erro":
-				logMsg("email: o poll falhou — " + s.Detalhe)
-			default:
-				logMsg("email: estado desconhecido do poll: " + s.Estado)
-			}
+			desligado = false
+			a.processaEmail()
 		}
-		time.Sleep(9 * time.Minute)
+		time.Sleep(10 * time.Minute)
 	}
 }
 
-// idadeLeitura — há quanto tempo o poll gravou o inbox.json. Data ilegível conta
+// idadeLeitura — há quanto tempo a conta foi lida. Data ilegível conta
 // como muito velha: sem saber a idade, não se avisa nada.
 //
-// ⚠️ 05/10/2026: mesmo defeito do ehNova — o poll grava hora LOCAL sem fuso e
-// `time.Parse` assumia UTC, somando o offset local à idade (medido: "leitura VELHA
-// (420 min)" com o Windows no Pacífico; 180 min em Brasília). Com o limite de 20 min
-// isto MUDO o e-mail por completo. ParseInLocation(Local) é o conserto.
+// ⚠️ 05/10/2026: o carimbo é hora LOCAL sem fuso e `time.Parse` assumia UTC,
+// somando o offset local à idade (medido: "leitura VELHA (420 min)" com o Windows no
+// Pacífico; 180 min em Brasília). Com o limite de 20 min isto MUDO o e-mail por
+// completo. ParseInLocation(Local) é o conserto.
 func idadeLeitura(quando string) time.Duration {
 	t, err := time.ParseInLocation("2006-01-02T15:04:05", quando, time.Local)
 	if err != nil {
@@ -379,55 +445,78 @@ const idadeMaximaLeitura = 20 * time.Minute
 
 // processaEmail — classifica e emite avisos (sem repetir o que já avisou).
 //
-// ⚠️ 04/10/2026: antes ele não olhava a idade da leitura. Medido: às 10:29:54 o
-// poll FALHOU (0x90740111) e às 10:30:29 o app logou "40 mensagens, 0 novos
-// importantes" — lendo o JSON do ciclo anterior como se fosse leitura de agora.
-// Num agente que existe para avisar e-mail importante, dado velho com cara de novo
-// é pior que silêncio.
+// ⚠️ 04/10/2026: dado velho com cara de novo é pior que silêncio. Uma conta cuja
+// leitura falhou fica com a caixa ANTERIOR no cache — e essa não vira aviso.
 func (a *App) processaEmail() {
-	c, err := leCaixa()
-	if err != nil {
-		return
-	}
-	if idade := idadeLeitura(c.VerificadoEm); idade > idadeMaximaLeitura {
-		logMsg(fmt.Sprintf("email: leitura VELHA (%.0f min) — nao aviso nada com dado velho",
-			idade.Minutes()))
-		return
-	}
+	contas := leContas()
 	r := leRegras()
 	vistos := leVistos()
 	novos := make([]CabecalhoEmail, 0, 4)
-	for _, m := range c.Mensagens {
-		if classifica(r, m) != "importante" {
+	total := 0
+	for _, c := range caixasAtuais(contas) {
+		if idade := idadeLeitura(c.VerificadoEm); idade > idadeMaximaLeitura {
+			logMsg(fmt.Sprintf("email: %s — leitura VELHA (%.0f min), nao aviso nada com dado velho",
+				c.Conta, idade.Minutes()))
 			continue
 		}
-		if !ehNova(m) { // só o que é NOVO / não lido (regra do dono)
-			continue
+		total += len(c.Mensagens)
+		for _, m := range c.Mensagens {
+			if classifica(r, m) != "importante" {
+				continue
+			}
+			if !ehNova(m) { // só o que é NOVO / não lido (regra do dono)
+				continue
+			}
+			fp := impressao(m)
+			if vistos[fp] {
+				continue
+			}
+			vistos[fp] = true
+			novos = append(novos, m)
 		}
-		fp := impressao(m)
-		if vistos[fp] {
-			continue
-		}
-		vistos[fp] = true
-		novos = append(novos, m)
 	}
 	if len(novos) > 0 {
 		gravaVistos(vistos)
+		porID := map[string]ContaEmail{}
+		for _, c := range contas {
+			porID[c.ID] = c
+		}
+		// os importantes novos são resumidos sozinhos (no máximo maxResumosCiclo por
+		// leitura; o resto fica com o botão "Resumir" do painel). Falhou: avisa sem resumo.
+		resumos := map[int]string{}
+		for i, m := range novos {
+			if i >= maxResumosCiclo {
+				break
+			}
+			if r, err := resumeMensagem(porID[m.ContaID], m); err == nil {
+				resumos[i] = r
+			} else {
+				logMsg("email: resumo automatico falhou (" + m.Conta + "): " + err.Error())
+			}
+		}
 		// teto de balõezinhos: no máximo 3 na tela, o resto vira resumo
 		limite := 3
 		for i, m := range novos {
 			if i >= limite {
-				a.aviso("📧", fmt.Sprintf("+%d e-mails importantes", len(novos)-limite),
-					"abre o painel 📧 no menu do boneco")
+				a.aviso("📧", fmt.Sprintf("Mais %d e-mails importantes", len(novos)-limite),
+					"Veja todos no painel E-mail.")
 				break
 			}
 			nome := m.DeNome
 			if nome == "" {
 				nome = m.DeEmail
 			}
-			a.aviso("📧", "E-mail importante", nome+" — "+m.Assunto)
+			titulo := "E-mail importante · " + nome
+			if len(contas) > 1 {
+				titulo += " · " + m.Conta
+			}
+			texto := m.Assunto
+			if r := resumos[i]; r != "" {
+				texto += " — " + r
+			}
+			a.avisoEmail(titulo, texto, linkWebmail(porID[m.ContaID], m))
 			time.Sleep(900 * time.Millisecond)
 		}
 	}
-	logMsg(fmt.Sprintf("email: %d mensagens, %d novos importantes", len(c.Mensagens), len(novos)))
+	logMsg(fmt.Sprintf("email: %d mensagens em %d conta(s), %d novos importantes", total, len(contas), len(novos)))
 }

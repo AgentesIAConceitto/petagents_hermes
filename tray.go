@@ -17,10 +17,10 @@ func runTray() {
 			systray.SetIcon(icon)
 		}
 		systray.SetTitle("PetAgent")
-		systray.SetTooltip("PetAgent - seus agentes no desktop")
-		mShow := systray.AddMenuItem("Mostrar bonecos", "Restaura o overlay")
-		mHide := systray.AddMenuItem("Esconder tudo", "Oculta o overlay (agentes seguem rodando)")
-		mStatus := systray.AddMenuItem("Status", "Resumo dos agentes")
+		systray.SetTooltip("PetAgent: seus agentes na área de trabalho")
+		mShow := systray.AddMenuItem("Mostrar bonecos", "Mostra os bonecos na tela")
+		mHide := systray.AddMenuItem("Esconder tudo", "Oculta os bonecos (os agentes continuam funcionando)")
+		mStatus := systray.AddMenuItem("Status", "Mostra um resumo dos agentes")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Sair", "Encerra o PetAgent")
 		go func() {

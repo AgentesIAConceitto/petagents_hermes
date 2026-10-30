@@ -145,7 +145,7 @@ func (a *App) opPonte(pedido map[string]any, esperar bool) (map[string]any, stri
 			return nil, "ocupado"
 		}
 		if r.Erro == "" {
-			r.Erro = "o agente não respondeu"
+			r.Erro = "O agente não respondeu."
 		}
 		return nil, r.Erro
 	}
@@ -208,7 +208,7 @@ func (a *App) ConversaRenomear(id, titulo string) string {
 		titulo = string(r[:80])
 	}
 	if titulo == "" {
-		return respostaJSON(map[string]any{"ok": false, "erro": "dê um nome para a conversa"})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Dê um nome para a conversa."})
 	}
 	_, erro := a.opPonte(map[string]any{"op": "renomear", "conversa": id, "titulo": titulo}, false)
 	return respostaJSON(map[string]any{"ok": erro == "", "erro": erro, "titulo": titulo})
@@ -257,7 +257,7 @@ func (a *App) ConversaOrganizar(id, pasta, etiquetasJSON string) string {
 func (a *App) PastaCriar(nome string) string {
 	nome = strings.TrimSpace(nome)
 	if nome == "" {
-		return respostaJSON(map[string]any{"ok": false, "erro": "dê um nome para a pasta"})
+		return respostaJSON(map[string]any{"ok": false, "erro": "Dê um nome para a pasta."})
 	}
 	conversasMu.Lock()
 	defer conversasMu.Unlock()

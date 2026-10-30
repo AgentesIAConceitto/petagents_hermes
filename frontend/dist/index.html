@@ -8,7 +8,7 @@
 </head>
 <body>
   <!-- ================= BONECO ================= -->
-  <div id="pet" class="pet idle" data-agent="hermes" title="Clique para conversar · botão direito para opções">
+  <div id="pet" class="pet idle" data-agent="hermes" title="Clique duas vezes para conversar · Botão direito para opções">
     <div id="petdex"></div>
     <svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
       <defs>
@@ -67,11 +67,11 @@
       <button id="anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
       <input id="txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
       <!-- falar em vez de digitar: grava, transcreve e envia (voz.js) -->
-      <button id="voz" class="voz-mic" data-ic="microfone" title="Falar (clique, fale e pare: eu envio sozinho)" aria-label="Gravar áudio"></button>
+      <button id="voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
       <button id="enviar" data-ic="enviar" aria-label="Enviar"></button>
     </div>
     <!-- redimensionar: canto de cima, do lado oposto ao rabinho (o balão cresce para cima) -->
-    <div class="balao-puxa" id="balao-puxa" title="arraste para redimensionar"></div>
+    <div class="balao-puxa" id="balao-puxa" title="Arraste para redimensionar"></div>
   </div>
 
   <!-- ============ MENU (dock com abas — montado pelo main.js) ============ -->
@@ -102,22 +102,22 @@
         </span>
         <button id="cg-conv-menu" class="botao-x borda" data-ic="reticencias" title="Renomear, pasta, etiquetas, excluir" aria-label="Opções da conversa"></button>
         <button id="cg-som" class="botao-x voz-som" title="Ler as respostas em voz alta" aria-label="Ler as respostas em voz alta"></button>
-        <button class="cg-bt sec" id="cg-min" title="voltar ao chat pequeno (reabre o balão)"><span data-ic="recolher"></span>chat pequeno</button>
-        <button class="botao-x" id="cg-x" data-ic="fechar" title="fechar o chat (a conversa fica guardada)" aria-label="Fechar o chat"></button>
+        <button class="cg-bt sec" id="cg-min" title="Voltar ao chat pequeno (reabre o balão)"><span data-ic="recolher"></span>Chat pequeno</button>
+        <button class="botao-x" id="cg-x" data-ic="fechar" title="Fechar o chat (a conversa fica guardada)" aria-label="Fechar o chat"></button>
       </div>
       <div id="cg-msgs" class="msgs cg-msgs"></div>
       <div id="cg-anexos" class="anexos-fila oculto" aria-label="Arquivos que vão junto"></div>
       <div class="cg-rodape">
         <button id="cg-anexo" class="anexo-bt" data-ic="clipe" title="Anexar imagem, PDF ou texto (ou arraste, ou cole um print)" aria-label="Anexar arquivo"></button>
         <input id="cg-txt" type="text" placeholder="Escreva ou fale pelo microfone…" autocomplete="off" />
-        <button id="cg-voz" class="voz-mic" data-ic="microfone" title="Falar (clique, fale e pare: eu envio sozinho)" aria-label="Gravar áudio"></button>
+        <button id="cg-voz" class="voz-mic" data-ic="microfone" title="Falar: clique, fale e pare; a mensagem é enviada automaticamente" aria-label="Gravar áudio"></button>
         <button id="cg-enviar" class="cg-bt"><span data-ic="enviar"></span>Enviar</button>
       </div>
       <span class="cg-dica-anexo">Imagem, PDF ou texto · até 5 por mensagem, 20 MB cada · arraste para o chat ou cole um print (Ctrl+V)</span>
     </div>
     <!-- menu ⋯ da conversa: nome, pasta, etiquetas, excluir (conversas.js) -->
     <div id="conv-menu" class="conv-menu oculto" role="dialog" aria-label="Opções da conversa"></div>
-    <div class="cg-puxa" id="cg-puxa" title="arraste para redimensionar"></div>
+    <div class="cg-puxa" id="cg-puxa" title="Arraste para redimensionar"></div>
   </div>
   <!-- escolher arquivos (o 📎 abre este seletor; anexo.js) -->
   <input id="anexo-arquivo" type="file" multiple hidden
@@ -129,7 +129,7 @@
     <div class="pn-topo"><span class="pn-quem"><b>Trocar boneco</b><span id="pets-atual"></span></span>
       <button class="botao-x" id="pets-x" data-ic="fechar" aria-label="Fechar"></button></div>
     <label class="pn-busca"><span data-ic="buscar"></span>
-      <input id="pets-termo" type="text" placeholder="buscar: capivara, mecha, dragão…" autocomplete="off" aria-label="Buscar boneco" /></label>
+      <input id="pets-termo" type="text" placeholder="Buscar: capivara, mecha, dragão…" autocomplete="off" aria-label="Buscar boneco" /></label>
     <div class="pn-abas" role="tablist">
       <button role="tab" id="pets-instalados">Meus</button><button role="tab" id="pets-galeria">Galeria</button>
       <button role="tab" id="pets-bichinhos">Bichinhos</button><button role="tab" id="pets-personagens">Personagens</button>
@@ -142,12 +142,15 @@
 
   <div id="email" class="email painel-n oculto" aria-label="E-mail">
     <div class="pn-topo"><span class="pn-ico" data-ic="email"></span>
-      <span class="pn-quem"><b>E-mail</b><span id="email-conta">triagem que aprende</span></span>
+      <span class="pn-quem"><b>E-mail</b><span id="email-conta">Avisos dos e-mails importantes</span></span>
       <button class="botao-x" id="email-fechar" data-ic="fechar" aria-label="Fechar"></button></div>
     <div class="pn-numeros" id="email-resumo"></div>
-    <div class="pn-sec"><b>Remetentes novos — me ensine</b><span id="email-faltam"></span></div>
-    <div class="email-lista" id="email-lista"></div>
-    <div class="pn-rodape"><span class="pn-nota">Só leitura: nada é apagado, movido ou marcado. Cada escolha sua vira regra.</span>
+    <div class="pn-sec" id="email-sec-imp" hidden><b>Importantes</b><span id="email-imp-n"></span></div>
+    <div class="email-lista email-imp" id="email-importantes" hidden></div>
+    <div class="pn-sec" id="email-sec-rem" hidden><b>Remetentes a classificar</b><span id="email-faltam"></span></div>
+    <div class="email-lista" id="email-lista" hidden></div>
+    <div class="pn-rodape"><span class="pn-nota">Somente leitura: nenhuma mensagem é apagada, movida ou marcada como lida.</span>
+      <button class="pn-bt sec" id="email-contas-bt">Contas</button>
       <button class="pn-bt" id="email-verificar"><span data-ic="atualizar"></span>Verificar agora</button></div>
   </div>
 
@@ -167,6 +170,7 @@
   <script src="premios.js"></script>
   <script src="bicho.js"></script>
   <script src="inteligencia.js"></script>
+  <script src="email-contas.js"></script>
   <script src="voz.js"></script>
   <script src="conversas.js"></script>
   <script src="anexo.js"></script>

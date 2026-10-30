@@ -125,8 +125,8 @@
     cfg.dormirAte = agora() + Math.round(horas * 60) * MIN;
     salvar();
     marcaSono(true);
-    fala(horas < 1 ? `Boa noite! Vou cochilar ${Math.round(horas * 60)} minutinhos 😴`
-                   : `Boa noite! Vou dormir por ${horas} hora${horas > 1 ? "s" : ""} 😴`);
+    fala(horas < 1 ? `Boa noite! Vou cochilar por ${Math.round(horas * 60)} minutinhos. 😴`
+                   : `Boa noite! Vou dormir por ${horas} hora${horas > 1 ? "s" : ""}. 😴`);
     pintaPainel();
   }
 
@@ -158,7 +158,7 @@
   // mesmo lembrete depois (o tique cuida, ver est.adiado).
   const ACAO_LEMBRETE = {
     agua: ["Já bebi", "agua", () => window.bichoAgua && window.bichoAgua()],
-    caminhada: ["Fui!", "exercicio", () => window.bichoExercicio && window.bichoExercicio()],
+    caminhada: ["Já caminhei", "exercicio", () => window.bichoExercicio && window.bichoExercicio()],
     refeicao: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
     lanche: ["Comi", "alimentar", () => window.bichoAlimentar && window.bichoAlimentar()],
     atencao: ["Carinho", "cuidar", () => carinho(30)],
@@ -174,7 +174,7 @@
   function alternarFoco() {
     cfg.foco = !cfg.foco; salvar(); pintaPainel();
     fala(cfg.foco
-      ? "Modo foco ligado 🎯 — só te lembro da água e fico quietinho."
+      ? "Modo foco ligado. 🎯 Vou lembrar você só da água e ficar quietinho."
       : "Modo foco desligado. Pode falar comigo. 🙂");
   }
 
@@ -216,28 +216,28 @@
   // ⚠️ Nada de hora escrita na frase ("das 15h", "passou das 19h"): a agenda é
   // derivada do expediente do dono, então a frase tem de servir em qualquer turno.
   const FRASES = {
-    agua: ["💧 Hora da água! Eu já bebi a minha — e você?",
-           "💧 Bora encher o copo? Já faz um tempinho…",
-           "Sede! 💧 Bebe uma água comigo?",
-           "💧 Pausa pro copo d'água — eu espero você."],
-    caminhada: ["🚶 Levanta e estica as pernas comigo (2 min bastam)",
-                "Minhas patinhas pedem movimento — e as suas costas também 👀",
-                "🚶 Que tal uma voltinha? A gente volta rapidinho",
-                "Pausa de caminhada! Levanta da cadeira e vai 🚶‍♂️"],
-    cafe: ["☕ Começando o dia! Café da manhã na mesa?",
-           "☕ Acordei com fome — e você, já tomou café?"],
-    almoco: ["🍲 Metade do dia: hora de comer de verdade, não de beliscar",
-             "🍲 Tô com uma fome de almoço… você também, né?"],
-    jantar: ["🍽 Fim de expediente chegando… bora comer algo de verdade?",
-             "🍽 Hora da última refeição do dia! Meu pratinho e o seu 👀"],
-    lancheM: ["🍎 Meio da manhã: uma fruta cai bem",
-              "🍎 Belisquei minha ração… e você, um lanchinho?"],
-    lancheT: ["🥪 Um lanchinho leve agora? (eu aceito migalhas 🐾)",
-              "🥪 Aquela fominha da tarde chegou — pra nós dois"],
+    agua: ["💧 Hora da água! Eu já bebi a minha. E você?",
+           "💧 Vamos encher o copo? Já faz um tempinho.",
+           "Que sede! 💧 Que tal beber uma água comigo?",
+           "💧 Pausa para o copo d'água. Eu espero você."],
+    caminhada: ["🚶 Levante e estique as pernas comigo. Dois minutos bastam.",
+                "Minhas patinhas pedem movimento, e as suas costas também. 👀",
+                "🚶 Que tal uma voltinha? É rapidinho.",
+                "Pausa para caminhar! Levante da cadeira e mexa-se. 🚶‍♂️"],
+    cafe: ["☕ Começando o dia! O café da manhã já está na mesa?",
+           "☕ Acordei com fome. E você, já tomou café?"],
+    almoco: ["🍲 Metade do dia: hora de comer de verdade, não só beliscar.",
+             "🍲 Estou com uma fome de almoço… Você também?"],
+    jantar: ["🍽 O fim do expediente está chegando. Que tal comer algo de verdade?",
+             "🍽 Hora da última refeição do dia! O meu pratinho e o seu. 👀"],
+    lancheM: ["🍎 Meio da manhã: uma fruta cai bem.",
+              "🍎 Belisquei minha ração. E você, que tal um lanchinho?"],
+    lancheT: ["🥪 Que tal um lanchinho leve agora? (Eu aceito migalhas. 🐾)",
+              "🥪 Aquela fominha da tarde chegou para nós."],
     atencao: ["🥰 Um carinho rapidinho?",
-              "Ei, olha pra mim um instante 🐾",
-              "🥰 Tô aqui do seu lado — só queria atenção",
-              "Um cafuné e eu volto a trabalhar feliz 🥰"],
+              "Ei, olhe para mim um instante. 🐾",
+              "🥰 Estou aqui do seu lado. Só queria um pouco de atenção.",
+              "Um cafuné, e eu volto a trabalhar feliz. 🥰"],
   };
   // quem manda quando dois avisos caem perto: refeição > lanche > água > caminhada > atenção
   const PESO = { refeicao: 5, lanche: 4, agua: 3, caminhada: 2, atencao: 1 };
@@ -459,13 +459,13 @@
   // a linha de baixo dos anéis: o próximo lembrete (ou por que não há)
   function proximoLembrete() {
     const d = new Date(), agoraMin = d.getHours() * 60 + d.getMinutes();
-    if (!emExpediente()) return `Fora do expediente · os lembretes voltam às <b>${hhmm(cfg.trabIni)}</b>`;
+    if (!emExpediente()) return `Fora do expediente: os lembretes voltam às <b>${hhmm(cfg.trabIni)}</b>`;
     const feitos = est.feitos || {};
     const prox = eventosDoDia(cfg, { ini: cfg.trabIni, fim: cfg.trabFim })
       .filter((e) => e.min > agoraMin && !feitos[chaveEv(e)] && (!estaEmFoco() || e.tipo === "agua"))[0];
-    if (!prox) return "Sem mais lembretes hoje";
+    if (!prox) return "Não há mais lembretes hoje";
     return `Próximo lembrete: <b>${NOME_EV[prox.tipo] || prox.tipo} às ${minHora(prox.min)}</b>` +
-      (estaEmFoco() ? " · foco ligado" : "");
+      (estaEmFoco() ? " (modo foco ligado)" : "");
   }
 
   function anel(nome, icoNome, v) {
@@ -490,7 +490,7 @@
       const ate = new Date(cfg.dormirAte), falta = Math.max(0, Math.round((cfg.dormirAte - agora()) / MIN));
       const faltaTxt = falta >= 60 ? `${Math.floor(falta / 60)}h${String(falta % 60).padStart(2, "0")}` : `${falta} min`;
       corpo = `<div class="pp-sono">${ic("dormir", 20)}<span><b>Dormindo até ${ate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</b>
-          <span>faltam ${faltaTxt} · sem lembretes, as barras não caem</span></span></div>
+          <span>Faltam ${faltaTxt}. Os lembretes ficam pausados e as barras não caem.</span></span></div>
         <div class="pp-acoes dois"><button class="pp-bt" data-acordar>Acordar agora</button><button class="pp-bt sec" data-mais1h>+1 h</button></div>`;
     } else {
       corpo = `<div class="pp-aneis">${anel("Água", "agua", e.sede)}${anel("Comida", "alimentar", e.fome)}${anel("Movimento", "exercicio", e.exercicio)}${anel("Carinho", "cuidar", e.carinho)}</div>
@@ -504,7 +504,7 @@
         <button class="botao-x ${ladoAberto ? "sel" : ""}" data-ajustes aria-expanded="${ladoAberto}" aria-label="Rotina e pausas" title="Rotina e pausas">${ic("ajustes", 18)}</button>
         <button class="botao-x" data-fechar aria-label="Fechar">${ic("fechar", 18)}</button></div>
       ${corpo}
-      <div class="pp-rodape">${conta(e.tarefas, "tarefa")} no chat hoje · ${conta(e.avisosHoje, "lembrete")} · ${conta((e.achados || []).length, "achado")}</div>`;
+      <div class="pp-rodape">Hoje: ${conta(e.tarefas, "tarefa")} no chat · ${conta(e.avisosHoje, "lembrete")} · ${conta((e.achados || []).length, "achado")}</div>`;
     const q = (s) => painel.querySelector(s);
     q("[data-fechar]").onclick = fecharPainel;
     q("[data-ajustes]").onclick = () => { ladoAberto = !ladoAberto; pintaPainel(); pintaLado(); };
@@ -538,11 +538,11 @@
         <input class="pp-campo" type="time" data-fim value="${hhmm(cfg.trabFim)}"></span></label>
       <div class="pp-linha"><span>Água a cada</span><select class="pp-campo curto" data-agua>${opc(cfg.aguaCadaMin, intervalos)}</select></div>
       <div class="pp-linha"><span>Caminhar a cada</span><select class="pp-campo curto" data-caminha>${opc(cfg.caminhadaCadaMin, intervalos)}</select></div>
-      <p class="pp-nota">Fora do expediente ela não lembra de nada. As refeições saem dele: café, lanche, almoço, lanche e a última, 45 min antes do fim.</p>
+      <p class="pp-nota">Fora do expediente não há lembretes. Os horários das refeições são calculados a partir dele: café, lanche, almoço, lanche e a última refeição, 45 min antes do fim.</p>
       <div class="pp-sep"></div>
-      <div class="pp-linha"><span class="pp-quem"><b>Modo foco</b><span>só lembra da água · não mexe no Windows</span></span>
+      <div class="pp-linha"><span class="pp-quem"><b>Modo foco</b><span>Apenas os lembretes de água. Não altera nada no Windows.</span></span>
         <button class="pp-switch" role="switch" aria-checked="${estaEmFoco()}" aria-label="Modo foco" data-foco><i></i></button></div>
-      <div class="pp-quem"><b>Dormir</b><span>cochila no canto, sem lembretes; clique nela para acordar</span></div>
+      <div class="pp-quem"><b>Dormir</b><span>O boneco cochila no canto, sem lembretes. Clique nele para acordar.</span></div>
       <div class="pp-acoes">${[[0.5, "30 min"], [1, "1 h"], [2, "2 h"], [4, "4 h"]].map(([h, r]) =>
         `<button class="pp-bt sec" data-dormir="${h}">${r}</button>`).join("")}</div>`;
     lado.classList.remove("oculto");
@@ -550,7 +550,7 @@
     const salvo = () => {
       salvar(); pintaPainel();
       const s = q(".pp-salvo");
-      if (s) { s.textContent = "✓ salvo"; clearTimeout(salvoTimer); salvoTimer = setTimeout(() => { s.textContent = ""; }, 1800); }
+      if (s) { s.textContent = "✓ Salvo"; clearTimeout(salvoTimer); salvoTimer = setTimeout(() => { s.textContent = ""; }, 1800); }
     };
     q("[data-nome]").onchange = (ev) => { cfg.nome = ev.target.value.trim() || "Xodó"; salvo(); };
     q("[data-ini]").onchange = (ev) => { if (ev.target.value) { cfg.trabIni = deHHMM(ev.target.value); salvo(); } };
@@ -611,7 +611,7 @@
     try {
       if (!localStorage.getItem("bicho.oi")) {
         localStorage.setItem("bicho.oi", "1");
-        setTimeout(() => fala(`Oi! Sou o ${cfg.nome}. 🐾 Me alimenta, me dá água e faz carinho de vez em quando — eu aviso quando precisar. E fica tranquilo: eu NUNCA morro.`), 4000);
+        setTimeout(() => fala(`Oi! Sou o ${cfg.nome}. 🐾 Dê comida, água e carinho de vez em quando; eu aviso quando precisar. E não se preocupe: eu nunca morro.`), 4000);
       }
     } catch (e) { /* sem storage */ }
     if (!est.proxPasseio) agendaProximoPasseio();
@@ -696,7 +696,7 @@
   const feliz = (q) => { const e = garante(); e.humor = Math.min(100, (e.humor || 80) + q); };
 
   /* ── 🍖 alimentar: fecha o menu (o tile já fecha) e fala variado ─────────── */
-  const FRASES_FOME = ["Hummm… 😋", "Gostoso!!!", "Delícia!", "Isso estava ótimo 🍖",
+  const FRASES_FOME = ["Hummm… 😋", "Que gostoso!", "Delícia!", "Isso estava ótimo! 🍖",
     "Nham nham nham…", "Que refeição, hein!", "Mais um pouquinho? 😍", "Barriga satisfeita!"];
   const FRASES_AGUA = ["Glub glub… 💧", "Água geladinha, que delícia!", "Ai que refresco!",
     "Obrigado, estava com sede!", "💧💧💧"];
@@ -719,7 +719,7 @@
     fx(["💧", "💦", "✨"], 6); reage("carinho", 1400);       // bebe: balança de gosto
   };
   /* 🏃 exercício — o dono pediu no menu e não existia: só "Brincar" mexia nisto */
-  const FRASES_EXERCICIO = ["Ufa! Alonguei tudo 🏃", "Hora do treino!", "Vou dar umas voltas!",
+  const FRASES_EXERCICIO = ["Ufa! Alonguei tudo. 🏃", "Hora do treino!", "Vou dar umas voltas!",
     "Corpo em movimento! 💪", "Alonga aqui, alonga ali…"];
   /* volta completa CONTORNANDO AS BORDAS em 22 s, no sentido horário (o movimento é
      do `voltaNaTela`, no main.js — o keyframe antigo saía da tela em multi-monitor).
@@ -739,7 +739,7 @@
   }
 
   const FRASES_VOLTA_CORRIDA = ["Ufa! Gostei da corrida! 😄", "Cansei… mas valeu! 🥵",
-    "Que volta boa! 🏃", "Corri bastante! 💪", "Adorei! Bora de novo? 😅"];
+    "Que volta boa! 🏃", "Corri bastante! 💪", "Adorei! Vamos de novo? 😅"];
 
   window.bichoExercicio = () => {
     const e = garante();
@@ -756,7 +756,7 @@
      tempo do keyframe voltaTela — os dois terminam juntos, no lugar de origem) ─ */
   const FRASES_BRINCAR = ["Vou brincar! 🎾", "Uhuu! Hora de brincar!", "Pega-pega comigo? 🎾",
     "Olha eu pulando!", "Quero cambalhota! 🤸"];
-  const FRASES_FIM = ["Ufa! Que brincadeira boa 🥵", "Cansado, mas feliz! 😄", "Isso foi divertido!"];
+  const FRASES_FIM = ["Ufa! Que brincadeira boa! 🥵", "Cansado, mas feliz! 😄", "Isso foi divertido!"];
   const FRASES_VOLTA_BRINCAR = ["Ufa! Que brincadeira boa! 🥵", "Cansei, mas me diverti! 😄",
     "Gostei! Pega-pega de novo? 🎾", "Isso foi divertido! ✨"];
   window.bichoBrincar = () => {
@@ -794,7 +794,7 @@
   window.bichoAchar = () => {
     if (!window.premiosAchar) return;              // premios.js não carregou
     const r = window.premiosAchar(false);
-    if (!r) { fala("Já achei 4 baús hoje — amanhã eu procuro mais! 🎁"); return; }
+    if (!r) { fala("Já achei 4 baús hoje. Amanhã eu procuro mais! 🎁"); return; }
     const it = r.item, nomes = { ultra: "ULTRA-RARO", mitico: "MÍTICO",
       lendario: "LENDÁRIO", epico: "ÉPICO", raro: "RARO" };
     if (r.novo) {
@@ -806,11 +806,11 @@
         fala(`${it.ico} ${it.nome}?! Isso é ${nomes[it.raridade]}! 🤩`);
       } else {
         fala(sorteia([`Achei um baú! 🎁 Olha: ${it.ico} ${it.nome}!`,
-                      `Um baú apareceu por aqui… 🎁 ${it.ico} ${it.nome} pra mim!`,
+                      `Um baú apareceu por aqui… 🎁 ${it.ico} ${it.nome} para mim!`,
                       `Ganhei: ${it.ico} ${it.nome}! Que sorte!`]));
       }
     } else {
-      fala(`Outro ${it.ico} ${it.nome}… repetido! Virou 🪙 ${r.moedas} moeda${r.moedas > 1 ? "s" : ""} 💰`);
+      fala(`Outro ${it.ico} ${it.nome}? Repetido! Virou 🪙 ${r.moedas} moeda${r.moedas > 1 ? "s" : ""}. 💰`);
     }
   };
   // 💎 a galeria (moedeiro + raros em destaque + coleção) vive em premios.js
@@ -847,17 +847,17 @@
       return { nome, linha: "Dormindo até " + ate, pendente: "" };
     }
     const h = e.humor || 80;
-    const humor = h >= 70 ? "Feliz" : h >= 40 ? "Tranquilo" : "Meio pra baixo";
+    const humor = h >= 70 ? "Feliz" : h >= 40 ? "Tranquilo" : "Meio para baixo";
     const nec = [
-      ["agua", e.sede, "com sede", "com um pouco de sede"],
-      ["alimentar", e.fome, "com fome", "com um pouco de fome"],
-      ["", e.carinho, "querendo carinho", "com saudade de você"],
-      ["exercicio", e.exercicio, "precisando se mexer", "meio parado"],
+      ["agua", e.sede, "Com sede", "Com um pouco de sede"],
+      ["alimentar", e.fome, "Com fome", "Com um pouco de fome"],
+      ["", e.carinho, "Querendo carinho", "Com saudade de você"],
+      ["exercicio", e.exercicio, "Precisando se mexer", "Meio parado"],
     ].sort((a, b) => a[1] - b[1]);
     const [ico, valor, forte, leve] = nec[0];
     if (valor < 40) return { nome, linha: humor + " · " + forte, pendente: ico };
     if (valor < 60) return { nome, linha: humor + " · " + leve, pendente: "" };
-    return { nome, linha: humor + " · tudo em dia", pendente: "" };
+    return { nome, linha: humor + " · Tudo em dia", pendente: "" };
   };
 
   /* ── tarefa concluída: balão quando o chat está fechado ──────────────────── */

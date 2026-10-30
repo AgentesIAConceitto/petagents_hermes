@@ -36,7 +36,7 @@ async function vozComeca(botao, input) {
     voz.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   } catch (e) {
-    toast("alerta", "Microfone indisponível", "Não consegui abrir o microfone (" + (e.name || e) + ").", 8000, true);
+    toast("alerta", "Microfone indisponível", "Não foi possível acessar o microfone (" + (e.name || e) + "). Verifique se ele está conectado e se não está em uso por outro programa.", 8000, true);
     return;
   }
   voz.mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
@@ -114,26 +114,26 @@ async function vozTerminou() {
   if (voz.cancelado || !voz.falou || audio.size < 1500) {
     vozDevolveInput();
     pintaBotoesVoz();
-    if (!voz.cancelado) toast("microfone", "Não ouvi nada", "Clique no microfone e fale perto dele.", 5000, true);
+    if (!voz.cancelado) toast("microfone", "Nenhuma fala detectada", "Clique no microfone e fale mais perto dele.", 5000, true);
     return;
   }
   voz.transcrevendo = true;
   pintaBotoesVoz();
-  let r = { ok: false, erro: "não consegui transcrever" };
+  let r = { ok: false, erro: "não foi possível transcrever o áudio" };
   try { r = JSON.parse(await G.Transcrever(await blobBase64(audio), audio.type)); } catch (e) { r.erro += ": " + e; }
   voz.transcrevendo = false;
   vozDevolveInput();
   pintaBotoesVoz();
   if (!r.ok) {
     if (r.semChave) {
-      toast("microfone", "Falta configurar a voz", "Cole uma chave grátis do Groq para eu entender áudio.", 15000, false,
+      toast("microfone", "Voz não configurada", "Para transcrever áudio, cole uma chave gratuita do Groq no painel Inteligência.", 15000, false,
         { acoes: [{ r: "Configurar", prim: true, fn: () => abrirVozNoPainel() }] });
     } else {
-      toast("alerta", "Áudio não enviado", r.erro, 9000, true);
+      toast("alerta", "Áudio não enviado", fraseUI(r.erro), 9000, true);
     }
     return;
   }
-  if (!r.texto) { toast("microfone", "Não entendi", "Não consegui tirar palavras do áudio — tente de novo.", 6000, true); return; }
+  if (!r.texto) { toast("microfone", "Áudio não compreendido", "Não foi possível identificar palavras no áudio. Tente novamente.", 6000, true); return; }
   enviarTexto(r.texto, input);
 }
 
@@ -172,7 +172,7 @@ if (window.speechSynthesis) {
 // o que se lê: sem código, link, markdown nem emoji (a voz soletraria tudo isso)
 function textoParaFala(t) {
   return String(t || "")
-    .replace(/```[\s\S]*?```/g, " (tem um trecho de código no chat) ")
+    .replace(/```[\s\S]*?```/g, " (há um trecho de código no chat) ")
     .replace(/`([^`\n]+)`/g, "$1")
     .replace(/https?:\/\/\S+/g, " (link no chat) ")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -255,12 +255,12 @@ function pintaBotoesVoz() {
     const barra = barraVoz(input), rod = input.parentElement;
     rod.classList.toggle("voz-ouvindo", grav);
     rod.classList.toggle("voz-entendendo", transc);
-    barra.querySelector(".voz-rotulo").textContent = transc ? "Entendendo o que você disse…" : "Ouvindo";
+    barra.querySelector(".voz-rotulo").textContent = transc ? "Transcrevendo o áudio…" : "Ouvindo";
     if (grav) pintaNivelVoz(0, Date.now() - voz.t0);
     b.classList.toggle("gravando", grav);
     b.disabled = transc || (!meu && (gravandoVoz() || voz.transcrevendo));
     b.innerHTML = icone(grav ? "fechar" : "microfone", 18);
-    b.title = grav ? "Cancelar o áudio (Esc)" : transc ? "Entendendo o áudio…" : "Falar em vez de escrever";
+    b.title = grav ? "Cancelar o áudio (Esc)" : transc ? "Transcrevendo o áudio…" : "Gravar áudio em vez de digitar";
     b.setAttribute("aria-label", grav ? "Cancelar o áudio" : "Gravar áudio");
   }
   for (const id of ["balao-som", "cg-som"]) {
@@ -270,7 +270,7 @@ function pintaBotoesVoz() {
     b.innerHTML = icone(on ? "som" : "mudo", 18);
     b.classList.toggle("sel", on);
     b.setAttribute("aria-pressed", String(on));
-    b.title = on ? "Lendo as respostas em voz alta — clique para silenciar" : "Respostas só em texto — clique para ouvir";
+    b.title = on ? "Leitura das respostas em voz alta ativada. Clique para silenciar." : "Leitura das respostas em voz alta desativada. Clique para ativar.";
   }
 }
 

@@ -155,10 +155,10 @@ func (a *App) PetDexAtual() string {
 
 	out := PetDex{
 		OK: true, Slug: slug,
-		Nome:   str(man["displayName"], slug),
-		Desc:   str(man["description"], ""),
-		Pasta:  pasta,
-		Fw:     fw, Fh: fh, Cols: cols, Linhas: linhas,
+		Nome:  str(man["displayName"], slug),
+		Desc:  str(man["description"], ""),
+		Pasta: pasta,
+		Fw:    fw, Fh: fh, Cols: cols, Linhas: linhas,
 		Sheet: "data:image/webp;base64," + base64.StdEncoding.EncodeToString(dados),
 	}
 	b, _ := json.Marshal(out)
