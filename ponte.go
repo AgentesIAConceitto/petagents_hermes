@@ -99,14 +99,28 @@ func caminhoPythonHermes() string {
 			return p
 		}
 		// Hermes 0.21+ (Windows): o venv mora em installs\<id>\environments\<hash>\venv
-		// (nome sorteado). Se houver mais de um, o mais recente é o da instalação atual.
+		// (nome sorteado), e há vários. Vale o que TEM websockets (a ponte importa logo na
+		// primeira linha) e, entre esses, a pasta mais nova.
+		//
+		// Medido em 30/10/2026: antes valia o python.exe mais novo, mas o uv grava TODOS com a
+		// mesma data (31/12/2023) — empatava e vencia o primeiro em ordem alfabética, um venv
+		// sem pacote nenhum. A ponte só subia porque o app herdava um PYTHONPATH do Hermes;
+		// aberto de outro jeito, morria com "websockets não está instalado".
 		achados, _ := filepath.Glob(filepath.Join(base, "hermes", "installs", "*",
 			"environments", "*", "venv", "Scripts", "python.exe"))
 		var maisNovo time.Time
+		comWS := false
 		p = ""
 		for _, c := range achados {
-			if st, err := os.Stat(c); err == nil && st.ModTime().After(maisNovo) {
-				maisNovo, p = st.ModTime(), c
+			venv := filepath.Dir(filepath.Dir(c))
+			st, err := os.Stat(venv)
+			if err != nil {
+				continue
+			}
+			_, errWS := os.Stat(filepath.Join(venv, "Lib", "site-packages", "websockets"))
+			temWS := errWS == nil
+			if p == "" || (temWS && !comWS) || (temWS == comWS && st.ModTime().After(maisNovo)) {
+				maisNovo, comWS, p = st.ModTime(), temWS, c
 			}
 		}
 		if p != "" {
