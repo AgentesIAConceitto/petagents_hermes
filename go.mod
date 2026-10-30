@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/getlantern/systray v1.2.2
+	github.com/ledongthuc/pdf v0.0.0-20240201131950-da5b75280b06
 	github.com/wailsapp/wails/v2 v2.15.0
 )
 
