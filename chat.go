@@ -160,6 +160,9 @@ func (a *App) InfoChat() string {
 	saldo := a.balance
 	a.mu.Unlock()
 	pronta, erro := estadoPonte() // sob ponteEstadoMu: a goroutine da ponte escreve isto
+	var modeloGratis, provedorGratis string
+
+	pronta, erro, modeloGratis, provedorGratis = prontidaoChat(pronta, erro, modoEfetivoDoApp(), chavesDoApp(), modeloSugeridoDoApp())
 	ef := iaAgora()
 	nome := ef.Provedor
 	if p, ok := provedorPorID(ef.Provedor); ok {
@@ -169,9 +172,54 @@ func (a *App) InfoChat() string {
 	if modelo == "" {
 		modelo = ef.Modelo // a ponte ainda não disse: o que está configurado
 	}
+	if modeloGratis != "" {
+		modelo = modeloGratis
+		nome = provedorGratis
+	}
 	b, _ := json.Marshal(map[string]any{"modelo": modelo, "saldo": saldo, "pronta": pronta, "erro": erro,
 		"provedor": nome, "modo": ef.Modo})
 	return string(b)
+}
+
+// prontidaoChat decide o que o CABEÇALHO do chat mostra.
+//
+// REGRA (03/11/2026, print do dono): o cabeçalho dizia "Agente indisponível: respondendo pelo
+// modo lento" ENQUANTO o motor próprio respondia em 1,1 s. Ele só olhava a ponte do Hermes —
+// que não existe no modo grátis. Se o modo nativo está ativo e há chave, o chat ESTÁ pronto.
+func prontidaoChat(prontaPonte bool, erroPonte string, modo ModoAgente, chaves int, modeloPadrao string) (pronta bool, erro, modelo, provedor string) {
+	if modo == ModoNativo && chaves > 0 {
+		if modeloPadrao == "" {
+			modeloPadrao = ModeloPadraoGemini
+		}
+		return true, "", "grátis · " + modeloPadrao, "Modo grátis"
+	}
+	return prontaPonte, erroPonte, "", ""
+}
+
+// modoEfetivoDoApp resolve o motor em uso a partir do cofre (nunca falha: cai em nativo).
+func modoEfetivoDoApp() ModoAgente {
+	h := NovoHarness()
+	if h == nil || h.Cofre == nil {
+		return ModoNativo
+	}
+	modo, _ := ResolverModo(h.Cofre.ModoEscolhido(), detectarHermes(), h.Cofre.TotalChaves() > 0)
+	return modo
+}
+
+func chavesDoApp() int {
+	h := NovoHarness()
+	if h == nil || h.Cofre == nil {
+		return 0
+	}
+	return h.Cofre.TotalChaves()
+}
+
+func modeloSugeridoDoApp() string {
+	h := NovoHarness()
+	if h == nil || h.Cofre == nil {
+		return ""
+	}
+	return h.Cofre.ModeloPadrao()
 }
 
 // ChatIntegrado — o chat está ligado ao Hermes? (o frontend mostra isso na tela)

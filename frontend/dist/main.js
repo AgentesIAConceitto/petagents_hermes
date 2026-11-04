@@ -1465,6 +1465,9 @@ const MENU = {
   sistema: [
     ["tela", "Tela e borda", () => abrirSeletorTela()],
     ["inteligencia", "Inteligência", () => abrirInteligencia()],
+    // ["chaves", "Chaves grátis", ...] — removido em 03/11/2026: as chaves grátis agora
+    // aparecem dentro de Inteligência (uma tela só, decisão do dono).
+    ["agenda", "Agendamentos", () => abrirAgenda()],
     ["ajustes", "Aparência", () => abrirAparencia()],
     ["esconder", "Esconder por 15 min", () => esconder(15)],
     ["relogio", "Esconder por 1 h", () => esconder(60)],
@@ -2078,7 +2081,7 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); if (typeof fecharContasEmail === "function") fecharContasEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (typeof fecharTarefas === "function") { fecharTarefas(); fecharCaptura(); } if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
+  if (e.key === "Escape") { fecharMenu(); fecharBalao(); fecharSeletorTela(); fecharEmail(); if (typeof fecharContasEmail === "function") fecharContasEmail(); fecharAparencia(); if (typeof fecharInteligencia === "function") fecharInteligencia(); if (typeof fecharChaves === "function") fecharChaves(); if (typeof fecharAgenda === "function") fecharAgenda(); if (typeof fecharTarefas === "function") { fecharTarefas(); fecharCaptura(); } if (window.bicho && window.bicho.fecharPainel) window.bicho.fecharPainel(); }
   reiniciarAuto();
 });
 document.getElementById("enviar").onclick = enviar;
