@@ -39,6 +39,12 @@ func main() {
 		println(balanceText(0))
 		return
 	}
+	// modo utilitário: petagent agente "pergunta" → o agente nativo responde no terminal.
+	// É o teste do modo grátis SEM janela, sem Hermes e sem Python (ver agente_cli.go).
+	if len(os.Args) > 2 && os.Args[1] == "agente" {
+		os.Exit(rodarAgenteCLI(os.Args[2:]))
+	}
+
 	// modo utilitário: petagent monitores → lista telas + área útil (teste headless)
 	if len(os.Args) > 1 && os.Args[1] == "monitores" {
 		b, _ := json.MarshalIndent(listarMonitores(), "", "  ")

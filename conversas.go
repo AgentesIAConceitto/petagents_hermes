@@ -167,6 +167,24 @@ func (a *App) opPonte(pedido map[string]any, esperar bool) (map[string]any, stri
 
 // ConversasListar — a lista do painel lateral: {ok, atual, pastas, conversas, ocupado?}.
 func (a *App) ConversasListar() string {
+	if modoNativoAtivo(NovoHarness()) {
+		d := leConversas()
+		var lista []map[string]any
+		for _, c := range ListaConversasLocal() {
+			// a tela mostra uma prévia embaixo do título (conversas.js usa c.previa)
+			previa := ""
+			for i := len(c.Mensagens) - 1; i >= 0; i-- {
+				if c.Mensagens[i].De == "assistant" {
+					previa = cortarTexto(strings.ReplaceAll(c.Mensagens[i].Texto, "\n", " "), 60)
+					break
+				}
+			}
+			lista = append(lista, map[string]any{"id": c.ID, "titulo": c.Titulo,
+				"previa": previa, "atualizada": c.Atualizada})
+		}
+		return respostaJSON(map[string]any{"ok": true, "atual": d.Atual, "pastas": d.Pastas,
+			"conversas": lista, "modo": "gratis"})
+	}
 	dados, erro := a.opPonte(map[string]any{"op": "listar"}, false)
 	conversasMu.Lock()
 	defer conversasMu.Unlock()
@@ -185,6 +203,17 @@ func (a *App) ConversasListar() string {
 
 // ConversaAbrir — passa a conversar nesta e devolve as mensagens dela.
 func (a *App) ConversaAbrir(id string) string {
+	if modoNativoAtivo(NovoHarness()) {
+		c := LeConversaLocal(id)
+		if c == nil {
+			return respostaJSON(map[string]any{"ok": false, "erro": "conversa não encontrada"})
+		}
+		d := leConversas()
+		d.Atual = id
+		gravaConversas(d)
+		msgs := MensagensParaTela(c)
+		return respostaJSON(map[string]any{"ok": true, "atual": id, "mensagens": msgs, "modo": "gratis"})
+	}
 	dados, erro := a.opPonte(map[string]any{"op": "abrir", "conversa": id}, false)
 	if erro != "" {
 		return respostaJSON(map[string]any{"ok": false, "erro": erro})
@@ -194,6 +223,20 @@ func (a *App) ConversaAbrir(id string) string {
 
 // ConversaNova — começa uma conversa do zero (a anterior fica guardada).
 func (a *App) ConversaNova() string {
+	// MODO GRÁTIS: não existe ponte do Hermes, então a conversa é criada e guardada pelo
+	// próprio app. Antes isso devolvia erro e o usuário via "o agente não está iniciado"
+	// ao tentar o botão mais básico da tela (04/11/2026).
+	if modoNativoAtivo(NovoHarness()) {
+		id := NovaConversaLocal()
+		if id == "" {
+			return respostaJSON(map[string]any{"ok": false, "erro": "não consegui criar a conversa em disco"})
+		}
+		a.EsquecerConversaNativa(id)
+		d := leConversas()
+		d.Atual = id
+		gravaConversas(d)
+		return respostaJSON(map[string]any{"ok": true, "atual": id, "modo": "gratis"})
+	}
 	dados, erro := a.opPonte(map[string]any{"op": "nova"}, false)
 	if erro != "" {
 		return respostaJSON(map[string]any{"ok": false, "erro": erro})
@@ -203,6 +246,12 @@ func (a *App) ConversaNova() string {
 
 // ConversaRenomear — o título fica no Hermes (o mesmo que ele mostra no CLI e no app dele).
 func (a *App) ConversaRenomear(id, titulo string) string {
+	if modoNativoAtivo(NovoHarness()) {
+		if err := RenomeiaConversaLocal(id, titulo); err != nil {
+			return respostaJSON(map[string]any{"ok": false, "erro": err.Error()})
+		}
+		return respostaJSON(map[string]any{"ok": true})
+	}
 	titulo = strings.TrimSpace(titulo)
 	if r := []rune(titulo); len(r) > 80 {
 		titulo = string(r[:80])
@@ -216,6 +265,13 @@ func (a *App) ConversaRenomear(id, titulo string) string {
 
 // ConversaExcluir — apaga do Hermes (histórico e anexos) e daqui (pasta e etiquetas).
 func (a *App) ConversaExcluir(id string) string {
+	if modoNativoAtivo(NovoHarness()) {
+		if err := ApagaConversaLocal(id); err != nil {
+			return respostaJSON(map[string]any{"ok": false, "erro": err.Error()})
+		}
+		a.EsquecerConversaNativa(id)
+		return respostaJSON(map[string]any{"ok": true})
+	}
 	dados, erro := a.opPonte(map[string]any{"op": "excluir", "conversa": id}, false)
 	if erro != "" {
 		return respostaJSON(map[string]any{"ok": false, "erro": erro})

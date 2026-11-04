@@ -1280,3 +1280,117 @@ select.ia-campo { cursor: pointer; }
 .tf-sugere > span { flex: 1; min-width: 0; }
 .tf-sugere .ic { color: var(--icone); fill: none; }
 .tf-sugere .pn-bt { height: 28px; padding: 0 10px; }
+
+/* ── painel Chaves grátis (chaves.js, 30/10/2026) ───────────────────────────── */
+.chaves { max-height: 78vh; overflow-y: auto; width: min(460px, 92vw); }
+.chaves .chv-item { border-top: 1px solid var(--borda, rgba(0,0,0,.08)); padding: 10px 0; }
+.chaves .chv-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.chaves .chv-ok { color: #1a7f37; font-weight: 600; font-size: 12px; }
+.chaves .chv-falta { color: #b3541e; font-weight: 600; font-size: 12px; }
+.chaves .chv-acoes { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 6px 0 2px; }
+.chaves .chv-linha { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.chaves .chv-input {
+  flex: 1 1 220px; min-width: 180px; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--borda, rgba(0,0,0,.18)); background: var(--campo, #fff);
+  color: inherit; font: inherit; font-size: 13px;
+}
+.chaves .chv-input:focus { outline: 2px solid var(--destaque, #7c5cff); outline-offset: 1px; }
+.chaves code { font-size: 12px; opacity: .8; }
+
+/* ── boas-vindas (chaves.js) e agendamentos (agenda.js), 30/10/2026 ─────────── */
+.chaves .chv-bemvindo { background: rgba(124,92,255,.08); border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; }
+.chaves .chv-bemvindo-titulo { font-weight: 700; margin: 0 0 8px; font-size: 13px; }
+.chaves .chv-passo { display: flex; gap: 10px; margin-bottom: 8px; }
+.chaves .chv-passo-n {
+  flex: 0 0 20px; height: 20px; border-radius: 50%; background: #7c5cff; color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.chaves .chv-dica { font-style: italic; opacity: .8; }
+.agenda .agd-item { border-top: 1px solid var(--borda, rgba(0,0,0,.08)); padding: 10px 0; }
+.agenda .agd-item.agd-off { opacity: .5; }
+.agenda .agd-topo { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.agenda .agd-pedido { margin: 4px 0; font-size: 13px; }
+.agenda .agd-erro { color: #b3541e; }
+.agenda .agd-acoes { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 4px; }
+.agenda .agd-linha { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+
+/* ── painel "Chaves grátis": legibilidade (03/11/2026) ────────────────────────────────
+   Relato do dono: "mostra essa tela horrível". Causa: o painel herdava .ap-dica com
+   margin -10px (pensado para outro contexto) e não tinha regra para .chv-chave/.ap-botao/
+   .ap-link — então o texto subia em cima do título, as chaves viravam texto solto e os
+   botões perdiam forma. Regras aqui são escopadas em .chaves e vencem por virem depois. */
+.chaves { width: min(480px, 94vw); }
+.chaves .ap-dica { margin: 2px 0 8px; line-height: 1.45; font-size: 12.5px; color: var(--sub); }
+.chaves .chv-item { padding: 14px 0; }
+.chaves .chv-topo { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.chaves .chv-topo b { font-size: 14px; letter-spacing: .1px; }
+.chaves .chv-chave { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 0 3px; font-size: 12.5px; }
+.chaves .chv-chave code { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 12px;
+  color: var(--texto); background: rgba(255,255,255,.07); padding: 3px 7px; border-radius: 6px; }
+.chaves .chv-linha { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.chaves .chv-input { flex: 1 1 190px; min-width: 0; }
+.chaves .ap-botao { padding: 7px 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06); color: var(--texto); font-size: 12.5px; cursor: pointer; }
+.chaves .ap-botao:hover { background: rgba(255,255,255,.13); }
+.chaves .ap-botao:disabled { opacity: .5; cursor: default; }
+.chaves .ap-link { background: none; border: none; padding: 4px 2px; color: var(--destaque, #7c5cff);
+  font-size: 12.5px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.chaves .ap-link:hover { text-decoration: underline; }
+.chaves .ia-status { margin: 8px 0; }
+.chaves .chv-espera code { opacity: .6; }
+.chaves .ap-sec { margin-top: 6px; }
+
+/* ── escolha do motor em 3 opções (03/11/2026) ─────────────────────────────────────── */
+.ia-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ia-3 button { padding: 8px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.05); color: var(--texto); font-size: 12px; cursor: pointer; line-height: 1.2; }
+.ia-3 button:hover { background: rgba(255,255,255,.11); }
+.ia-3 button.sel { background: var(--destaque, #7c5cff); border-color: transparent; color: #fff; font-weight: 600; }
+
+/* ── chaves grátis DENTRO do painel Inteligência (04/11/2026) ─────────────────────────
+   O bloco anterior usava .ia-linha e .ia-link, pensados para outra tela: os botões
+   flutuavam soltos e o texto se amontoava. Aqui cada chave tem linha própria, com o
+   código à esquerda, o selo no meio e as ações empurradas para a direita. */
+.ia-chave-bloco { border-top: 1px solid rgba(255,255,255,.08); padding: 12px 0 4px; }
+.ia-chave-bloco:first-of-type { border-top: none; }
+.ia-chave-titulo { font-size: 12.5px; font-weight: 600; color: var(--sub); margin-bottom: 8px; letter-spacing: .2px; }
+.ia-chave-item { display: flex; align-items: center; gap: 10px; padding: 5px 0; flex-wrap: nowrap; }
+.ia-chave-codigo { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 12px;
+  background: rgba(255,255,255,.07); color: var(--texto); padding: 4px 8px; border-radius: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; }
+.ia-chave-ok { color: #4caf7d; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ia-chave-espera { color: #d9913f; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ia-chave-acoes { margin-left: auto; display: flex; gap: 12px; }
+.ia-chave-bt { background: none; border: none; padding: 2px 0; color: var(--destaque, #7c5cff);
+  font-size: 12px; cursor: pointer; white-space: nowrap; }
+.ia-chave-bt:hover { text-decoration: underline; }
+.ia-chave-bt:disabled { opacity: .5; cursor: default; text-decoration: none; }
+.ia-chave-vazio { font-size: 12px; color: var(--sub); margin: 2px 0 6px; }
+.ia-chave-nova { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.ia-chave-nova .ia-campo { flex: 1 1 auto; min-width: 0; }
+.ia-chave-bloco .ia-link { display: inline-block; margin-top: 8px; font-size: 12px; }
+.ia-3 button { white-space: normal; }
+
+/* ── escolha do motor em lista vertical (04/11/2026) ───────────────────────────────── */
+.ia-motor-lista { display: flex; flex-direction: column; gap: 6px; }
+.ia-motor-opc { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 9px; border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.04); color: var(--texto); cursor: pointer; }
+.ia-motor-opc:hover { background: rgba(255,255,255,.09); }
+.ia-motor-opc.sel { border-color: var(--destaque, #7c5cff); background: rgba(124,92,255,.16); }
+.ia-motor-marca { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35);
+  margin-top: 2px; flex: 0 0 auto; }
+.ia-motor-opc.sel .ia-motor-marca { border-color: var(--destaque, #7c5cff); background: var(--destaque, #7c5cff);
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.55); }
+.ia-motor-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ia-motor-texto b { font-size: 13px; font-weight: 600; }
+.ia-motor-texto i { font-style: normal; font-size: 11.5px; color: var(--sub); line-height: 1.35; }
+
+/* status logo abaixo das opções de motor (04/11/2026) */
+.ia-motor-lista + .ia-status { margin: 10px 0 0; }
+.ia-status { border-radius: 8px; padding: 9px 11px; font-size: 12.5px; line-height: 1.4;
+  animation: iaStatusEntra .18s ease-out; }
+@keyframes iaStatusEntra { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.ia-status.erro { background: rgba(220,60,60,.16); border: 1px solid rgba(220,60,60,.45); color: #ff9c9c; }
+.ia-status.ok   { background: rgba(70,180,110,.15); border: 1px solid rgba(70,180,110,.45); color: #86e0a8; }
+.ia-status.info { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); color: var(--sub); }

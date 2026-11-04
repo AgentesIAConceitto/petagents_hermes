@@ -179,7 +179,21 @@ func (a *App) startup(ctx context.Context) {
 	go a.escondeDuranteCaptura() // some enquanto a Ferramenta de Captura está aberta
 	go a.emailLoop()             // triagem de e-mail (lê as contas por IMAP, só leitura)
 	go a.tarefasLoop()           // lembretes das tarefas (balão + notificação do Windows)
-	go a.atalhoTarefas()         // Ctrl+Alt+T: anotar uma tarefa de qualquer lugar
+	gravaDiagnostico()           // estado essencial em diag.txt (suporte em maquina de terceiro)
+
+	// mede a latência dos provedores em segundo plano: a cadeia passa a ser montada do mais
+	// rápido para o mais lento, com número de AGORA (03/11/2026). Não bloqueia a abertura.
+	go func() {
+		defer func() { _ = recover() }()
+		h := NovoHarness()
+		if h == nil || h.Cofre == nil {
+			return
+		}
+		c := h.Cofre.CadeiaDeChaves(h.Cofre.ModeloPadrao(), h.Cofre.ModeloPadrao())
+		MedirProvedores(context.Background(), c.Elos())
+	}()
+	go a.agendadorLoop() // agente nativo: tarefas marcadas (só roda com chave configurada)
+	go a.atalhoTarefas() // Ctrl+Alt+T: anotar uma tarefa de qualquer lugar
 	go a.warmBalance()
 }
 
@@ -548,16 +562,17 @@ func (a *App) stateLoop() {
 			Heartbeat: age, Hwnd: fmt.Sprintf("%x", hw),
 			Version: "0.1.0-mvp",
 		}
-		switch {
-		case age < 0:
-			st.State, st.Detail = "erro", "Arquivo de heartbeat do gateway não encontrado"
-		case age < 120:
-			st.State, st.Detail = "idle", fmt.Sprintf("Gateway ativo (último sinal há %d s)", age)
-		case age < 600:
-			st.State, st.Detail = "pensando", fmt.Sprintf("Gateway sem sinal há %d s", age)
-		default:
-			st.State, st.Detail = "dormindo", fmt.Sprintf("Gateway sem resposta há %d min", age/60)
+		// O ESTADO DO BONECO SÓ DEPENDE DO GATEWAY QUANDO O MOTOR É O HERMES.
+		// No modo grátis (motor próprio) o gateway não existe por definição — antes disso,
+		// o app se marcava "erro" para sempre e o boneco ficava com a cara de erro (linha 5
+		// do sprite), parecendo triste/sofrendo. Relato do dono, 03/11/2026.
+		motorEfetivo := ModoNativo
+		chavesGratis := 0
+		if h := NovoHarness(); h != nil && h.Cofre != nil {
+			chavesGratis = h.Cofre.TotalChaves()
+			motorEfetivo, _ = ResolverModo(h.Cofre.ModoEscolhido(), detectarHermes(), chavesGratis > 0)
 		}
+		st.Agent, st.State, st.Detail = estadoDoBoneco(motorEfetivo, chavesGratis, int64(age))
 		if num := strings.TrimPrefix(bal, "US$ "); strings.HasPrefix(bal, "US$ ") {
 			if f, err := parseFloat(num); err == nil && f < 3.0 {
 				st.State, st.Detail = "erro", "Saldo abaixo de US$ 3"
@@ -584,6 +599,32 @@ func (a *App) stateLoop() {
 		}
 		time.Sleep(15 * time.Second)
 	}
+}
+
+// estadoDoBoneco decide o estado que o boneco mostra.
+//
+// REGRA (03/11/2026, relato do dono): no modo grátis o gateway do Hermes NÃO EXISTE por
+// definição. Antes esta função (inline no laço) marcava "erro" quando não achava o arquivo
+// de heartbeat — e o boneco ficava com a cara de erro (linha 5 do sprite), parecendo
+// triste e sofrendo, mesmo com tudo funcionando. Estado "erro" só faz sentido quando o
+// motor em uso é o Hermes.
+func estadoDoBoneco(motor ModoAgente, chaves int, age int64) (agente, estado, detalhe string) {
+	if motor == ModoHermes {
+		switch {
+		case age < 0:
+			return "hermes", "erro", "Arquivo de heartbeat do gateway não encontrado"
+		case age < 120:
+			return "hermes", "idle", fmt.Sprintf("Gateway ativo (último sinal há %d s)", age)
+		case age < 600:
+			return "hermes", "pensando", fmt.Sprintf("Gateway sem sinal há %d s", age)
+		default:
+			return "hermes", "dormindo", fmt.Sprintf("Gateway sem resposta há %d min", age/60)
+		}
+	}
+	if chaves == 0 {
+		return "nativo", "idle", "Falta configurar uma chave grátis"
+	}
+	return "nativo", "idle", fmt.Sprintf("Motor próprio ativo (%d chave(s) grátis)", chaves)
 }
 
 func parseFloat(s string) (float64, error) {
@@ -674,6 +715,10 @@ func (a *App) enviaChat(conversa, text string, anexos []map[string]any) string {
 			return fmt.Sprintf("O gateway está funcionando (último sinal há %d s). Sigo acompanhando.", age)
 		}
 		return fmt.Sprintf("Atenção: o gateway está sem sinal há %d min.", age/60)
+	}
+	// Modo próprio (chave grátis, sem Hermes): o motor nativo responde aqui mesmo.
+	if resp, tratado := a.respondeNativo(conversa, text, anexos); tratado {
+		return resp
 	}
 	resp := a.chamarHermes(conversa, text, anexos)
 	// a resposta gastou crédito: relê o saldo (no máximo 1x/min) para o "gasto de hoje"

@@ -25,6 +25,10 @@
     // horários de refeição NÃO são fixos no relógio: são DERIVADOS do expediente
     // (ver eventosDoDia). Quem trabalha 7h-17h não pode receber aviso de jantar
     // das 19h30.
+    // REGRA DO DONO (03/11/2026): ele quer o boneco na tela e vai dar comida, água,
+    // carinho, corrida e brincadeira — mas pode passar DIAS sem conversar no chat, e não
+    // quer o boneco triste por isso. Logo: o humor só cai se ele LIGAR esta opção.
+    humorCai: false,
     aguaCadaMin: 120,        // água de 2 em 2 h, do começo ao fim do expediente
     caminhadaCadaMin: 90,    // levantar/caminhar a cada 1h30
     atencaoCadaMin: 180,     // carinho/atenção a cada 3 h
@@ -362,9 +366,12 @@
       for (const k of Object.keys(DECAIMENTO)) {
         est[k] = Math.max(0, est[k] - DECAIMENTO[k] * minutos);
       }
-      // humor: cai ~2 por hora e para em 30 (antes só subia — ficava sempre em 100).
-      // Sobe com cada cuidado e com cada tarefa feita no chat (bloco 2, feliz()).
-      if (typeof est.humor === "number") est.humor = Math.max(30, est.humor - minutos / 30);
+      // humor: OPCIONAL. Só cai se o dono ligar "Humor cai com o tempo" na rotina.
+      // Desligado (padrão), ele nunca fica triste por passar tempo — só sobe com cuidado e
+      // com tarefa feita. Decisão do dono em 03/11/2026: ausência de chat não é castigo.
+      if (cfg.humorCai === true && typeof est.humor === "number") {
+        est.humor = Math.max(30, est.humor - minutos / 30);
+      }
 
       // ── AGENDA DO DIA (04/10/2026): avisa no horário, um aviso por vez ──────
       if (est.dia !== hoje()) {
@@ -542,6 +549,9 @@
       <div class="pp-sep"></div>
       <div class="pp-linha"><span class="pp-quem"><b>Modo foco</b><span>Apenas os lembretes de água. Não altera nada no Windows.</span></span>
         <button class="pp-switch" role="switch" aria-checked="${estaEmFoco()}" aria-label="Modo foco" data-foco><i></i></button></div>
+      <div class="pp-sep"></div>
+      <div class="pp-linha"><span class="pp-quem"><b>Humor cai com o tempo</b><span>Desligado, ele nunca fica triste por você passar tempo sem conversar. Ligado, o ânimo cai devagar até um mínimo.</span></span>
+        <button class="pp-switch" role="switch" aria-checked="${cfg.humorCai === true}" aria-label="Humor cai com o tempo" data-humor><i></i></button></div>
       <div class="pp-quem"><b>Dormir</b><span>O boneco cochila no canto, sem lembretes. Clique nele para acordar.</span></div>
       <div class="pp-acoes">${[[0.5, "30 min"], [1, "1 h"], [2, "2 h"], [4, "4 h"]].map(([h, r]) =>
         `<button class="pp-bt sec" data-dormir="${h}">${r}</button>`).join("")}</div>`;
@@ -558,6 +568,7 @@
     q("[data-agua]").onchange = (ev) => { cfg.aguaCadaMin = +ev.target.value; salvo(); };
     q("[data-caminha]").onchange = (ev) => { cfg.caminhadaCadaMin = +ev.target.value; salvo(); };
     q("[data-foco]").onclick = () => { alternarFoco(); pintaLado(); };
+    q("[data-humor]").onclick = () => { cfg.humorCai = (cfg.humorCai !== true); salvo(); pintaLado(); };
     lado.querySelectorAll("[data-dormir]").forEach((b) => b.onclick = () => { dormir(+b.dataset.dormir); pintaLado(); });
     posicionaPainel();
   }
