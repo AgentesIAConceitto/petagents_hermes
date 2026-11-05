@@ -23,6 +23,38 @@ E ele é **vivo**: tem fome, sede, sono, humor, vontade de brincar — e uma age
 ligada à biologia humana, porque um bicho de estimação que só pede é chato, e um
 bicho que *também* cuida de você é útil.
 
+**Dois modos: com o Hermes ou sozinho**
+
+- **Integrado ao Hermes** — usa o Hermes que você já tem (mesma IA, mesma memória).
+- **Chave própria** — um Hermes isolado, só para o bicho, com a sua chave; o seu Hermes não é tocado.
+- **Chaves grátis** — roda **sem Hermes nenhum**, com planos gratuitos (Google Gemini, NVIDIA e Brave Search). É o modo de quem está começando e não pode pagar.
+- A escolha é uma só, em **Inteligência** no painel 🐾: o corpo da tela muda conforme o modo.
+
+**Motor próprio (modo grátis)**
+
+- Laço de ferramentas de verdade: cria pasta, escreve e lê arquivo, busca na web, lê página e memoriza.
+- **Várias chaves por provedor**: quando uma estoura a cota (429), ela entra em espera de 60 s e a próxima assume — a conversa não para.
+- **Mede o provedor na hora** e monta a ordem pelo tempo real, não por uma lista fixa escrita dias antes.
+- **Pré-busca**: pergunta de consulta busca antes de chamar o modelo (uma ida em vez de duas).
+- **Cache de 10 min** para pergunta repetida — só para respostas que não alteraram nada.
+- Quando o serviço gratuito oscila (503, timeout), o app **falha rápido e diz o motivo real**. Ele nunca diz "sua cota acabou" quando a cota não acabou.
+
+**Chaves com cofre (DPAPI)**
+
+- Cadastro pela própria interface, **sem variável de ambiente** e sem arquivo de texto.
+- Cifradas com DPAPI do Windows em `%LOCALAPPDATA%\petagent`, com máscara na tela: o app não devolve a chave em claro em nenhum momento.
+
+**Conversas**
+
+- Conversas salvas, com título automático tirado da primeira pergunta, renomear e excluir.
+- **Contexto por conversa**: o diálogo de uma nunca entra no prompt de outra. Fatos memorizados continuam valendo em todas — isso é memória de longo prazo, de propósito.
+
+**Tarefas e aprovação de comandos**
+
+- Captura rápida por atalho (texto ou áudio), lembretes com cadência e painel do dia.
+- Quando o Hermes pede permissão para um comando, aparece um **cartão de aprovação** no chat: você lê o comando e decide.
+- Caixa de código nas mensagens, com botão **Copiar**.
+
 ### O que ele faz hoje
 
 **Conversa de verdade**
@@ -104,7 +136,7 @@ bicho que *também* cuida de você é útil.
 
 | Para | O que precisa |
 |---|---|
-| Rodar | Windows 10/11 (x64), WebView2 (já vem no Windows 11 e no Edge), **Hermes** instalado |
+| Rodar | Windows 10/11 (x64) + WebView2 (já vem no Windows 11 e no Edge). **Hermes é opcional**: no modo *chaves grátis* o motor é próprio |
 | Compilar | Go 1.22+, [Wails v2](https://wails.io), Node só para checagem de sintaxe |
 | E-mail (opcional) | Outlook desktop + os scripts em `mail/` rodando **não-elevados** |
 
@@ -182,6 +214,13 @@ Para desfazer, apague os dois `.lnk`; o app e o lançador ficam onde estão.
 - O leitor de e-mail depende do Outlook desktop e de um caminho fixo
   (`C:\petagent_mail`) — parametrizar está no roadmap.
 - O sprite vem do PetDex em tempo de execução; a arte é dos autores originais.
+- **Modo grátis**: os planos gratuitos oscilam (503/timeout) e têm cota diária. O app
+  contorna com várias chaves, espera e troca de provedor, mas **não promete** a mesma
+  velocidade de um plano pago. Ainda **não há streaming**: a resposta aparece de uma vez.
+- **Modo grátis não lê imagem** (sem visão no modelo simples) e o perfil padrão é um
+  modelo **sem raciocínio** — de propósito, para resposta rápida e barata.
+- A chave fica cifrada na máquina do usuário (DPAPI): trocar de máquina exige cadastrar
+  as chaves de novo.
 
 ### Licença
 
@@ -202,6 +241,38 @@ your agent by clicking a creature at the edge of your screen.
 And it is **alive**: hungry, thirsty, sleepy, moody, playful — with an agenda tied to
 human biology, because a pet that only asks for things is annoying, and a pet that
 *also* takes care of you is useful.
+
+**Two modes: with Hermes, or on its own**
+
+- **Integrated with Hermes** — uses the Hermes you already run (same AI, same memory).
+- **Your own key** — an isolated Hermes just for the pet, with your key; your own Hermes is never touched.
+- **Free keys** — runs with **no Hermes at all**, on free tiers (Google Gemini, NVIDIA and Brave Search). This is the mode for people starting out who cannot pay.
+- One single choice in **Inteligência** in the 🐾 panel: the body of the screen changes with the mode.
+
+**Native engine (free mode)**
+
+- Real tool loop: create folder, write/read file, search the web, read a page, remember facts.
+- **Several keys per provider**: when one hits the quota (429) it cools down for 60 s and the next takes over — the conversation does not stop.
+- **Measures the provider right now** and orders the chain by real latency, not by a list written days earlier.
+- **Pre-search**: a lookup question searches before calling the model (one round trip instead of two).
+- **10-minute cache** for repeated questions — only for answers that changed nothing.
+- When the free service wobbles (503, timeout) the app **fails fast and states the real reason**. It never says "your quota ran out" when it did not.
+
+**Keys in a vault (DPAPI)**
+
+- Configured in the app itself, **no environment variables**, no plain-text file.
+- Encrypted with Windows DPAPI under `%LOCALAPPDATA%\petagent`, always masked on screen: the app never hands the key back in clear text.
+
+**Conversations**
+
+- Saved conversations, title taken from the first question, rename and delete.
+- **Per-conversation context**: one conversation's dialogue never enters another's prompt. Memorised facts stay global on purpose — that is long-term memory.
+
+**Tasks and command approval**
+
+- Quick capture by shortcut (text or audio), reminders with cadence, and a daily panel.
+- When Hermes asks permission for a command, an **approval card** shows up in the chat: you read the command and decide.
+- Code box in messages with a **Copy** button.
 
 ### What it does today
 
@@ -363,6 +434,13 @@ the launcher stay where they are.
 - The e-mail reader depends on Outlook desktop and a fixed path
   (`C:\petagent_mail`) — making it configurable is on the roadmap.
 - Sprites come from PetDex at runtime; the artwork belongs to its original authors.
+- **Free mode**: free tiers wobble (503/timeout) and have a daily quota. The app works
+  around it with several keys, cooldown and provider switching, but it **does not
+  promise** paid-plan speed. There is **no streaming yet**: the answer arrives at once.
+- **Free mode cannot read images** (no vision on the simple model), and the default
+  profile is a **non-reasoning** model — on purpose, for fast, cheap answers.
+- Keys are encrypted on the user's machine (DPAPI): moving to another machine means
+  entering them again.
 
 ### License
 
